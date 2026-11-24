@@ -1160,6 +1160,51 @@
           "common-core-goal-confirmgoal-runtime"
         ]
       }
+    },
+    {
+      "id": "security-definer-search-path-hardening-migration-036",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/036_security_definer_search_path_hardening.sql"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime",
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-drizzle-projection",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/phone-use-contract-schema.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "drizzle-schema-entrypoint",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/schema/index.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "009-safety-hold-control-foundation",
+          "010-compliance-feature-policy-foundation",
+          "012-digital-use-assessment-runtime",
+          "016-psychological-behavioral-intervention-contract-authority-reconciliation"
+        ]
+      }
     }
   ]
 }
