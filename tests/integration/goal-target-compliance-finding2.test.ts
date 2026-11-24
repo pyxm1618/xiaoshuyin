@@ -46,9 +46,10 @@ describe('A/#2 Goal compliance includes the bound Digital Use target',()=>{
       [accountId]
     )).rows[0].id as string;
     const familyId=(await admin.query('SELECT uuidv7() AS id')).rows[0].id as string;
-    await admin.query('SELECT app.create_family($1,$2,$3)',[
-      familyId,ownerPersonId,`A2-${label}`,
-    ]);
+    await admin.query(
+      'INSERT INTO families (id,display_name,created_by_person_id) VALUES ($1,$2,$3)',
+      [familyId,`A2-${label}`,ownerPersonId]
+    );
     await admin.query(
       'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2),($1,$3) ON CONFLICT DO NOTHING',
       [familyId,ownerPersonId,targetPersonId]
