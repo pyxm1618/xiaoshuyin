@@ -27,6 +27,7 @@ import {
   lockFamilyForPrimaryDecision,
   lockGoalVersion,
   normalizedGoalContract,
+  readDigitalUseAssessmentTarget,
   resolveActiveCaseParticipantPersonIds,
   resolveEvidenceRefs,
   revalidateStoredEvidenceDependencies,
@@ -213,6 +214,26 @@ async function assertGoalCompliance(
       throw httpError(code, result.reason);
     }
   }
+}
+
+async function resolveGoalProcessingPersonIds(
+  tx: pg.PoolClient,
+  input: {
+    actorPersonId: string;
+    caseId: string;
+    caseCreatorPersonId: string;
+  }
+): Promise<string[]> {
+  const activeParticipants =
+    await resolveActiveCaseParticipantPersonIds(tx, input.caseId);
+  const targetPersonId =
+    await readDigitalUseAssessmentTarget(tx, input.caseId);
+  return [
+    input.actorPersonId,
+    input.caseCreatorPersonId,
+    ...activeParticipants,
+    ...(targetPersonId ? [targetPersonId] : []),
+  ];
 }
 
 async function assertGoalDependencyConsents(
@@ -496,13 +517,14 @@ export async function saveGoal(
               input.contract.dependencyRefs
             );
 
-            const activeParticipants =
-              await resolveActiveCaseParticipantPersonIds(tx, input.caseId);
-            await assertGoalCompliance(tx, [
-              input.actor.personId,
-              caseRow.created_by_person_id,
-              ...activeParticipants,
-            ]);
+            await assertGoalCompliance(
+              tx,
+              await resolveGoalProcessingPersonIds(tx, {
+                actorPersonId: input.actor.personId,
+                caseId: input.caseId,
+                caseCreatorPersonId: caseRow.created_by_person_id,
+              })
+            );
 
             const active = await lockActiveGoal(tx, input.caseId);
             if (active?.confirmation_state === 'CONFIRMED') {
@@ -639,13 +661,14 @@ export async function confirmGoal(
               formulation,
             });
 
-            const activeParticipants =
-              await resolveActiveCaseParticipantPersonIds(tx, input.caseId);
-            await assertGoalCompliance(tx, [
-              input.actor.personId,
-              caseRow.created_by_person_id,
-              ...activeParticipants,
-            ]);
+            await assertGoalCompliance(
+              tx,
+              await resolveGoalProcessingPersonIds(tx, {
+                actorPersonId: input.actor.personId,
+                caseId: input.caseId,
+                caseCreatorPersonId: caseRow.created_by_person_id,
+              })
+            );
             await assertA2010Completed(tx, input.caseId);
 
             const transition = await confirmGoalTransition(tx, {

@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { getTableConfig } from 'drizzle-orm/pg-core';
+import { digitalUseContractVersions } from '@xiaoshuyin/domain';
+import * as drizzleSchema from '../../db/schema/index.js';
 
 const URL=process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
@@ -24,6 +27,32 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
          AND tablename IN ('phone_contract_scene_states','phone_contract_scene_artifacts','generic_contract_engine','generic_workflow_tables')`
     );
     expect(forbidden.rows).toHaveLength(0);
+  });
+
+  it('keeps actual Contract columns aligned with the Drizzle projection and drizzle-kit entrypoint', async () => {
+    expect(drizzleSchema.digitalUseContractVersions).toBe(digitalUseContractVersions);
+
+    const {rows}=await db.query<{name:string;sql_type:string;not_null:boolean}>(
+      `SELECT a.attname AS name,
+              format_type(a.atttypid, a.atttypmod) AS sql_type,
+              a.attnotnull AS not_null
+         FROM pg_attribute a
+        WHERE a.attrelid='public.digital_use_contract_versions'::regclass
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY a.attnum`
+    );
+    const projected=getTableConfig(digitalUseContractVersions).columns.map((column)=>({
+      name:column.name,
+      sql_type:column.getSQLType(),
+      not_null:column.notNull,
+    }));
+    expect(rows).toEqual(projected);
+    expect(projected.at(-1)).toEqual({
+      name:'review_state',
+      sql_type:'text',
+      not_null:true,
+    });
   });
 
   it('FORCEs RLS on every new business table', async () => {

@@ -34,6 +34,7 @@ export const digitalUseContractVersions = pgTable('digital_use_contract_versions
   activatedAt: timestamp('activated_at', { withTimezone: true }),
   supersededAt: timestamp('superseded_at', { withTimezone: true }),
   pausedAt: timestamp('paused_at', { withTimezone: true }),
+  reviewState: text('review_state').notNull().default('CURRENT'),
 });
 
 export const roleplaySessions = pgTable('roleplay_sessions', {

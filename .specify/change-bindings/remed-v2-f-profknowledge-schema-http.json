@@ -17,7 +17,9 @@
       "feature": "012-digital-use-assessment-runtime",
       "specPath": "specs/012-digital-use-assessment-runtime",
       "implementationPaths": [
-        "apps/server/api/src/plugins/error-handler.ts"
+        "apps/server/api/src/plugins/error-handler.ts",
+        "packages/domain/src/phone-use-contract-schema.ts",
+        "db/schema/index.ts"
       ]
     },
     {
@@ -34,9 +36,21 @@
       "implementationPaths": [
         "apps/server/api/src/routes/cases.ts"
       ]
+    },
+    {
+      "feature": "common-core-goal-confirmgoal-runtime",
+      "specPath": "specs/common-core-goal-confirmgoal-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/goals.ts",
+        "db/migrations/037_goal_target_compliance_revalidation.sql"
+      ]
     }
   ],
   "findingVerificationPaths": {
+    "2": [
+      "tests/integration/goal-target-compliance-finding2.test.ts",
+      "tests/db/goal-runtime-schema.test.ts"
+    ],
     "21": [
       "tests/unit/professional-knowledge-effective-window-finding21.test.ts",
       "tests/db/finding21-effective-window-db.test.ts",
@@ -45,6 +59,9 @@
     "23": [
       "tests/unit/intervention-resolver-finding23.test.ts",
       "tests/professional-knowledge-audit2-remediation.integration.test.ts"
+    ],
+    "28": [
+      "tests/db/digital-use-phone-contract-runtime-schema.test.ts"
     ],
     "34": [
       "tests/unit/members-account-bound-finding34.test.ts"
