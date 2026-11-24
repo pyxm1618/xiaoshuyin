@@ -1146,6 +1146,20 @@
           "common-core-goal-confirmgoal-runtime"
         ]
       }
+    },
+    {
+      "id": "workline-c-post-merge-dependency-propagation-migration-035",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/035_workline_c_post_merge_dependency_propagation.sql"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
     }
   ]
 }
