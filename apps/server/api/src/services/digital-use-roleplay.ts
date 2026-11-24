@@ -13,7 +13,6 @@ import {
 import {
   assertOrdinaryProgressionAllowedRaw,
   isSafetyHoldStatus,
-  SafetyError,
   casCompleteSceneNodeState,
   casRecordSceneNodeProgress,
   casRecompleteSceneNodeState,
@@ -487,7 +486,7 @@ export async function selectPhoneUseRoleplay(
    // The RLS-visible Case is locked in this transaction. Only genuine Safety
    // Hold blocks a historical replay here. WAITING/CLOSED and other mutable
    // lifecycle eligibility are enforced by resolveRoleplayExecution on EXECUTE.
-   if(isSafetyHoldStatus(caseRow.status)) throw new SafetyError('SAFETY_HOLD_BLOCKED');
+   if(isSafetyHoldStatus(caseRow.status)) throw roleplayError('SAFETY_HOLD_BLOCKED');
    await assertRoleplayCompliance(tx,input.actor.personId);
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
