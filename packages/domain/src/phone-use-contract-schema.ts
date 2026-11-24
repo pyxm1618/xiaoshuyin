@@ -10,7 +10,7 @@ export const digitalUseContractVersions = pgTable('digital_use_contract_versions
   caseId: uuid('case_id').notNull(),
   version: integer('version').notNull(),
   draftRevision: integer('draft_revision').notNull().default(1),
-  status: text('status').notNull(),
+  status: text('status').notNull().default('DRAFT'),
   adultPartyPersonId: uuid('adult_party_person_id').notNull(),
   childPartyPersonId: uuid('child_party_person_id').notNull(),
   childParticipationId: uuid('child_participation_id'),

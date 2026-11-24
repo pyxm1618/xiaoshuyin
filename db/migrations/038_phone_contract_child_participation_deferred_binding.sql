@@ -18,20 +18,31 @@ ALTER TABLE digital_use_contract_versions
     (
       parent_confirmation IS NULL
       OR (
-        parent_confirmation ->> 'kind' = 'ADULT'
-        AND parent_confirmation ->> 'personId' = adult_party_person_id::text
-        AND parent_confirmation ->> 'authorizationAction' = 'CASE_RESPOND_ASSESSMENT_SCENE'
+        (
+          parent_confirmation ? 'kind'
+          AND parent_confirmation ? 'personId'
+          AND parent_confirmation ? 'authorizationAction'
+          AND parent_confirmation ->> 'kind' = 'ADULT'
+          AND parent_confirmation ->> 'personId' = adult_party_person_id::text
+          AND parent_confirmation ->> 'authorizationAction' = 'CASE_RESPOND_ASSESSMENT_SCENE'
+        ) IS TRUE
       )
     )
     AND
     (
       child_confirmation IS NULL
       OR (
-        child_participation_id IS NOT NULL
-        AND child_confirmation ->> 'kind' = 'CHILD'
-        AND child_confirmation ->> 'personId' = child_party_person_id::text
-        AND child_confirmation ->> 'participationId' = child_participation_id::text
-        AND child_confirmation ->> 'authorizationAction' = 'PHONE_USE_CONTRACT_CONFIRM_SELF'
+        (
+          child_participation_id IS NOT NULL
+          AND child_confirmation ? 'kind'
+          AND child_confirmation ? 'personId'
+          AND child_confirmation ? 'participationId'
+          AND child_confirmation ? 'authorizationAction'
+          AND child_confirmation ->> 'kind' = 'CHILD'
+          AND child_confirmation ->> 'personId' = child_party_person_id::text
+          AND child_confirmation ->> 'participationId' = child_participation_id::text
+          AND child_confirmation ->> 'authorizationAction' = 'PHONE_USE_CONTRACT_CONFIRM_SELF'
+        ) IS TRUE
       )
     )
   );
@@ -55,12 +66,16 @@ BEGIN
   END IF;
 
   IF NEW.child_participation_id IS DISTINCT FROM OLD.child_participation_id THEN
-    IF NOT (
+    IF NOT ((
       app_current_purpose() = 'PHONE_USE_CONTRACT'
       AND OLD.child_participation_id IS NULL
       AND NEW.child_participation_id IS NOT NULL
       AND OLD.child_confirmation IS NULL
       AND NEW.child_confirmation IS NOT NULL
+      AND NEW.child_confirmation ? 'kind'
+      AND NEW.child_confirmation ? 'personId'
+      AND NEW.child_confirmation ? 'participationId'
+      AND NEW.child_confirmation ? 'authorizationAction'
       AND NEW.child_confirmation ->> 'kind' = 'CHILD'
       AND NEW.child_confirmation ->> 'personId' = NEW.child_party_person_id::text
       AND NEW.child_confirmation ->> 'participationId' = NEW.child_participation_id::text
@@ -74,7 +89,7 @@ BEGIN
            AND cp.person_id = NEW.child_party_person_id
            AND cp.state = 'ACTIVE'
       )
-    ) THEN
+    ) IS TRUE) THEN
       RAISE EXCEPTION 'PHONE_USE_CONTRACT_IMMUTABLE_IDENTITY' USING ERRCODE = '23514';
     END IF;
   END IF;

@@ -87,7 +87,7 @@
       "tests/db/digital-use-phone-contract-runtime-schema.test.ts"
     ],
     "34": [
-      "tests/unit/members-account-bound-finding34.test.ts"
+      "tests/integration/members.test.ts"
     ],
     "36": [
       "tests/unit/phone-contract-patch-malformed-json-finding36.test.ts"
