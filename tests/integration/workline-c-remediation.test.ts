@@ -416,7 +416,9 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(mismatchDraft.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
   });
 
-  it('Finding #10: Roleplay select idempotency exact replay succeeds after completion', async () => {
+  it.each(['WAITING', 'CLOSED', 'SAFETY_HOLD'] as const)(
+    'Finding #10: Roleplay select exact replay after completion and %s lifecycle drift',
+    async (lifecycleStatus) => {
     const adapter = {
       adapterRef: 'test:deterministic-roleplay-v1',
       async isAvailable() { return true; },
@@ -454,7 +456,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     await roleplayApp.ready();
 
     try {
-      const f = await createTestFixture('finding10');
+      const f = await createTestFixture(`finding10-${lifecycleStatus.toLowerCase()}`);
 
       // Enable A4003 node state
       await admin.query(
@@ -568,6 +570,81 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       });
       expect(denied.statusCode).toBe(404);
       expect(await mutations()).toEqual(beforeReplay);
+
+      // No public WAITING/CLOSED transition command exists in the current
+      // Case route surface. Seed a valid post-transition state via the same
+      // admin fixture seam as case-primary-switch-waiting.test.ts; exercise
+      // the REAL production Select route with the existing committed key.
+      // Each parameter starts from its own successful OPEN Case.
+      const transitioned = await admin.query<{ version: number }>(
+        `UPDATE cases SET status=$2::case_status,
+                phase=CASE WHEN $2::case_status='CLOSED' THEN 'CLOSED'::case_phase ELSE phase END,
+                is_primary=CASE WHEN $2::case_status='CLOSED' THEN false ELSE is_primary END,
+                version=version+1, updated_at=now()
+          WHERE id=$1 AND status='OPEN' RETURNING version`,
+        [f.caseId, lifecycleStatus]
+      );
+      expect(transitioned.rowCount).toBe(1);
+      const transitionedVersion = transitioned.rows[0]!.version;
+      expect(transitionedVersion).toBe(newVersion + 1);
+      const visible = await roleplayApp.inject({
+        method: 'GET', url: `/api/v1/cases/${f.caseId}`, headers: auth(f.manager.token),
+      });
+      expect(visible.statusCode, visible.body).toBe(200);
+      expect(visible.json()).toMatchObject({ status: lifecycleStatus, version: transitionedVersion });
+
+      const snapshot = async () => ({
+        mutations: await mutations(),
+        caseRow: (await admin.query('SELECT * FROM cases WHERE id=$1', [f.caseId])).rows[0],
+        session: (await admin.query('SELECT * FROM roleplay_sessions WHERE id=$1', [sessionId])).rows[0],
+        node: (await admin.query("SELECT * FROM scene_node_states WHERE case_id=$1 AND node_code='A4003'", [f.caseId])).rows[0],
+        idempotency: (await admin.query(
+          "SELECT count(*)::int AS n FROM idempotency_keys WHERE actor_account_id=$1 AND command_type='PHONE_USE_ROLEPLAY_SELECT'",
+          [f.manager.accountId]
+        )).rows[0],
+      });
+      const beforeLifecycleReplay = await snapshot();
+      const lifecycleReplay = await roleplayApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+        payload: selectPayload,
+      });
+      const lifecycleCode = lifecycleStatus === 'SAFETY_HOLD'
+        ? 'SAFETY_HOLD_BLOCKED'
+        : lifecycleStatus === 'CLOSED' ? 'CASE_CLOSED' : 'CASE_NOT_OPEN';
+      if (lifecycleStatus === 'SAFETY_HOLD') {
+        expect(lifecycleReplay.statusCode, lifecycleReplay.body).toBe(409);
+        expect(lifecycleReplay.json().code).toBe(lifecycleCode);
+      } else {
+        expect(lifecycleReplay.statusCode, lifecycleReplay.body).toBe(200);
+        expect(lifecycleReplay.json()).toEqual(firstSelect.json());
+        const lifecycleMismatch = await roleplayApp.inject({
+          method: 'POST',
+          url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+          headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+          payload: { ...selectPayload, expectedCaseVersion: transitionedVersion },
+        });
+        expect(lifecycleMismatch.statusCode, lifecycleMismatch.body).toBe(409);
+        expect(lifecycleMismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      }
+      // A fresh operation must still fail the ordinary execution gate, even
+      // with the current Case/session/node revisions. No new reservation,
+      // selection, event or audit can survive the rejected transaction.
+      const fresh = await roleplayApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: commandHeaders(f.manager.token, `f10-new-${lifecycleStatus.toLowerCase()}`),
+        payload: {
+          ...selectPayload,
+          expectedCaseVersion: transitionedVersion,
+          expectedSessionRevision: beforeLifecycleReplay.session.revision,
+          expectedNodeRevision: beforeLifecycleReplay.node.revision,
+        },
+      });
+      expect(fresh.statusCode, fresh.body).toBe(409);
+      expect(fresh.json().code).toBe(lifecycleCode);
+      expect(await snapshot()).toEqual(beforeLifecycleReplay);
     } finally {
       await roleplayApp.close();
     }

@@ -12,6 +12,8 @@ import {
 } from '@xiaoshuyin/compliance';
 import {
   assertOrdinaryProgressionAllowedRaw,
+  isSafetyHoldStatus,
+  SafetyError,
   casCompleteSceneNodeState,
   casRecordSceneNodeProgress,
   casRecompleteSceneNodeState,
@@ -482,7 +484,10 @@ export async function selectPhoneUseRoleplay(
    // mandatory on replay. Mutable execution preconditions belong below the
    // idempotency decision; preserve family/case lock order.
    const caseRow=await lockRoleplayAuthority(tx,input);
-   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
+   // The RLS-visible Case is locked in this transaction. Only genuine Safety
+   // Hold blocks a historical replay here. WAITING/CLOSED and other mutable
+   // lifecycle eligibility are enforced by resolveRoleplayExecution on EXECUTE.
+   if(isSafetyHoldStatus(caseRow.status)) throw new SafetyError('SAFETY_HOLD_BLOCKED');
    await assertRoleplayCompliance(tx,input.actor.personId);
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
