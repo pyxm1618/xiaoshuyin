@@ -1190,7 +1190,8 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
             supervision_measures,incentives,breach_responsibilities,source_template_version,
             dependency_refs,created_by_person_id)
          VALUES
-           ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,
+           ($1,$2,(SELECT COALESCE(MAX(version),0)+1 FROM digital_use_contract_versions WHERE case_id=$2),
+            1,'DRAFT','CURRENT',$3,$4,
             $5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$6,$7::jsonb,$3)
          RETURNING id`,
         [
