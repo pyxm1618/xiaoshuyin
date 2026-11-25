@@ -1287,6 +1287,19 @@
           "012-digital-use-assessment-runtime"
         ]
       }
+    },
+    {
+      "id": "digital-use-phone-contract-node-semantics",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-phone-contract-semantics.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
     }
   ]
 }
