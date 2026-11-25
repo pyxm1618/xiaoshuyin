@@ -211,6 +211,30 @@ async function closeoutJson(source, rel) {
   if (item.encoding !== "base64" || typeof item.content !== "string") throw new Error("Missing exact-head JSON content: " + rel);
   return JSON.parse(Buffer.from(item.content, "base64").toString("utf8"));
 }
+// Match the repository's ownership policy against the complete historical registry.
+function closeoutOwnership(registry, rel) {
+  if (registry.schemaVersion !== 1 || registry.resolution !== "LONGEST_MATCH" || !Array.isArray(registry.rules) || !registry.rules.length) throw new Error("Historical ownership requires schemaVersion=1, LONGEST_MATCH and non-empty rules.");
+  const ids = new Set();
+  const matchers = new Set();
+  const matches = [];
+  for (const rule of registry.rules) {
+    const kind = rule?.match?.kind;
+    const matchPath = rule?.match?.path;
+    const features = rule?.ownership?.features;
+    if (typeof rule?.id !== "string" || !rule.id || ids.has(rule.id)) throw new Error("Invalid/duplicate historical ownership rule id.");
+    ids.add(rule.id);
+    if (!["EXACT", "PREFIX"].includes(kind) || (typeof matchPath !== "string" || !closeoutPath(matchPath.endsWith("/") ? matchPath + "_" : matchPath)) || !/^(apps|packages|db)\//.test(matchPath) || (kind === "PREFIX" && !matchPath.endsWith("/") && !matchPath.endsWith("-"))) throw new Error("Invalid historical ownership matcher.");
+    const key = kind + ":" + matchPath;
+    if (matchers.has(key)) throw new Error("Ambiguous duplicate historical ownership matcher.");
+    matchers.add(key);
+    if (!["FEATURE", "SHARED"].includes(rule.ownership?.kind) || !Array.isArray(features) || !features.length || new Set(features).size !== features.length || features.some((f) => typeof f !== "string" || !/^[a-zA-Z0-9_-]+$/.test(f)) || (rule.ownership.kind === "FEATURE" && features.length !== 1)) throw new Error("Invalid historical ownership assignment.");
+    if ((kind === "EXACT" && rel === matchPath) || (kind === "PREFIX" && rel.startsWith(matchPath))) matches.push(rule);
+  }
+  matches.sort((a, b) => b.match.path.length - a.match.path.length);
+  if (!matches.length) return null;
+  if (matches.length > 1 && matches[0].match.path.length === matches[1].match.path.length) throw new Error("Ambiguous historical effective ownership.");
+  return matches[0];
+}
 async function validateCloseoutGraph(binding, errors) {
   const label = "Closeout " + binding.id;
   try {
@@ -227,8 +251,7 @@ async function validateCloseoutGraph(binding, errors) {
     if (!deltas.get(governance.id).has(ownershipPath)) errors.push(label + ": governance ownership missing from delta.");
     if (!await closeoutDeltaFeature(governance.pr, ownershipPath, binding.featureId)) errors.push(label + ": governance delta does not establish feature ownership.");
     const ownership = await closeoutJson(governance, ownershipPath);
-    const rules = (ownership.rules ?? []).filter((rule) => rule.ownership?.features?.includes(binding.featureId));
-    if (!rules.length) errors.push(label + ": governance has no feature ownership.");
+
     const implementation = binding.sources.find((s) => s.role === "IMPLEMENTATION");
     const changePath = ".specify/change-bindings/" + binding.featureId + ".json";
     if (!deltas.get(implementation.id).has(changePath)) errors.push(label + ": implementation change-binding missing from delta.");
@@ -237,7 +260,8 @@ async function validateCloseoutGraph(binding, errors) {
     const featureBinding = change.featureBindings?.find((b) => b.feature === binding.featureId && b.specPath === "specs/" + binding.featureId);
     if (!featureBinding?.implementationPaths?.length) errors.push(label + ": implementation has no feature binding.");
     for (const rel of featureBinding?.implementationPaths ?? []) {
-      if (!closeoutPath(rel) || !deltas.get(implementation.id).has(rel) || !rules.some((r) => r.match?.kind === "EXACT" ? rel === r.match.path : r.match?.kind === "PREFIX" && rel.startsWith(r.match.path))) errors.push(label + ": implementation ownership/delta mismatch: " + rel);
+      const owner = closeoutOwnership(ownership, rel);
+      if (!closeoutPath(rel) || !deltas.get(implementation.id).has(rel) || !owner?.ownership.features.includes(binding.featureId)) errors.push(label + ": implementation ownership/delta mismatch: " + rel);
     }
     for (const file of binding.files) {
       const source = binding.sources.find((s) => s.id === file.sourceId);

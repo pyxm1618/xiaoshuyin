@@ -241,6 +241,12 @@ const cases = [];
     ["DELTA absent", (v) => { v.missingDelta = true; }],
     ["TREE blob mismatch", (v) => { v.wrongBlob = true; }],
     ["missing planning identity", (v) => { v.missingPlanning = true; }],
+    ["narrower feature owner overrides foreign broad rule", (v) => { v.effectiveFeature = true; }, 0],
+    ["narrower foreign owner overrides broad feature", (v) => { v.foreignExact = true; }],
+    ["narrower foreign prefix overrides broad feature", (v) => { v.foreignPrefix = true; }],
+    ["ambiguous same-length owners", (v) => { v.ambiguousOwner = true; }],
+    ["invalid ownership schema", (v) => { v.invalidOwnershipSchema = true; }],
+    ["unsupported ownership resolution", (v) => { v.invalidResolution = true; }],
     ["ownership content mismatch", (v) => { v.noOwnership = true; }],
     ["change binding mismatch", (v) => { v.noChangeBinding = true; }],
     ["missing trusted binding", (v) => { v.trusted.postMergeCloseouts = []; }],
@@ -256,7 +262,7 @@ const cases = [];
     ["unknown source ref", (v) => { v.binding.files[0].sourceId = "unknown"; }],
     ["duplicate source", (v) => { v.binding.sources.push(v.binding.sources[0]); }],
   ];
-  for (const [name, mutate] of variants) {
+  for (const [name, mutate, expected] of variants) {
     const binding = structuredClone(baseBinding);
     const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: [binding] };
     const state = { binding, trusted: structuredClone(registry), evidence: structuredClone(baseEvidence), run: { name: "CI", head_sha: "3".repeat(40), event: "pull_request", status: "completed", conclusion: "success" } };
@@ -271,20 +277,27 @@ const cases = [];
       }
       if (endpoint.startsWith("/contents/")) {
         let value = {};
-        if (endpoint.includes("implementation-ownership.json")) value = { rules: state.noOwnership ? [] : [{ match: { kind: "EXACT", path: "apps/fixture.ts" }, ownership: { features: [feature] } }] };
-        if (endpoint.includes("change-bindings/")) value = { featureBindings: state.noChangeBinding ? [] : [{ feature, specPath: "specs/" + feature, implementationPaths: ["apps/fixture.ts"] }] };
+        if (endpoint.includes("implementation-ownership.json")) {
+          const rule = (id, kind, path, owner) => ({ id, match: { kind, path }, ownership: { kind: "FEATURE", features: [owner] } });
+          value = { schemaVersion: state.invalidOwnershipSchema ? 2 : 1, resolution: state.invalidResolution ? "ANY_MATCH" : "LONGEST_MATCH", rules: state.noOwnership ? [] : [rule("feature", "PREFIX", "apps/", feature)] };
+          if (state.effectiveFeature) value.rules = [rule("foreign", "PREFIX", "apps/", "other-feature"), rule("feature", "EXACT", "apps/nested/fixture.ts", feature)];
+          if (state.foreignExact) value.rules.push(rule("foreign", "EXACT", "apps/nested/fixture.ts", "other-feature"));
+          if (state.foreignPrefix) value.rules.push(rule("foreign", "PREFIX", "apps/nested/", "other-feature"));
+          if (state.ambiguousOwner) value.rules.push(rule("foreign", "PREFIX", "apps/", "other-feature"));
+        }
+        if (endpoint.includes("change-bindings/")) value = { featureBindings: state.noChangeBinding ? [] : [{ feature, specPath: "specs/" + feature, implementationPaths: ["apps/nested/fixture.ts"] }] };
         return { type: "file", sha: (state.wrongBlob ? "b" : "a").repeat(40), encoding: "base64", content: Buffer.from(JSON.stringify(value)).toString("base64") };
       }
       throw new Error("Unexpected fixture API request " + endpoint);
     };
-    const delta = async (pr) => new Set(pr === 1 ? (state.missingPlanning ? [] : ["specs/" + feature + "/spec.md", "specs/" + feature + "/tasks.md"]) : pr === 2 ? [".specify/implementation-ownership.json"] : [".specify/change-bindings/" + feature + ".json", "apps/fixture.ts", ...(state.missingDelta ? [] : ["tests/check.test.ts"])]);
+    const delta = async (pr) => new Set(pr === 1 ? (state.missingPlanning ? [] : ["specs/" + feature + "/spec.md", "specs/" + feature + "/tasks.md"]) : pr === 2 ? [".specify/implementation-ownership.json"] : [".specify/change-bindings/" + feature + ".json", "apps/nested/fixture.ts", ...(state.missingDelta ? [] : ["tests/check.test.ts"])]);
     const factory = new Function("github", "prChangedFiles", "execFileSync", "repository", "root", "isAllowedVerificationPath", "globMatches", functions + "\nreturn {validateCloseoutRegistry,validateCloseoutGraph,validateRemoteCloseout};");
     const functionsUnderTest = factory(api, delta, () => JSON.stringify(state.trusted), "fixture/repo", root, (p) => /^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/)/.test(p), globMatches);
     const errors = [];
     functionsUnderTest.validateCloseoutRegistry(registry, errors);
     if (!errors.length) await functionsUnderTest.validateCloseoutGraph(binding, errors);
     await functionsUnderTest.validateRemoteCloseout(state.evidence, [{ id: "T001", req: "FR-001", verify: check }], registry, "fixture", errors);
-    cases.push({ name: "PMC remote " + name, expected: mutate ? 1 : 0, marker: "", actual: { code: errors.length ? 1 : 0, out: errors.join("\n") } });
+    cases.push({ name: "PMC remote " + name, expected: expected ?? (mutate ? 1 : 0), marker: "", actual: { code: errors.length ? 1 : 0, out: errors.join("\n") } });
   }
 }
 
