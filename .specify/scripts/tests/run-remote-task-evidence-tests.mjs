@@ -229,7 +229,7 @@ const cases = [];
   const functions = sourceText.slice(sourceText.indexOf("// POST_MERGE_CLOSEOUT"), sourceText.indexOf("const errors = [];"));
   const feature = "fixture-post-merge";
   const check = "scripts/check.mjs";
-  const baseBinding = { id: "fixture-closeout", featureId: feature, sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: check, identity: "TREE", verification: true, blobSha: "a".repeat(40) }, { sourceId: "implementation", path: "tests/check.test.ts", identity: "DELTA", verification: true }] };
+  const baseBinding = { id: "fixture-closeout", featureId: feature, authorizedTaskIds: ["T001"], sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: check, identity: "TREE", verification: true, blobSha: "a".repeat(40) }, { sourceId: "implementation", path: "tests/check.test.ts", identity: "DELTA", verification: true }] };
   const baseEvidence = { schemaVersion: 4, provenanceKind: "POST_MERGE_CLOSEOUT", featureId: feature, taskFile: "specs/" + feature + "/tasks.md", closeoutBindingId: baseBinding.id, taskIds: ["T001"], taskVerifications: [{ taskId: "T001", reqContract: "FR-001", verifyContract: check, verificationPaths: [check] }], ciRuns: [{ sourceId: "implementation", runId: 1, name: "CI", headSha: "3".repeat(40), conclusion: "success" }] };
   const variants = [
     ["valid multi-PR DELTA + TREE + CI", null],
@@ -261,8 +261,20 @@ const cases = [];
     ["traversal authorization", (v) => { v.binding.files[0].path = "scripts/../secret"; }],
     ["unknown source ref", (v) => { v.binding.files[0].sourceId = "unknown"; }],
     ["duplicate source", (v) => { v.binding.sources.push(v.binding.sources[0]); }],
+    ["M01-A unauthorized checked task", (v) => {
+      const extra = { sourceId: "implementation", path: "tests/other.test.ts", identity: "DELTA", verification: true };
+      v.binding.files.push(extra);
+      v.trusted.postMergeCloseouts[0].files.push(structuredClone(extra));
+      v.evidence.taskIds.push("T011");
+      v.evidence.taskVerifications.push({ taskId: "T011", reqContract: "FR-001", verifyContract: "tests/other.test.ts", verificationPaths: ["tests/other.test.ts"] });
+      v.tasks = [{ id: "T001", req: "FR-001", verify: check }, { id: "T011", req: "FR-001", verify: "tests/other.test.ts" }];
+      v.historicalExtra = "- [ ] T011 fixture [REQ:FR-001] [VERIFY: tests/other.test.ts]\n";
+    }, undefined, "task is not pre-authorized by trusted-base closeout binding"],
+    ["M01-C historical REQ drift", (v) => { v.historicalReq = "FR-999"; }, undefined, "historical task contract drift: T001"],
+    ["M01-D historical VERIFY drift", (v) => { v.historicalVerify = "scripts/drift.mjs"; }, undefined, "historical task contract drift: T001"],
+    ["M01-E current registry cannot expand authorizedTaskIds", (v) => { v.binding.authorizedTaskIds.push("T011"); }, undefined, "same-change closeout self authorization forbidden"],
   ];
-  for (const [name, mutate, expected] of variants) {
+  for (const [name, mutate, expected, marker] of variants) {
     const binding = structuredClone(baseBinding);
     const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: [binding] };
     const state = { binding, trusted: structuredClone(registry), evidence: structuredClone(baseEvidence), run: { name: "CI", head_sha: "3".repeat(40), event: "pull_request", status: "completed", conclusion: "success" } };
@@ -276,17 +288,22 @@ const cases = [];
         return { number: prNumber, merged_at: state.unmerged ? null : "2026-01-01", base: { ref: state.wrongBase ? "other" : "main", repo: { full_name: state.wrongRepo ? "other/repo" : "fixture/repo" } }, head: { sha: state.wrongHead ? "f".repeat(40) : source.headSha, repo: { full_name: "fixture/repo" } }, merge_commit_sha: state.wrongMerge ? "f".repeat(40) : source.mergeCommitSha };
       }
       if (endpoint.startsWith("/contents/")) {
-        let value = {};
+        const sha = (state.wrongBlob ? "b" : "a").repeat(40);
         if (endpoint.includes("implementation-ownership.json")) {
           const rule = (id, kind, path, owner) => ({ id, match: { kind, path }, ownership: { kind: "FEATURE", features: [owner] } });
-          value = { schemaVersion: state.invalidOwnershipSchema ? 2 : 1, resolution: state.invalidResolution ? "ANY_MATCH" : "LONGEST_MATCH", rules: state.noOwnership ? [] : [rule("feature", "PREFIX", "apps/", feature)] };
+          let value = { schemaVersion: state.invalidOwnershipSchema ? 2 : 1, resolution: state.invalidResolution ? "ANY_MATCH" : "LONGEST_MATCH", rules: state.noOwnership ? [] : [rule("feature", "PREFIX", "apps/", feature)] };
           if (state.effectiveFeature) value.rules = [rule("foreign", "PREFIX", "apps/", "other-feature"), rule("feature", "EXACT", "apps/nested/fixture.ts", feature)];
           if (state.foreignExact) value.rules.push(rule("foreign", "EXACT", "apps/nested/fixture.ts", "other-feature"));
           if (state.foreignPrefix) value.rules.push(rule("foreign", "PREFIX", "apps/nested/", "other-feature"));
           if (state.ambiguousOwner) value.rules.push(rule("foreign", "PREFIX", "apps/", "other-feature"));
+          return { type: "file", sha, encoding: "base64", content: Buffer.from(JSON.stringify(value)).toString("base64") };
         }
-        if (endpoint.includes("change-bindings/")) value = { featureBindings: state.noChangeBinding ? [] : [{ feature, specPath: "specs/" + feature, implementationPaths: ["apps/nested/fixture.ts"] }] };
-        return { type: "file", sha: (state.wrongBlob ? "b" : "a").repeat(40), encoding: "base64", content: Buffer.from(JSON.stringify(value)).toString("base64") };
+        if (endpoint.includes("change-bindings/")) {
+          const value = { featureBindings: state.noChangeBinding ? [] : [{ feature, specPath: "specs/" + feature, implementationPaths: ["apps/nested/fixture.ts"] }] };
+          return { type: "file", sha, encoding: "base64", content: Buffer.from(JSON.stringify(value)).toString("base64") };
+        }
+        const historical = "- [ ] T001 fixture [REQ:" + (state.historicalReq ?? "FR-001") + "] [VERIFY: " + (state.historicalVerify ?? check) + "]\n" + (state.historicalExtra ?? "");
+        return { type: "file", sha, encoding: "base64", content: Buffer.from(historical).toString("base64") };
       }
       throw new Error("Unexpected fixture API request " + endpoint);
     };
@@ -296,8 +313,44 @@ const cases = [];
     const errors = [];
     functionsUnderTest.validateCloseoutRegistry(registry, errors);
     if (!errors.length) await functionsUnderTest.validateCloseoutGraph(binding, errors);
-    await functionsUnderTest.validateRemoteCloseout(state.evidence, [{ id: "T001", req: "FR-001", verify: check }], registry, "fixture", errors);
-    cases.push({ name: "PMC remote " + name, expected: expected ?? (mutate ? 1 : 0), marker: "", actual: { code: errors.length ? 1 : 0, out: errors.join("\n") } });
+    await functionsUnderTest.validateRemoteCloseout(state.evidence, state.tasks ?? [{ id: "T001", req: "FR-001", verify: check }], registry, "fixture", errors);
+    cases.push({ name: "PMC remote " + name, expected: expected ?? (mutate ? 1 : 0), marker: marker ?? "", actual: { code: errors.length ? 1 : 0, out: errors.join("\n") } });
+  }
+}
+
+// PMC-M02 deterministic changed-files completeness tests against the real helper.
+{
+  const sourceText = fs.readFileSync(validator, "utf8");
+  const helperSource = sourceText.slice(sourceText.indexOf("const MAX_CHANGED_FILE_PAGES"), sourceText.indexOf("function parseCompletedTasks"));
+  const makeChangedFiles = new Function("github", helperSource + "\nreturn prChangedFiles;");
+  const page = (prefix, count) => Array.from({ length: count }, (_, index) => ({ filename: prefix + String(index).padStart(4, "0") + ".ts" }));
+  const scenarios = [
+    ["M02-A normal pagination", 4, [page("a", 4)], 0, ""],
+    ["M02-B metadata count mismatch", 4, [page("a", 3)], 1, "changed-files listing incomplete"],
+    ["M02-C early incomplete pagination", 150, [page("a", 100), page("b", 40)], 1, "changed-files listing incomplete"],
+    ["M02-D metadata above 3000 bound", 3001, [], 1, "exceeds bounded pagination"],
+    ["M02-D 30 full pages cannot prove completeness", 2999, Array.from({ length: 30 }, (_, i) => page("p" + i + "-", 100)), 1, "exceeds metadata"],
+    ["M02-E malformed filename entry", 2, [[{ filename: "a.ts" }, {}]], 1, "Malformed PR file entry"],
+    ["M02-F duplicate filename", 2, [[{ filename: "a.ts" }, { filename: "a.ts" }]], 1, "Duplicate PR filename"],
+    ["M02-G GitHub API failure", 1, [], 1, "GitHub API failure"],
+  ];
+  for (const [name, metadata, pages, expected, marker] of scenarios) {
+    const github = async (endpoint) => {
+      if (name.includes("GitHub API failure")) throw new Error("GitHub API failure");
+      const index = Number(endpoint.match(/&page=(\d+)/)?.[1]) - 1;
+      if (!Number.isInteger(index) || index < 0) throw new Error("Unexpected endpoint " + endpoint);
+      return pages[index] ?? [];
+    };
+    let code = 0;
+    let out = "";
+    try {
+      const files = await makeChangedFiles(github)(1, metadata);
+      if (files.size !== metadata) throw new Error("unexpected result size " + files.size);
+    } catch (error) {
+      code = 1;
+      out = error instanceof Error ? error.message : String(error);
+    }
+    cases.push({ name: "PMC remote " + name, expected, marker, actual: { code, out } });
   }
 }
 

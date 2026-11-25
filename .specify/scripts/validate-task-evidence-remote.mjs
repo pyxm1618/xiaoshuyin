@@ -45,15 +45,43 @@ async function github(pathname) {
   return value;
 }
 
-async function prChangedFiles(prNumber) {
-  const files = [];
-  for (let page = 1; page <= 30; page += 1) {
-    const batch = await github("/pulls/" + prNumber + "/files?per_page=100&page=" + page);
-    if (!Array.isArray(batch)) throw new Error("Unexpected PR files response for #" + prNumber);
-    for (const item of batch) if (typeof item?.filename === "string") files.push(item.filename);
-    if (batch.length < 100) break;
+const MAX_CHANGED_FILE_PAGES = 30;
+const CHANGED_FILES_PER_PAGE = 100;
+function changedFilePath(value) {
+  return typeof value === "string" && value.length > 0 && !value.startsWith("/") &&
+    !value.includes("\\") && !value.includes("\0") &&
+    !value.split("/").some((part) => !part || part === "." || part === "..");
+}
+async function prChangedFiles(prNumber, expectedChangedFiles) {
+  if (!Number.isInteger(expectedChangedFiles) || expectedChangedFiles < 0) {
+    throw new Error("PR #" + prNumber + " has invalid changed_files metadata.");
   }
-  return new Set(files);
+  if (expectedChangedFiles > MAX_CHANGED_FILE_PAGES * CHANGED_FILES_PER_PAGE) {
+    throw new Error("PR #" + prNumber + " changed_files exceeds bounded pagination.");
+  }
+  const files = new Set();
+  for (let page = 1; page <= MAX_CHANGED_FILE_PAGES; page += 1) {
+    const batch = await github("/pulls/" + prNumber + "/files?per_page=" + CHANGED_FILES_PER_PAGE + "&page=" + page);
+    if (!Array.isArray(batch) || batch.length > CHANGED_FILES_PER_PAGE) {
+      throw new Error("Unexpected PR files response for #" + prNumber);
+    }
+    for (const item of batch) {
+      if (!item || typeof item !== "object" || Array.isArray(item) || !changedFilePath(item.filename)) {
+        throw new Error("Malformed PR file entry for #" + prNumber);
+      }
+      if (files.has(item.filename)) throw new Error("Duplicate PR filename for #" + prNumber + ": " + item.filename);
+      files.add(item.filename);
+      if (files.size > expectedChangedFiles) {
+        throw new Error("PR #" + prNumber + " changed-files count exceeds metadata.");
+      }
+    }
+    if (files.size === expectedChangedFiles) break;
+    if (batch.length < CHANGED_FILES_PER_PAGE) break;
+  }
+  if (files.size !== expectedChangedFiles) {
+    throw new Error("PR #" + prNumber + " changed-files listing incomplete: " + files.size + " of " + expectedChangedFiles);
+  }
+  return files;
 }
 
 function parseCompletedTasks(content) {
@@ -119,6 +147,11 @@ function validateCloseoutRegistry(registry, errors) {
     ids.add(binding?.id);
     if (!/^[a-z0-9-]+$/.test(binding?.featureId ?? "") || features.has(binding.featureId)) errors.push("Invalid/duplicate closeout featureId.");
     features.add(binding?.featureId);
+    const authorizedTaskIds = binding?.authorizedTaskIds;
+    if (!Array.isArray(authorizedTaskIds) || !authorizedTaskIds.length || new Set(authorizedTaskIds).size !== authorizedTaskIds.length ||
+        authorizedTaskIds.some((id) => typeof id !== "string" || !/^T\d{3,}$/.test(id))) {
+      errors.push("Closeout authorizedTaskIds must be a finite/non-empty array of unique task IDs.");
+    }
     const sources = Array.isArray(binding?.sources) ? binding.sources : [];
     const sourceIds = new Set();
     const prs = new Set();
@@ -160,6 +193,11 @@ function validateCloseoutConsumer(evidence, records, binding, rel, errors) {
   const actualIds = mappings.map((m) => m?.taskId);
   const checked = records.map((r) => r.id);
   if (new Set(actualIds).size !== actualIds.length || taskIds.length !== checked.length || actualIds.length !== checked.length || checked.some((id) => !taskIds.includes(id) || !actualIds.includes(id))) errors.push(rel + ": checked tasks must exactly match taskIds and taskVerifications.");
+  const authorized = closeoutSet(binding.authorizedTaskIds, rel + " authorizedTaskIds", errors);
+  if (!authorized.length) errors.push(rel + ": trusted-base closeout binding authorizes no tasks.");
+  for (const id of new Set([...taskIds, ...checked])) {
+    if (typeof id !== "string" || !authorized.includes(id)) errors.push(rel + ": task is not pre-authorized by trusted-base closeout binding: " + String(id));
+  }
   const usedPaths = new Set();
   const usedSources = new Set();
   for (const record of records) {
@@ -188,6 +226,57 @@ function validateCloseoutConsumer(evidence, records, binding, rel, errors) {
 }
 function verificationPatternsCloseout(verify) {
   return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.*?\/-]+/g) ?? [])];
+}
+function parseHistoricalTasks(content) {
+  const records = [];
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^- \[([ xX])\] (T\d{3,})\b/);
+    if (!match) continue;
+    const req = line.match(/\[REQ:(.*?)\]/);
+    const verify = line.match(/\[VERIFY:(.*)\]\s*$/);
+    records.push({
+      id: match[2],
+      req: req ? req[1].trim() : null,
+      verify: verify ? verify[1].trim() : null,
+    });
+  }
+  return records;
+}
+async function closeoutText(source, rel) {
+  const item = await closeoutContent(source, rel);
+  if (item.encoding !== "base64" || typeof item.content !== "string" || item.truncated) {
+    throw new Error("Missing exact-head text content: " + rel);
+  }
+  return Buffer.from(item.content, "base64").toString("utf8");
+}
+async function validateHistoricalTaskContract(binding, tasks, rel, errors) {
+  const planning = binding.sources?.find((source) => source.role === "PLANNING");
+  if (!planning) {
+    errors.push(rel + ": missing historical PLANNING source.");
+    return;
+  }
+  const historicalPath = "specs/" + binding.featureId + "/tasks.md";
+  let historical;
+  try {
+    historical = parseHistoricalTasks(await closeoutText(planning, historicalPath));
+  } catch (error) {
+    errors.push(rel + ": cannot read historical PLANNING task contract: " + (error instanceof Error ? error.message : String(error)));
+    return;
+  }
+  if (!historical.length) {
+    errors.push(rel + ": historical PLANNING task contract is empty.");
+    return;
+  }
+  for (const task of tasks) {
+    const prior = historical.find((record) => record.id === task.id);
+    if (!prior) {
+      errors.push(rel + ": historical task missing: " + task.id);
+      continue;
+    }
+    if (!task.req || !task.verify || !prior.req || !prior.verify || task.req !== prior.req || task.verify !== prior.verify) {
+      errors.push(rel + ": historical task contract drift: " + task.id);
+    }
+  }
 }
 
 async function closeoutDeltaFeature(pr, rel, feature) {
@@ -242,7 +331,7 @@ async function validateCloseoutGraph(binding, errors) {
     for (const source of binding.sources) {
       const pr = await github("/pulls/" + source.pr);
       if (pr.number !== source.pr || pr.base?.repo?.full_name !== repository || pr.head?.repo?.full_name !== repository || !pr.merged_at || pr.base?.ref !== (source.baseBranch ?? "main") || pr.head?.sha !== source.headSha || pr.merge_commit_sha !== source.mergeCommitSha) errors.push(label + ": source PR truth mismatch: " + source.id);
-      deltas.set(source.id, await prChangedFiles(source.pr));
+      deltas.set(source.id, await prChangedFiles(source.pr, pr.changed_files));
     }
     const planning = binding.sources.find((s) => s.role === "PLANNING");
     for (const name of ["spec.md", "tasks.md"]) if (!deltas.get(planning.id).has("specs/" + binding.featureId + "/" + name)) errors.push(label + ": planning identity missing from delta.");
@@ -286,6 +375,7 @@ async function validateRemoteCloseout(evidence, tasks, registry, rel, errors) {
   if (JSON.stringify(binding) !== JSON.stringify(current)) errors.push(rel + ": same-change closeout self authorization forbidden.");
   validateCloseoutConsumer(evidence, tasks, binding, rel, errors);
   if (!binding) return;
+  await validateHistoricalTaskContract(binding, tasks, rel, errors);
   for (const run of evidence.ciRuns ?? []) {
     const source = binding.sources?.find((s) => s.id === run?.sourceId);
     if (!source) continue;
@@ -444,7 +534,7 @@ for (const name of files) {
       errors.push(rel + ": mergedAt mismatch; GitHub=" + pr.merged_at + " manifest=" + evidence.mergedAt);
     }
 
-    const delta = await prChangedFiles(evidence.implementationPr);
+    const delta = await prChangedFiles(evidence.implementationPr, pr.changed_files);
     if (evidence.provenanceKind === "FEATURE_IMPLEMENTATION") {
       const featureSpec = "specs/" + evidence.featureId + "/spec.md";
       const featureTasks = "specs/" + evidence.featureId + "/tasks.md";

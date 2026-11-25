@@ -842,7 +842,7 @@ for (const rel of ["db/init/unknown.sh", "db/migrations/999_slice19_forbidden.sq
     const taskFile = "specs/" + feature + "/tasks.md";
     write(root, taskFile, "- [ ] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n- [ ] T011 optional [REQ:FR-001] [VERIFY: scripts/other.mjs]\n");
     write(root, verification, "// fixture\n");
-    const binding = { id: "fixture-closeout", featureId: feature, sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: verification, identity: "TREE", verification: true, blobSha: "a".repeat(40) }] };
+    const binding = { id: "fixture-closeout", featureId: feature, authorizedTaskIds: ["T001"], sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: verification, identity: "TREE", verification: true, blobSha: "a".repeat(40) }] };
     const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: selfAuthorize ? [] : [binding] };
     write(root, ".specify/task-provenance-registry.json", JSON.stringify(registry));
     if (name === "legacy baseline cannot bypass closeout") {
@@ -858,6 +858,59 @@ for (const rel of ["db/init/unknown.sh", "db/migrations/999_slice19_forbidden.sq
     write(root, ".specify/task-evidence/" + (name === "orphan manifest" ? "nonexistent-feature" : feature) + ".json", JSON.stringify(evidence));
     commit(root, "consume fixture");
     record("PMC " + name, mutate || selfAuthorize ? 1 : 0, run(root, base));
+    cleanup(root);
+  }
+}
+
+// PMC-M01 adversarial: historical task completion is pre-authorized, not consumer-selected.
+{
+  const feature = "fixture-m01";
+  const verification = "scripts/fixture-check.mjs";
+  const other = "scripts/m01-other.mjs";
+  const sources = ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({
+    id: role.toLowerCase(), role, pr: i + 1,
+    headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40),
+  }));
+  const files = [
+    { sourceId: "implementation", path: verification, identity: "TREE", verification: true, blobSha: "a".repeat(40) },
+    { sourceId: "implementation", path: other, identity: "TREE", verification: true, blobSha: "b".repeat(40) },
+  ];
+  const unchecked = "- [ ] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n" +
+    "- [ ] T011 optional [REQ:FR-001] [VERIFY: scripts/m01-other.mjs]\n";
+  const checked = "- [ ] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n" +
+    "- [x] T011 optional [REQ:FR-001] [VERIFY: scripts/m01-other.mjs]\n";
+  for (const [name, expandCurrentRegistry] of [
+    ["M01-A unchecked→checked unauthorized task with complete evidence is rejected", false],
+    ["M01-E consumer cannot self-expand trusted-base authorizedTaskIds", true],
+  ]) {
+    const root = project();
+    addFeature(root, feature);
+    const taskFile = "specs/" + feature + "/tasks.md";
+    write(root, taskFile, unchecked);
+    write(root, verification, "// fixture\n");
+    write(root, other, "// fixture\n");
+    const binding = { id: "fixture-closeout", featureId: feature, authorizedTaskIds: ["T001"], sources, files };
+    const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: [binding] };
+    write(root, ".specify/task-provenance-registry.json", JSON.stringify(registry));
+    const base = commit(root, "pre-authorize fixture");
+    if (expandCurrentRegistry) {
+      registry.postMergeCloseouts[0].authorizedTaskIds = ["T001", "T011"];
+      write(root, ".specify/task-provenance-registry.json", JSON.stringify(registry));
+    }
+    write(root, taskFile, checked);
+    const evidence = {
+      schemaVersion: 4,
+      provenanceKind: "POST_MERGE_CLOSEOUT",
+      featureId: feature,
+      taskFile,
+      closeoutBindingId: binding.id,
+      taskIds: ["T011"],
+      taskVerifications: [{ taskId: "T011", reqContract: "FR-001", verifyContract: other, verificationPaths: [other] }],
+      ciRuns: [{ runId: 1, sourceId: "implementation", name: "CI", headSha: "3".repeat(40), conclusion: "success" }],
+    };
+    write(root, ".specify/task-evidence/" + feature + ".json", JSON.stringify(evidence));
+    commit(root, "consume unauthorized task");
+    record(name, 1, run(root, base), "task is not pre-authorized by trusted-base closeout binding");
     cleanup(root);
   }
 }

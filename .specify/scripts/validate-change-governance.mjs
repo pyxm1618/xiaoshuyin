@@ -887,6 +887,11 @@ function validateCloseoutRegistry(registry, errors) {
     ids.add(binding?.id);
     if (!/^[a-z0-9-]+$/.test(binding?.featureId ?? "") || features.has(binding.featureId)) errors.push("Invalid/duplicate closeout featureId.");
     features.add(binding?.featureId);
+    const authorizedTaskIds = binding?.authorizedTaskIds;
+    if (!Array.isArray(authorizedTaskIds) || !authorizedTaskIds.length || new Set(authorizedTaskIds).size !== authorizedTaskIds.length ||
+        authorizedTaskIds.some((id) => typeof id !== "string" || !/^T\d{3,}$/.test(id))) {
+      errors.push("Closeout authorizedTaskIds must be a finite/non-empty array of unique task IDs.");
+    }
     const sources = Array.isArray(binding?.sources) ? binding.sources : [];
     const sourceIds = new Set();
     const prs = new Set();
@@ -928,6 +933,11 @@ function validateCloseoutConsumer(evidence, records, binding, rel, errors) {
   const actualIds = mappings.map((m) => m?.taskId);
   const checked = records.map((r) => r.id);
   if (new Set(actualIds).size !== actualIds.length || taskIds.length !== checked.length || actualIds.length !== checked.length || checked.some((id) => !taskIds.includes(id) || !actualIds.includes(id))) errors.push(rel + ": checked tasks must exactly match taskIds and taskVerifications.");
+  const authorized = closeoutSet(binding.authorizedTaskIds, rel + " authorizedTaskIds", errors);
+  if (!authorized.length) errors.push(rel + ": trusted-base closeout binding authorizes no tasks.");
+  for (const id of new Set([...taskIds, ...checked])) {
+    if (typeof id !== "string" || !authorized.includes(id)) errors.push(rel + ": task is not pre-authorized by trusted-base closeout binding: " + String(id));
+  }
   const usedPaths = new Set();
   const usedSources = new Set();
   for (const record of records) {
