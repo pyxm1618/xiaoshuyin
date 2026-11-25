@@ -173,11 +173,11 @@ export async function withDrizzleIdentityTransaction<T>(
         : undefined;
 
     return await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
-      );
-      await assertIdentityContextMatches(tx, opts);
       try {
+        await tx.execute(
+          sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
+        );
+        await assertIdentityContextMatches(tx, opts);
         return await fn(tx, client);
       } catch (error) {
         rememberFailure(error);
@@ -232,14 +232,14 @@ export async function withDrizzleRlsTransaction<T>(
         : undefined;
 
     return await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
-      );
-      await assertIdentityContextMatches(tx, opts);
-      await tx.execute(
-        sql`SELECT app.set_family_context(${opts.familyId}, ${opts.personId}, ${opts.purpose})`
-      );
       try {
+        await tx.execute(
+          sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
+        );
+        await assertIdentityContextMatches(tx, opts);
+        await tx.execute(
+          sql`SELECT app.set_family_context(${opts.familyId}, ${opts.personId}, ${opts.purpose})`
+        );
         return await fn(tx, client);
       } catch (error) {
         rememberFailure(error);

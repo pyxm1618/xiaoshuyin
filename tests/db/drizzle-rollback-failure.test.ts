@@ -26,6 +26,22 @@ for (const transaction of [withDrizzleIdentityTransaction, withDrizzleRlsTransac
       expect(client.release).toHaveBeenCalledExactlyOnceWith(['ECONNRESET', '08006', 'ETIMEDOUT', 'EPIPE', '57P01', '25P02'].includes(code));
     });
 
+    it('preserves identity authorization failure when Drizzle rollback also fails', async () => {
+      const client = Object.assign(new EventEmitter(), {
+        query: vi.fn(async (query: { text: string }) => {
+          if (query.text === 'rollback') throw new Error('rollback failed');
+          if (query.text.includes('app_account_id')) return { rows: [{ account_id: 'different-account', person_id: 'person', purpose: 'test' }] };
+          return { rows: [] };
+        }),
+        release: vi.fn(),
+      });
+      const pool = { connect: vi.fn(async () => client) } as unknown as pg.Pool;
+      await expect(transaction(pool, identity, async () => 'unreachable')).rejects.toMatchObject({
+        code: '42501', message: 'RLS_IDENTITY_CONTEXT_MISMATCH',
+      });
+      expect(client.release).toHaveBeenCalledExactlyOnceWith(true);
+    });
+
     it.each(['23505', 'ECONNRESET'])('destroys on real Drizzle rollback failure and preserves original %s request error', async (code) => {
       const original = Object.assign(new Error('request failed'), { code });
       const client = Object.assign(new EventEmitter(), {
