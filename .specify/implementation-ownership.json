@@ -1274,6 +1274,32 @@
           "common-core-goal-confirmgoal-runtime"
         ]
       }
+    },
+    {
+      "id": "consent-dependency-canonical-matching-migration-040",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/040_consent_dependency_canonical_matching.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-node-semantics",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-phone-contract-semantics.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
     }
   ]
 }
