@@ -165,6 +165,7 @@ describe('Slice 14 Contract request contracts', () => {
       version: 1,
       draftRevision: 1,
       status: 'DRAFT',
+      reviewState: 'CURRENT',
       adultPartyPersonId: base.adultPartyPersonId,
       childPartyPersonId: base.childPartyPersonId,
       childParticipationId: null,

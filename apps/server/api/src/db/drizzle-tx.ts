@@ -27,6 +27,44 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { safetySchema } from '@xiaoshuyin/domain';
 import { isBrokenClientError } from './tx.js';
 
+/** Observe Drizzle's own rollback without taking transaction ownership. */
+function observeTransactionQueries(client: pg.PoolClient, markBroken: () => void) {
+  let originalFailure: unknown;
+  let hasOriginalFailure = false;
+  let rollbackFailed = false;
+  const rememberFailure = (error: unknown) => {
+    if (!hasOriginalFailure) {
+      originalFailure = error;
+      hasOriginalFailure = true;
+    }
+  };
+  const observedClient = new Proxy(client, {
+    get(target, property) {
+      if (property !== 'query') return Reflect.get(target, property, target);
+      return async (...args: unknown[]) => {
+        const query = args[0];
+        const text = typeof query === 'string' ? query : (query as { text?: string })?.text;
+        try {
+          return await Reflect.apply(target.query, target, args);
+        } catch (error) {
+          if (text?.trim().toLowerCase() === 'rollback') {
+            rollbackFailed = true;
+            markBroken();
+            if (hasOriginalFailure) throw originalFailure;
+          }
+          rememberFailure(error);
+          throw error;
+        }
+      };
+    },
+  });
+  return {
+    observedClient,
+    rememberFailure,
+    requestFailure: (error: unknown) => rollbackFailed && hasOriginalFailure ? originalFailure : error,
+  };
+}
+
 /** The typed Drizzle database bound to the Slice 9 schema projection. */
 export type SafetyDrizzleDb = NodePgDatabase<typeof safetySchema>;
 
@@ -123,7 +161,10 @@ export async function withDrizzleIdentityTransaction<T>(
   };
   client.on('error', onClientError);
 
-  const db = drizzle(client, { schema: safetySchema });
+  const { observedClient, rememberFailure, requestFailure } = observeTransactionQueries(client, () => {
+    broken = true;
+  });
+  const db = drizzle(observedClient, { schema: safetySchema });
 
   try {
     const transactionConfig =
@@ -136,11 +177,16 @@ export async function withDrizzleIdentityTransaction<T>(
         sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
       );
       await assertIdentityContextMatches(tx, opts);
-      return fn(tx, client);
+      try {
+        return await fn(tx, client);
+      } catch (error) {
+        rememberFailure(error);
+        throw error;
+      }
     }, transactionConfig);
   } catch (error) {
     broken = broken || isBrokenClientError(error);
-    throw error;
+    throw requestFailure(error);
   } finally {
     try {
       client.release(broken);
@@ -171,7 +217,10 @@ export async function withDrizzleRlsTransaction<T>(
   };
   client.on('error', onClientError);
 
-  const db = drizzle(client, { schema: safetySchema });
+  const { observedClient, rememberFailure, requestFailure } = observeTransactionQueries(client, () => {
+    broken = true;
+  });
+  const db = drizzle(observedClient, { schema: safetySchema });
 
   try {
     // Drizzle owns BEGIN / COMMIT / ROLLBACK for this whole callback. The
@@ -190,11 +239,16 @@ export async function withDrizzleRlsTransaction<T>(
       await tx.execute(
         sql`SELECT app.set_family_context(${opts.familyId}, ${opts.personId}, ${opts.purpose})`
       );
-      return fn(tx, client);
+      try {
+        return await fn(tx, client);
+      } catch (error) {
+        rememberFailure(error);
+        throw error;
+      }
     }, transactionConfig);
   } catch (error) {
     broken = broken || isBrokenClientError(error);
-    throw error;
+    throw requestFailure(error);
   } finally {
     try {
       client.release(broken);

@@ -11,8 +11,10 @@ import {
   createFamily,
   createMember,
   loginWithLabel,
+  revokeConsent,
   type LoginResult,
 } from '../setup/api.js';
+import { buildConsentEvidence, getAcceptanceTextHash, getCurrentNoticeHash, runtimeConsentChannel } from '@xiaoshuyin/compliance';
 import { createCase } from '../setup/participation.js';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
@@ -414,6 +416,71 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     });
     expect(mismatchDraft.statusCode).toBe(409);
     expect(mismatchDraft.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+  });
+
+  it('B2 Roleplay create exact replay bypasses mutable execution and compliance gates',async()=>{
+    const adapter = {
+      adapterRef: 'test:deterministic-roleplay-v1',
+      async isAvailable() { return true; },
+      async createTurn() {
+        return {
+          simulatedParentOutput: 'simulated parent',
+          adapterRef: 'test:deterministic-roleplay-v1',
+          modelRef: 'test-model',
+          promptVersionRef: 'test-prompt-v1',
+        };
+      },
+    };
+    const roleplayApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: PHONE_USE_CONTRACT_CONTENT_VERSION,
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: 'test-model',
+            authorityRef: 'test-authority:model-v1',
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: 'test-prompt-v1',
+            authorityRef: 'test-authority:prompt-v1',
+          },
+        }),
+      },
+    });
+    await roleplayApp.ready();
+
+    try {
+      const f = await createTestFixture(`b2-create-${crypto.randomUUID()}`);
+
+      // Enable A4003 node state
+      await admin.query(
+        `INSERT INTO scene_node_states
+           (family_id, case_id, scene_package_version, node_code, source_node_code,
+            status, revision, branch_reason_codes, input_refs, output_refs)
+         VALUES ($1, $2, $3, 'A4003', 'A4002', 'AVAILABLE', 1, ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb)`,
+        [f.familyId, f.caseId, DIGITAL_USE_PACKAGE_VERSION]
+      );
+
+      const key=`b2-create-${crypto.randomUUID()}`;
+      const payload={expectedCaseVersion:f.caseVersion,professionalContentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION};
+      const request=(idempotencyKey=key)=>roleplayApp.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/roleplays`,headers:{...auth(f.manager.token),'idempotency-key':idempotencyKey},payload});
+      const first=await request();
+      expect(first.statusCode,first.body).toBe(201);
+      await admin.query(`UPDATE person_compliance_profiles SET age_band='UNKNOWN',minor_mode=false WHERE person_id=$1`,[f.manager.personId]);
+      const replay=await request();
+      expect(replay.statusCode,replay.body).toBe(201);
+      expect(replay.json()).toEqual(first.json());
+      const blocked=await request(`${key}-new`);
+      expect(blocked.statusCode,blocked.body).toBe(403);
+      expect(blocked.json().code).toBe('AGE_BAND_UNKNOWN');
+      expect((await admin.query('SELECT count(*)::int AS n FROM roleplay_sessions WHERE case_id=$1',[f.caseId])).rows[0].n).toBe(1);
+    }finally{await roleplayApp.close();}
   });
 
   it.each(['WAITING', 'CLOSED', 'SAFETY_HOLD'] as const)(
@@ -1257,6 +1324,29 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       }
     }
 
+    const revokeChild = await loginWithLabel(app, `a3-revoke-${crypto.randomUUID()}`);
+    const revokeFixture = await createTestFixture(`a3-revoke-${crypto.randomUUID()}`, revokeChild);
+    const noticeHash = getCurrentNoticeHash();
+    const request = await admin.query<{id:string}>(
+      `INSERT INTO guardian_consent_requests
+       (family_id,guardian_person_id,subject_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',now()+interval '24 hours',now()) RETURNING id`,
+      [revokeFixture.familyId,revokeFixture.manager.personId,revokeChild.personId,noticeHash]);
+    const evidence = buildConsentEvidence({channel:runtimeConsentChannel(process.env),acceptedTextHash:getAcceptanceTextHash('v1')!,clientIp:null,userAgent:null,pepper:'a3-real-revoke'});
+    const consent = await admin.query<{id:string}>(
+      `INSERT INTO consent_records
+       (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),'v1',$6,'v1',$7::jsonb) RETURNING id`,
+      [revokeFixture.familyId,revokeFixture.manager.personId,revokeFixture.manager.accountId,request.rows[0]!.id,revokeChild.personId,noticeHash,JSON.stringify(evidence)]);
+    await admin.query(`UPDATE person_compliance_profiles SET age_band='UNDER_14',minor_mode=true,verified_source='GUARDIAN_RELAY',guardian_person_id=$2,guardian_consent_record_id=$3,guardian_consent_version=1 WHERE person_id=$1`,[revokeChild.personId,revokeFixture.manager.personId,consent.rows[0]!.id]);
+    const reference = {type:'CONSENT',id:consent.rows[0]!.id.toUpperCase(),version:1};
+    const revokeGoal = await seedGoal(revokeFixture,reference,'real-revoke');
+    const revokeContract = await seedDraftContract(revokeFixture,revokeChild,reference);
+    const revoked = await revokeConsent(app,revokeFixture.manager.token,`a3-${crypto.randomUUID()}`,consent.rows[0]!.id,{reason:'A3 regression'});
+    expect(revoked.statusCode,revoked.body).toBe(200);
+    expect((await admin.query('SELECT review_state FROM goals WHERE id=$1',[revokeGoal])).rows[0].review_state).toBe('NEEDS_REVIEW');
+    expect((await admin.query('SELECT review_state FROM digital_use_contract_versions WHERE id=$1',[revokeContract])).rows[0].review_state).toBe('NEEDS_REVIEW');
+
     const targetConsentId = crypto.randomUUID();
     const otherConsentId = crypto.randomUUID();
     const scenarios: Array<{
@@ -1275,17 +1365,17 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
         label: 'identity-invalidation-to-versioned-storage',
         stored: { type: 'CONSENT', id: targetConsentId, version: 3 },
         invalidated: { type: 'CONSENT', id: targetConsentId },
-        affected: true,
+        affected: false,
       },
       {
         label: 'versioned-invalidation-to-identity-storage',
         stored: { type: 'CONSENT', id: targetConsentId },
         invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
-        affected: true,
+        affected: false,
       },
       {
-        label: 'exact-version',
-        stored: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        label: 'mixed-case-exact-version',
+        stored: { type: 'CONSENT', id: targetConsentId.toUpperCase(), version: 2 },
         invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
         affected: true,
       },

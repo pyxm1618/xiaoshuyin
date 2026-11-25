@@ -21,7 +21,7 @@ export const PhoneUseContractConfirmation=z.strictObject({
 });
 export const PhoneUseContractDto=z.strictObject({
  id:z.string().uuid(),familyId:z.string().uuid(),caseId:z.string().uuid(),
- version:z.number().int().min(1).max(PG_INTEGER_MAX),draftRevision:z.number().int().min(1).max(PG_INTEGER_MAX),status:PhoneUseContractStatus,
+ version:z.number().int().min(1).max(PG_INTEGER_MAX),draftRevision:z.number().int().min(1).max(PG_INTEGER_MAX),status:PhoneUseContractStatus,reviewState:z.enum(['CURRENT','NEEDS_REVIEW']),
  adultPartyPersonId:z.string().uuid(),childPartyPersonId:z.string().uuid(),childParticipationId:z.string().uuid().nullable(),
  terms:PhoneUseContractTerms,sourceTemplateVersion:z.string().min(1).max(128),dependencyRefs:z.array(SceneRef),
  parentConfirmation:PhoneUseContractConfirmation.nullable(),childConfirmation:PhoneUseContractConfirmation.nullable(),
@@ -111,4 +111,11 @@ export const PhoneUseContractRuntimeError=z.strictObject({code:z.enum([
 export const PhoneUseRoleplaySelectionResponse=z.strictObject({
  session:PhoneUseRoleplaySessionDto,
  selectedTurn:PhoneUseRoleplayTurnDto,
+});
+
+export const ReviewPhoneUseContractRequest=z.strictObject({
+ expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),
+ expectedDraftRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
+ expectedUpdatedAt:z.string().datetime(),
+ outcome:z.literal('NO_MATERIAL_CHANGE'),
 });

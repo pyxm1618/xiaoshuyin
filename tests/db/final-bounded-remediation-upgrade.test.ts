@@ -49,8 +49,8 @@ describe('Final bounded remediation 038 -> 039 upgrade', () => {
       const files = readdirSync(join(ROOT, 'db', 'migrations'))
         .filter((filename) => filename.endsWith('.sql'))
         .sort();
-      expect(files.at(-1)).toBe(TARGET);
-      const before = files.slice(0, -1);
+      expect(files.at(-1)).toBe('040_consent_dependency_canonical_matching.sql');
+      const before = files.filter((filename) => filename < TARGET);
       expect(before.at(-1)).toBe('038_phone_contract_child_participation_deferred_binding.sql');
       expect(before).toHaveLength(41);
 
@@ -121,6 +121,23 @@ describe('Final bounded remediation 038 -> 039 upgrade', () => {
         'SELECT count(*)::int AS count FROM schema_migrations'
       );
       expect(ledger.rows[0]!.count).toBe(42);
+
+      // The new forward migration must also apply over the verified 039 state.
+      const forward = '040_consent_dependency_canonical_matching.sql';
+      await client.query('BEGIN');
+      try {
+        await applySql(client, forward);
+        await client.query('INSERT INTO schema_migrations(filename) VALUES ($1)', [forward]);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+      const canonical = await client.query<{ definition: string }>(
+        `SELECT pg_get_functiondef('app.propagate_downstream_dependency_review(uuid,uuid,jsonb)'::regprocedure) AS definition`
+      );
+      expect(canonical.rows[0]!.definition).toContain('app.consent_dependency_matches');
+      expect((await client.query('SELECT count(*)::int AS count FROM schema_migrations')).rows[0].count).toBe(43);
     } finally {
       await client.end();
     }

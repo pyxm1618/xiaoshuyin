@@ -19,28 +19,19 @@ type TxClient = pg.PoolClient;
  * transaction rollbacks) must NOT mark the client broken.
  */
 export function isBrokenClientError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === 'string') {
-    // 1. Node.js network / transport level system errors (Finding #31)
-    if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'EPIPE') {
-      return true;
+  const visited = new Set<object>();
+  let current = error;
+  for (let depth = 0; depth < 16; depth++) {
+    if (!current || typeof current !== 'object' || visited.has(current)) break;
+    visited.add(current);
+    const failure = current as { code?: unknown; errno?: unknown; cause?: unknown };
+    for (const code of [failure.code, failure.errno]) {
+      if (typeof code === 'string' && (
+        code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'EPIPE' ||
+        /^08/.test(code) || code === '57P01' || code === '25P02'
+      )) return true;
     }
-    // 2. PostgreSQL connection exceptions (08xxx), admin shutdown (57P01),
-    // and "current transaction is aborted" (25P02 — a failed ROLLBACK leaves the
-    // session unusable for further work).
-    if (/^08/.test(code) || code === '57P01' || code === '25P02') {
-      return true;
-    }
-  }
-
-  const errno = (error as { errno?: unknown }).errno;
-  if (
-    typeof errno === 'string' &&
-    (errno === 'ECONNRESET' || errno === 'ETIMEDOUT' || errno === 'EPIPE')
-  ) {
-    return true;
+    current = failure.cause;
   }
 
   return false;

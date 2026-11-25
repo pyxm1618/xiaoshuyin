@@ -30,6 +30,14 @@ function createMockPool(): { pool: pg.Pool; client: MockClient } {
 }
 
 describe('Finding #18: Identity Binding Transaction Wrappers Broken Client Protection', () => {
+  it.each(['ECONNRESET', '08006', 'ETIMEDOUT', 'EPIPE', '57P01', '25P02', '23505', '23503', '23514', '42501', 'BUSINESS_VALIDATION_FAILED'])('classifies nested raw failure %s', async (code) => {
+    const { pool, client } = createMockPool();
+    const failure = new Error('operation failed', { cause: { cause: { code } } });
+    await expect(withTransactionClient(pool, async () => { throw failure; })).rejects.toBe(failure);
+    expect(pool.connect).toHaveBeenCalledTimes(1);
+    expect(client.release).toHaveBeenCalledExactlyOnceWith(['ECONNRESET', '08006', 'ETIMEDOUT', 'EPIPE', '57P01', '25P02'].includes(code));
+  });
+
   it('normal success releases client healthy exactly once', async () => {
     const { pool, client } = createMockPool();
 

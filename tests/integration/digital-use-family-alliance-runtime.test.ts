@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import * as complianceRepository from '@xiaoshuyin/compliance';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
@@ -972,6 +973,22 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     const blocked = await request(`${key}-new`);
     expect(blocked.json().code, blocked.body).toBe('COMPLIANCE_BLOCKED');
     expect(await effects()).toEqual(beforeComplianceChange);
+    const wrongTarget = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `${key}-wrong-target` },
+      payload: { ...payload, targetPersonId: crypto.randomUUID() },
+    });
+    expect(wrongTarget.json().code, wrongTarget.body).toBe('TARGET_SCOPE_INVALID');
+    const outsider = await fixture('b2-outsider');
+    const crossFamily = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
+      headers: { ...auth(outsider.manager.token), 'idempotency-key': `${key}-cross-family` },
+      payload,
+    });
+    expect(crossFamily.json().code, crossFamily.body).toBe('CASE_NOT_FOUND');
+
 
     const currents = await admin.query<{ n: number; revisions: number }>(
       `SELECT count(*)::int AS n,
@@ -1472,6 +1489,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
   it('AS-27/28 Compliance publication race and UNKNOWN policy fail closed', async () => {
     const f = await fixture('compliance-race');
+    const completedKey = `b2-policy-${crypto.randomUUID()}`;
+    const completed = await respond(f, 'A3000', selfAssessment(), {}, completedKey);
+    expect(completed.statusCode,completed.body).toBe(200);
+    const beforePolicy = (await admin.query('SELECT count(*)::int AS n FROM assertions WHERE case_id=$1',[f.caseId])).rows;
     const publisher = new pg.Client({
       connectionString: process.env['MIGRATION_DATABASE_URL']!,
     });
@@ -1505,6 +1526,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
       await new Promise((resolve) => setTimeout(resolve, 40));
       await publisher.query('COMMIT');
+      const replay = await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,headers:{...auth(f.manager.token),'idempotency-key':completedKey},payload:{targetPersonId:f.targetPersonId,expectedCaseVersion:f.caseVersion,expectedNodeRevision:0,expectedScenePackageVersion:'v1',response:selfAssessment()}});
+      expect(replay.statusCode,replay.body).toBe(200);
+      expect(replay.json()).toEqual(completed.json());
+      expect((await admin.query('SELECT count(*)::int AS n FROM assertions WHERE case_id=$1',[f.caseId])).rows).toEqual(beforePolicy);
       const blocked = await request;
       expect(blocked.statusCode, blocked.body).toBe(409);
       expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
@@ -1527,7 +1552,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'`,
       [f.caseId]
     );
-    expect(residue.rows[0]!.n).toBe(0);
+    expect(residue.rows[0]!.n).toBeGreaterThan(0);
   });
 
   async function installFaultTrigger(
@@ -2207,14 +2232,9 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
   });
 
 
-  it('HX-07 Consent revoke race serializes against Family Alliance processing', async () => {
+  it.each(['business-first', 'revoke-first'] as const)('HX-07 Consent revoke race serializes against Family Alliance processing: %s', async (order) => {
     const f = await fixture('consent-race');
-    const child = await loginWithLabel(app, 'fa-consent-race-child');
-    await admin.query(
-      `INSERT INTO family_members (family_id,person_id)
-       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-      [f.familyId, child.personId]
-    );
+    const child = { personId: f.targetPersonId, token: f.manager.token };
 
     const noticeHash = getCurrentNoticeHash();
     const acceptedTextHash = getAcceptanceTextHash('v1');
@@ -2284,12 +2304,30 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
          updated_at=now()`,
       [child.personId, f.manager.personId, granted.id]
     );
-    // Test-only role transfer makes the consent-bound subject the authorized
-    // Family manager so the race reaches Consent/Compliance, not authz denial.
-    await admin.query(
-      `UPDATE families SET created_by_person_id=$2 WHERE id=$1`,
-      [f.familyId, child.personId]
-    );
+    let observedGranted!: () => void;
+    const grantedObserved = new Promise<void>((resolve) => { observedGranted = resolve; });
+    let releaseBusiness!: () => void;
+    const businessReleased = new Promise<void>((resolve) => { releaseBusiness = resolve; });
+    const originalRead = complianceRepository.getConsentRecordForGate;
+    let paused = false;
+    const consentRead = vi.spyOn(complianceRepository, 'getConsentRecordForGate')
+      .mockImplementation(async (...args) => {
+        const record = await originalRead(...args);
+        if (order === 'business-first' && args[1] === granted.id && !paused) {
+          paused = true;
+          expect(record?.decision).toBe('GRANTED');
+          observedGranted();
+          await businessReleased;
+        }
+        return record;
+      });
+    const revoke = () => revokeConsent(app, f.manager.token,
+      `fa-consent-race-${crypto.randomUUID()}`, granted.id,
+      { reason: 'deterministic serialization test' });
+    if (order === 'revoke-first') {
+      const revoked = await revoke();
+      expect(revoked.statusCode, revoked.body).toBe(200);
+    }
 
     const familyRequest = app.inject({
       method: 'POST',
@@ -2306,22 +2344,28 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         response: selfAssessment(),
       },
     });
-    const revokeRequest = revokeConsent(
-      app,
-      f.manager.token,
-      `fa-consent-race-${crypto.randomUUID()}`,
-      granted.id,
-      { reason: 'concurrent family processing test' }
-    );
-    const [familyResult, revoked] = await Promise.all([
-      familyRequest,
-      revokeRequest,
-    ]);
-    expect(revoked.statusCode, revoked.body).toBe(200);
-    expect([403, 409]).toContain(familyResult.statusCode);
-    expect(familyResult.json().code).toBe(
-      familyResult.statusCode === 403 ? 'GUARDIAN_CONSENT_REVOKED' : 'CONSENT_BLOCKED'
-    );
+    let familyResult;
+    try {
+      if (order === 'business-first') {
+        const pendingBusiness = familyRequest.then((response) => response);
+        await grantedObserved;
+        releaseBusiness();
+        familyResult = await pendingBusiness;
+        const revoked = await revoke();
+        expect(revoked.statusCode, revoked.body).toBe(200);
+        // Frozen D5 permits UNDER_14 consent administration only; observing
+        // GRANTED is therefore legitimately blocked for FAMILY_ALLIANCE.
+        expect(familyResult.statusCode, familyResult.body).toBe(409);
+        expect(familyResult.json().code).toBe('CONSENT_BLOCKED');
+      } else {
+        familyResult = await familyRequest;
+        expect([403, 409]).toContain(familyResult.statusCode);
+        expect(['GUARDIAN_CONSENT_REVOKED', 'CONSENT_BLOCKED']).toContain(familyResult.json().code);
+      }
+    } finally {
+      releaseBusiness();
+      consentRead.mockRestore();
+    }
 
     const final = await admin.query<{
       guardian_consent_version: number;
@@ -2344,8 +2388,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'`,
       [f.caseId]
     );
-    expect(currentArtifacts.rows[0]!.n)
-      .toBe(0);
+    expect(currentArtifacts.rows[0]!.n).toBe(0);
   });
 
 

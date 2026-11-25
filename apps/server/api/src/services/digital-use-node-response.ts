@@ -66,7 +66,6 @@ import {
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 import {
-  assertFamilyAllianceComplianceSnapshot,
   executeFamilyAllianceNodeInTransaction,
 } from './digital-use-family-alliance.js';
 import {
@@ -979,14 +978,6 @@ export async function completeDigitalUseNodeResponse(
     readonly professionalReviewContent?: ProfessionalReviewContentProvider;
   } = {}
 ): Promise<DigitalUseSceneResponseType> {
-  if (input.nodeCode.startsWith('A3') && input.targetPersonId) {
-    await assertFamilyAllianceComplianceSnapshot(pool, {
-      actor: input.actor,
-      familyId: input.familyId,
-      caseId: input.caseId,
-      targetPersonId: input.targetPersonId,
-    });
-  }
   return withRlsTransaction(
     pool,
     {

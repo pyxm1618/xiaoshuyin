@@ -23,6 +23,11 @@ export interface PhoneUseContractVersionRow {
   supersedes_id:string|null; update_reason:string|null; update_trigger:PhoneUseContractUpdateTrigger|null;
   created_by_person_id:string; created_at:Date; updated_at:Date; activated_at:Date|null; superseded_at:Date|null; paused_at:Date|null;
 }
+export function isPhoneUseContractAuthoritativeExecutionBasis(
+ row: Pick<PhoneUseContractVersionRow, 'status' | 'review_state'>
+): boolean {
+ return row.status === 'ACTIVE' && row.review_state === 'CURRENT';
+}
 export type BoundPhoneUseContractVersionRow = PhoneUseContractVersionRow & {
   child_participation_id:string;
 };
