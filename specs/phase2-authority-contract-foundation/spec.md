@@ -43,6 +43,7 @@ Out of scope:
 - **P2-AUTH-009 — U19 Safety/Referral:** Safety entry is internal `EnterSafetyHold` from an approved Safety decision; resolution is Staff-only with `SAFETY_RESOLVE` + valid assignment/evidence; Referral uses the existing six-state lifecycle and explicit transition commands/APIs.
 - **P2-AUTH-010 — Staff:** existing Account/session authentication resolves a server-owned StaffPrincipal; capability/assignment authorization is explicit, scoped, revocable and audited; existing `SERVICE_CONTROL` governs staff capability/scope administration with no-self-escalation and without implying business capabilities.
 - **P2-AUTH-011 — No runtime claim:** these contracts close Authority ambiguity only. Production/runtime drift is intentionally deferred to Phase 3 and MUST NOT be represented here as already remediated.
+- **P2-AUTH-012 — Single generated client contract:** 运营端与小程序端消费同一份 generated TypeScript types。运营端使用 openapi-fetch typed client；小程序端使用 wx.request + 薄类型适配层，仅约束 method/path/params/body/response/error 类型，不维护第二套 DTO/schema，不引入通用 Fetch polyfill、全局重试或拦截器框架、自建打包体系。两端生成的客户端/适配层均不得与服务端 contract 漂移。小程序端适配层必须在目标基础库真机验证普通 HTTP 请求、参数与头部、成功与错误响应、网络失败、取消、响应读取及运行时限制，未实测通过不得进入正式 Transport 实现。
 
 ## Acceptance Scenarios
 

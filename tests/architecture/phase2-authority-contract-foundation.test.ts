@@ -39,4 +39,14 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
     expect(text).toContain('SERVICE_CONTROL');
     expect(text).not.toContain('STAFF_ACCESS_ADMIN');
   });
+
+  it('binds both clients to one generated contract without a second DTO', () => {
+    expect(text).toContain('P2-AUTH-012');
+    expect(text).toContain('运营端使用 openapi-fetch typed client');
+    expect(text).toContain('小程序端使用 wx.request + 薄类型适配层');
+    expect(text).toContain('不维护第二套 DTO/schema');
+    expect(text).toContain('两端生成的客户端/适配层均不得与服务端 contract 漂移');
+    expect(text).toContain('通用 Fetch polyfill');
+    expect(text).toContain('未实测通过不得进入正式 Transport 实现');
+  });
 });

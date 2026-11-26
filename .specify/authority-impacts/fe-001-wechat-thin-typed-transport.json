@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "changeId": "fe-001-wechat-thin-typed-transport",
+  "status": "CONVERGED",
+  "authorityChanges": [
+    {
+      "path": "Docs/V1技术设计.md",
+      "previousBlobSha": "afef9fcc4af41b6137e5020717135972a3d515fc",
+      "newBlobSha": "decc923ad106b31c956cd767f667cbea1a262e0a"
+    }
+  ],
+  "unitImpacts": [
+    {
+      "authorityUnitId": "AUTH-V1T-135",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "phase2-authority-contract-foundation",
+          "specPath": "specs/phase2-authority-contract-foundation",
+          "requirementId": "Requirements",
+          "requiredArtifacts": [
+            "tests/architecture/phase2-authority-contract-foundation.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1T-211",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "phase2-authority-contract-foundation",
+          "specPath": "specs/phase2-authority-contract-foundation",
+          "requirementId": "Requirements",
+          "requiredArtifacts": [
+            "tests/architecture/phase2-authority-contract-foundation.test.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}
