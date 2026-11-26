@@ -1,37 +1,39 @@
 # Slice 22 — pg_jieba Lexical Readiness Spike — Plan
 
 Feature: 022-pg-jieba-lexical-readiness-spike  
-Role: Plan AI 2  
-Status: PLANNING CANDIDATE — becomes frozen only after Audit 1 FINAL PASS.
+Role: Plan AI 2 — Targeted Planning Correction Continuation  
+Status: TARGETED PLANNING CORRECTION CANDIDATE — becomes frozen only after Audit 1 FINAL PASS.
 
 ## 1. Remote Truth / Planning Baseline
 
-Planning began from the frozen Slice 22 Spec and then reconciled one non-semantic main drift by an ordinary two-parent merge.
+Planning began from the frozen Slice 22 Spec, was subsequently reconciled in `spec-correction/022-governance` (`210363fb3e6a739c49c4aa6e95338b80935dd465`, blob `b489bf974032b3bfed678443cda42001ec162f63`) against current main (`e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`), and now continues as a targeted planning correction without altering the corrected Spec.
 
 - Repository: pyxm1618/xiaoshuyin
-- Frozen Spec branch: spec/022-pg-jieba-lexical-readiness-spike
-- Frozen Spec head: c583e7d67d3cca7bb5b9f1b533f08448c2362334
-- Frozen Spec blob: c11c595d3fc9390bb569651562ba52c36cf9546b
-- Historical Spec parent main: 3161677256c479e0e6754554a07e08a1fbaf16ef
-- Current main at reconciliation: d24e5449a9c7589b70013c0d35f610a63bc6ec89
-- Planning branch: plan/022-pg-jieba-lexical-readiness-spike
-- Reconciled pre-artifact head: c46c546bbbc192cc668fbf6ded077746e2e9259b
+- Corrected Spec branch: spec-correction/022-governance
+- Corrected Spec head: 210363fb3e6a739c49c4aa6e95338b80935dd465 (supersedes historical spec head c583e7d67d3cca7bb5b9f1b533f08448c2362334)
+- Corrected Spec blob: b489bf974032b3bfed678443cda42001ec162f63 (supersedes historical spec blob c11c595d3fc9390bb569651562ba52c36cf9546b)
+- Current main at targeted correction: e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512
+- Merge base with origin/main: e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512 (behind = 0)
+- Previous planning branch (superseded): plan/022-pg-jieba-lexical-readiness-spike (head 3f6d2c0f9ac30bdaab895c9b0e36523ccc844d6d)
+- Planning correction branch: plan-correction/022-targeted
+- Historical implementation PR under remediation: #149 (head 32599a4be8f54ee99692b9521fe1d1ae9b01176b)
 
-The main drift from 3161677... to d24e544... contains Workline D Safety / Identity / Authorization / Participation remediation and migrations 032/036. It does not modify the four Authority Docs, Slice 22 Spec, Stage A Docker/pgvector substrate, implementation-ownership registry, change-governance validator, or pg_jieba semantics. Authority conflict: NONE.
+The current main (`e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`) preserves the four Authority Docs unchanged, preserves Slice 19 Stage A Docker/pgvector substrate (`docker-compose.stage-a.yml`), preserves `tests/` under `FIXED_EXEMPT_PREFIXES` in `.specify/scripts/validate-change-governance.mjs`, and introduces no semantic conflict with Slice 22. Authority conflict: NONE.
 
 Current upstream state relevant to 022:
 - Slice 19 PostgreSQL 18 Stage A substrate is present on main.
-- Slice 20 implementation is not required and remains independently incomplete; PR #118 is only its governance prerequisite.
+- Slice 20 implementation is not required for 022 lexical substrate verification.
 - Slice 21 planning is frozen independently; its implementation/result is not required for 022.
-- No competing Slice 22 implementation branch was observed before planning branch creation.
+- No competing Slice 22 implementation PR is merged on main; PR #149 (`32599a4be8f54ee99692b9521fe1d1ae9b01176b`) requires targeted remediation after this planning correction is frozen and audited.
 
 ## 2. Frozen Authority
 
 The sole feature authority is:
 - specs/022-pg-jieba-lexical-readiness-spike/spec.md
-- blob c11c595d3fc9390bb569651562ba52c36cf9546b
+- head 210363fb3e6a739c49c4aa6e95338b80935dd465
+- blob b489bf974032b3bfed678443cda42001ec162f63
 
-Controlling formal documents observed on the frozen Spec lineage:
+Controlling formal documents observed on `HEAD` and `origin/main` (`e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`):
 - Docs/总产品需求.md — blob 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29
 - Docs/V1产品需求.md — blob 379cb8cfb377924cd21ccfe55baa5aecdf207f5e
 - Docs/总体技术架构.md — blob 6b4630803f371faf6d93f27361070223d0f661a0
@@ -45,6 +47,32 @@ Frozen interpretation:
 - formal Candidate C = dense-only
 - Slice 22 proves only Candidate B lexical substrate readiness
 - Slice 22 does not select a route and does not create production lexical retrieval.
+
+## Upstream Traceability
+
+This Plan directly traces to and does not widen the approved upstream bindings recorded in the Corrected Spec (`specs/022-pg-jieba-lexical-readiness-spike/spec.md`, blob `b489bf974032b3bfed678443cda42001ec162f63`):
+
+- `Docs/V1技术设计.md` §4.2, §13.1–§13.2, §20 & `Docs/总体技术架构.md` §11.1: PostgreSQL 18 Stage A substrate and V1 RAG Candidate B (`qwen3.7 dense + pg_jieba + 小树荫专业词典`) lexical readiness prerequisite prior to RRF/rerank and A/B/C Gold Dataset comparison (`pg_textsearch` remains DEFERRED).
+- `V1-C03` (`Docs/V1产品需求.md`): real `UNKNOWN` / `NOT_EVALUATED` / `BLOCKED` / inconclusive observations cannot be fabricated into `PASS` or determinate readiness; incomplete identity, unverified failure injection, or fake/stale `run_family_id` bindings must never pass.
+- `V1-C27` (`Docs/V1产品需求.md`): infrastructure, build, SQL, tokenization, query, or cleanup failures and runtime exceptions must surface truthful terminal states and preserved failure evidence rather than silent exit or fabricated success.
+- `V1-C34`, `V1-C37` (`Docs/V1产品需求.md`): Staff/Professional Review authority and reviewed Psychological/Behavioral Intervention Contracts cannot be bypassed, substituted, or invented by AI, test lexicons, or corpus fixtures.
+- `V1-X14` (`Docs/V1产品需求.md`): only real, actually verified `pg_jieba` capability on the exact Stage A PostgreSQL 18 target counts as readiness; mock tokenizers, fallback substitutions, unconsumed negative checks, or unverified head/fixture assumptions cannot pass.
+
+## Constitution Check
+
+Mechanical verification against `AGENTS.md` and the Corrected Spec (`210363fb3e6a739c49c4aa6e95338b80935dd465` / blob `b489bf974032b3bfed678443cda42001ec162f63`):
+
+| Check | Status | Mechanical Basis |
+|---|---|---|
+| Authority Docs unchanged | PASS | `Docs/**` diff = 0; all four Authority blobs match `origin/main` (`e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`) |
+| Corrected Spec byte-exact | PASS | `specs/022-pg-jieba-lexical-readiness-spike/spec.md` blob remains `b489bf974032b3bfed678443cda42001ec162f63` unchanged |
+| No scope widening | PASS | Exact `12` FR (`FR-001`–`FR-012`), `8` AS (`AS-01`–`AS-08`), `12` NS (`NS-01`–`NS-12`), `12` Tasks (`T001`–`T012`); test-only 7-file surface under `tests/` |
+| No Professional Authority invention | PASS | Lexicon limited to 3 formal-doc terms (`§9`); corpus limited to 4 formal-doc excerpts (`§10`); zero clinical/Gold labels (`V1-C34`, `V1-C37`) |
+| No Candidate B RAG / Gold Eval / route choice | PASS | Zero dense, sparsevec, embeddings, RRF, reranker, Gold scoring, `rag_route_version`, or production schema/index/API |
+| Real capability without mock/fallback | PASS | Actual `pg_jieba` on exact Stage A PG18 substrate required; zero mock/fallback substitution (`V1-X14`) |
+| Failure & exception truthfulness | PASS | `PASS \| FAIL \| BLOCKED \| UNKNOWN \| NOT_EVALUATED` state machine; failure injection consumed by evaluator; any stage exception captures, classifies, cleans up, and emits terminal evidence (`V1-C03`, `V1-C27`) |
+| Exact-head & recomputable run-family binding | PASS | `run_family_id` mechanically recomputed from repo HEAD, all implementation/fixture blobs & hashes, upstream source, environment, and attempt identity; arbitrary non-empty strings rejected (`V1-C03`, `V1-X14`) |
+| Governance exemption boundary | PASS | All planned implementation paths stay under `FIXED_EXEMPT_PREFIXES` (`tests/`) with zero `.specify/` or product-path mutation |
 
 ## 3. Scope Boundary
 
@@ -117,12 +145,12 @@ This decision is conditional on the implementation diff remaining a subset of th
 The gate is mechanical.
 
 OPEN only if all are true:
-- frozen Spec blob == c11c595d3fc9390bb569651562ba52c36cf9546b;
+- corrected Spec blob == b489bf974032b3bfed678443cda42001ec162f63 (head == 210363fb3e6a739c49c4aa6e95338b80935dd465);
 - Audit 1 == FINAL PASS;
 - current main reconciliation == behind 0 at Developer start;
 - Slice 19 Stage A PG18 base image identity remains observable;
 - planned changed paths remain test-only fixed-exempt;
-- no competing 022 implementation exists;
+- no competing un-reconciled 022 implementation exists (targeted remediation operates strictly on the audited remediation target);
 - lexicon/corpus source authority can be proven before runtime;
 - Docker daemon/build execution and source retrieval are available enough to attempt the pinned build.
 
@@ -155,21 +183,23 @@ One run family uses the same derived image identity for:
 Each environment uses a fresh disposable PostgreSQL data volume. No environment is a production-readiness environment.
 
 Required runtime identity evidence:
-- repository exact implementation head;
+- repository exact implementation head (`repo_head`) and clean working-tree proof (`working_tree_clean == true`, zero uncommitted/untracked drift on tracked/implementation paths);
 - base main and merge base;
 - changed-file list;
+- exact Git blob SHAs for all implementation and fixture files (`implementation_file_blobs`, including `Dockerfile` blob, `readiness-state.ts` blob, DB harness `pg-jieba-readiness.test.ts` blob, architecture test blob, `xiaoshuyin_022_test.dict` blob, `lexicon-manifest.json` blob, and `corpus-manifest.json` blob);
 - base image immutable reference;
 - derived image ID/digest;
-- PostgreSQL server_version and server_version_num;
-- pg_config version/path;
-- pg_jieba source commit and submodule commit;
+- PostgreSQL `server_version`, `server_version_num`, and execution stage/environment identity;
+- `pg_config` version/path;
+- upstream source identity (`pg_jieba` repo, commit, `libjieba` submodule commit, declared extension version);
 - extension default/installed version;
-- hashes of pg_jieba.so, pg_jieba.control, installed extension SQL and frozen custom dictionary;
-- SHOW shared_preload_libraries;
-- SHOW pg_jieba.user_dict when the GUC exists;
+- hashes of `pg_jieba.so`, `pg_jieba.control`, installed extension SQL, frozen custom dictionary SHA-256, and frozen corpus manifest SHA-256;
+- `SHOW shared_preload_libraries`;
+- `SHOW pg_jieba.user_dict` when the GUC exists;
 - extension owner;
-- current_user and runtime role security flags;
-- run_family_id.
+- `current_user` and runtime role security flags;
+- unique `attempt_identity` (attempt nonce/ID and sequence/timestamp binding);
+- mechanically recomputable `run_family_id` derived deterministically from all required identity components above (arbitrary non-empty strings are rejected).
 
 ## 8. pg_jieba Compatibility Verification
 
@@ -386,7 +416,7 @@ No dense score, sparse score, fusion, RRF, rerank or relevance metric may be int
 
 ## 14. Negative / Failure Verification
 
-Architecture/state-machine tests must mechanically prove:
+Architecture/state-machine tests (`tests/architecture/pg-jieba-readiness-evidence.test.ts`) must mechanically prove:
 - compatibility cannot PASS when extension/source/environment identity is missing;
 - source/package unavailable maps BLOCKED, not FAIL;
 - observed PG18 build/load/runtime incompatibility maps FAIL, not BLOCKED;
@@ -397,14 +427,28 @@ Architecture/state-machine tests must mechanically prove:
 - tokenization without lexicon proof cannot aggregate PASS;
 - lexical query mismatch cannot aggregate PASS;
 - mock/fallback tokenizer cannot aggregate PASS;
-- cleanup failure forces aggregate FAIL.
+- cleanup failure (including failure-injection cleanup failure or cleanup stage exception) forces aggregate FAIL;
+- `failure_injection` observation is mandatory for positive readiness and must be consumed by `evaluateReadinessEvidence` / evaluator assertions:
+  - missing `failure_injection` observation or unconsumed `failed_as_expected` flag cannot produce aggregate PASS;
+  - if injected invalid dictionary configuration produces `LEXICON_LOAD PASS` (does not fail as expected), evaluator forces `LEXICON_LOAD = FAIL` (`LEXICON_LOAD_FAILED`) and prevents aggregate PASS;
+  - injected invalid dictionary failure must NOT misclassify `PG_JIEBA_COMPATIBILITY` as `PG18_BUILD_INCOMPATIBLE` / `EXTENSION_INSTALL_INCOMPATIBLE` / `EXTENSION_LOAD_INCOMPATIBLE`;
+  - missing or failed `failure_injection` cleanup proof forces `CLEANUP = FAIL` (`CLEANUP_FAILED`);
+- stage exception handling (`startup`, `build`, `SQL`, `tokenization`, `query`, `cleanup`) must route through `capture -> classify -> cleanup -> terminal evidence artifact`, never leaving missing terminal evidence on unexpected throws;
+- exact-head and recomputable `run_family_id` adversarial coverage explicitly proves rejection (never PASS) for all six failure modes:
+  1. `fake run_family_id` (e.g., arbitrary UUID or non-empty string not matching deterministic recomputation over all required identity inputs);
+  2. `working-tree drift` (`working_tree_clean !== true` / dirty working tree or uncommitted changes);
+  3. `fixture drift` (lexicon or corpus blob/SHA-256 mismatch against frozen expected manifest);
+  4. `mixed-head evidence` (any implementation file blob, `Dockerfile` blob, `readiness-state.ts` blob, DB harness blob, or stage environment/source identity differs from the single bound head/build);
+  5. `stale evidence` (evidence generated against a prior head/attempt identity presented for the current expected head/blobs);
+  6. `head mismatch` (`repo_head`, `base_main`, `merge_base`, or `frozen_spec_blob` disagrees with expected binding).
 
-At least one real injected-failure environment must also be attempted after the positive harness exists:
-- start the same derived image with a deliberately missing user-dictionary name or otherwise mechanically equivalent bounded invalid lexicon configuration;
-- prove it cannot produce LEXICON_LOAD PASS;
-- destroy that failed environment and prove cleanup.
+At least one real injected-failure environment must also be executed and consumed by the evaluator in `tests/db/pg-jieba-readiness.test.ts` after the positive harness exists:
+- start the same derived image with a deliberately missing user-dictionary name (`nonexistent_022_dict`) or otherwise mechanically equivalent bounded invalid lexicon configuration;
+- pass structured `failure_injection` execution, classification, and cleanup observations directly into `ReadinessObservation` consumed by `evaluateReadinessEvidence`;
+- mechanically prove it cannot produce `LEXICON_LOAD PASS` and is NOT misclassified as PG18 incompatibility (`PG_JIEBA_COMPATIBILITY` remains independent);
+- destroy that failed environment (container + volume) and produce explicit removal/cleanup evidence bound to `CLEANUP`.
 
-This injected failure is not evidence that upstream is incompatible; it is a negative state-machine/cleanup proof.
+This injected failure is not evidence that upstream is incompatible; it is a mandatory negative state-machine/cleanup proof consumed by the readiness evaluator.
 
 ## 15. Evidence State Machine
 
@@ -433,7 +477,14 @@ Aggregate derivation priority:
 6. else if all five == PASS => aggregate PASS;
 7. else => UNKNOWN.
 
-The implementation must expose a pure deterministic deriveAggregateState(evidence) function covered by architecture tests. Runtime code supplies observations only; it never sets aggregate PASS directly.
+The implementation must expose a pure deterministic `deriveAggregateState(evidence)` function and `evaluateReadinessEvidence(obs, expected)` evaluator covered by architecture tests. Runtime code supplies observations only; it never sets aggregate PASS directly.
+
+Mandatory evaluator consumption & terminal-exception contracts:
+- `evaluateReadinessEvidence` must consume `obs.failure_injection` (requiring `attempted === true`, `observed_lexicon_load_pass === false`, `misclassified_as_pg18_incompatibility === false`, and `cleanup_verified === true` before aggregate `PASS` is possible). Recording `rawEvidence.failure_injection.failed_as_expected` alone without evaluator consumption is forbidden.
+- `evaluateReadinessEvidence` must recompute `run_family_id` deterministically from all required §18 identity components (`computeRunFamilyId(...)`) and verify `obs.run_family_id === recomputed` plus exact blob/head/working-tree match; any non-matching or arbitrary non-empty `run_family_id` invalidates positive readiness.
+- Every runtime execution stage (`startup`, `build`, `SQL`, `tokenization`, `query`, `cleanup`) must enforce exception terminal-evidence discipline:
+  `exception -> capture (stage, redacted error, raw state) -> classify (truthful BLOCKED / FAIL / UNKNOWN + reason code) -> cleanup (finally path + removal verification) -> terminal evidence artifact (evaluateReadinessEvidence + JSON artifact write + SHA-256)`
+  Uncaught `throw -> process exit -> no terminal evidence` is strictly forbidden.
 
 Reason codes must identify at least:
 - SOURCE_UNAVAILABLE
@@ -445,15 +496,22 @@ Reason codes must identify at least:
 - EXTENSION_LOAD_INCOMPATIBLE
 - RUNTIME_ROLE_INCOMPATIBLE
 - IDENTITY_INCOMPLETE
+- RUN_FAMILY_ID_MISMATCH
+- WORKING_TREE_DRIFT
+- STALE_OR_MIXED_HEAD_EVIDENCE
 - LEXICON_PROVENANCE_INVALID
 - LEXICON_FINGERPRINT_MISMATCH
 - LEXICON_LOAD_FAILED
+- FAILURE_INJECTION_NOT_CONSUMED
+- FAILURE_INJECTION_UNEXPECTED_PASS
+- FAILURE_INJECTION_MISCLASSIFIED_INCOMPATIBLE
 - PRIMARY_DIFFERENTIAL_NOT_OBSERVED
 - TOKENIZATION_FAILED
 - TOKENIZATION_NON_REPRODUCIBLE
 - LEXICAL_QUERY_MISMATCH
 - FALLBACK_FORBIDDEN
 - FIXTURE_DRIFT
+- STAGE_EXCEPTION_CAPTURED
 - CLEANUP_FAILED.
 
 ## 16. Cleanup / Isolation
@@ -467,20 +525,20 @@ Per run family:
 - one uniquely tagged derived test image.
 
 Success cleanup:
-- stop/remove all three containers;
-- remove their exact disposable volumes;
+- stop/remove all three containers (explicitly including the `FAILURE_INJECTION` container);
+- remove their exact disposable volumes (explicitly including the `FAILURE_INJECTION` volume);
 - remove the exact derived image tag after required hashes/identity are captured;
-- verify no matching containers/volumes remain;
+- verify no matching containers/volumes remain (producing per-environment cleanup verification evidence including `failure_injection_cleanup_verified`);
 - verify no product schema/table/index/business row was created;
 - verify no host PostgreSQL config/tsearch_data was modified.
 
 Expected-failure cleanup:
-- cleanup runs in finally semantics even if build/start/CREATE EXTENSION/token/query fails;
-- removal checks are evidence predicates, not best effort.
+- cleanup runs in `finally` semantics even if `startup`, `build`, `SQL`, `tokenization`, `query`, or `failure_injection` fails or throws;
+- removal checks are evidence predicates, not best effort, and `failure_injection` cleanup forms explicit evidence consumed by `CLEANUP`.
 
 Unexpected-failure cleanup:
-- same finally cleanup path;
-- if cleanup cannot be proven, CLEANUP = FAIL.
+- same `finally` cleanup path wrapped with exception capture so cleanup errors themselves cannot abort terminal artifact emission;
+- if cleanup throws or removal cannot be proven, `CLEANUP = FAIL` with `CLEANUP_FAILED`, and the terminal evidence artifact is still written and hashed.
 
 Rerun:
 - any final aggregate PASS or observed technical FAIL must be reproduced by a second clean attempt on the same exact implementation head + fixture blobs, with a new run_family_id and fresh containers/volumes;
@@ -505,27 +563,40 @@ The committed xiaoshuyin_022_test.dict is an authorized test fixture, not an ins
 
 ## 18. Exact-Head Evidence Binding
 
-One positive or negative run family is valid only when all evidence binds to the same tuple:
+One positive or negative run family is valid only when all evidence binds to one exact clean head/environment/attempt tuple and carries a mechanically recomputable `run_family_id`:
 
-RUN_FAMILY_ID = hash(
-  repository exact implementation head,
-  base main,
-  merge base,
-  changed-file set,
-  frozen Spec blob,
-  derived image identity,
-  PostgreSQL identity,
-  pg_jieba source/submodule/build hashes,
-  lexicon git blob + SHA-256,
-  corpus manifest git blob + SHA-256,
-  query manifest identity
-)
+```text
+RUN_FAMILY_ID = sha256(canonical_json({
+  repo_head,
+  base_main,
+  merge_base,
+  changed_files,
+  frozen_spec_blob,
+  working_tree_clean,
+  implementation_file_blobs,   // sorted map of all changed/implementation file Git blobs
+  dockerfile_blob,             // tests/fixtures/pg-jieba-readiness/Dockerfile Git blob
+  readiness_state_blob,        // tests/fixtures/pg-jieba-readiness/readiness-state.ts Git blob
+  db_harness_blob,             // tests/db/pg-jieba-readiness.test.ts Git blob
+  lexicon_identity: { dict_blob, manifest_blob, dict_sha256 },
+  corpus_identity: { manifest_blob, corpus_sha256, query_manifest_identity },
+  upstream_source_identity: { pg_jieba_repo, pg_jieba_commit, libjieba_commit, extension_version },
+  environment_identity: { base_image_ref, derived_image_id, pg_server_version, pg_server_version_num, runtime_role },
+  attempt_identity: { attempt_id, attempt_nonce, attempt_started_at }
+}))
+```
+
+Mechanical rules:
+- `readiness-state.ts` must export the deterministic `computeRunFamilyId(...)` derivation and `evaluateReadinessEvidence` must recompute and verify `obs.run_family_id === expectedRunFamilyId`.
+- An arbitrary non-empty string (e.g., raw `randomUUID()` not derived from the above tuple) MUST FAIL validation and MUST NOT pass `evaluateReadinessEvidence`.
+- `working_tree_clean !== true` (working-tree drift) MUST invalidate positive readiness.
+- Any mismatch in `repo_head`, `implementation_file_blobs`, `dockerfile_blob`, `readiness_state_blob`, `db_harness_blob`, lexicon/corpus blob or SHA-256, upstream source identity, environment identity, or attempt identity (mixed-head evidence, stale evidence, fixture drift, or head mismatch) MUST reject aggregate PASS.
 
 Do not combine:
 - compatibility evidence from one head with query evidence from another;
 - baseline from one image with loaded behavior from another build;
 - tokenization before fixture freeze with retrieval after fixture edits;
-- results from different corpus or lexicon fingerprints.
+- results from different corpus or lexicon fingerprints;
+- evidence from an earlier commit/dirty tree with a different target HEAD.
 
 Runtime evidence must be emitted outside the committed source tree or as attached run output so that evidence generation does not change the exact implementation head it claims to bind. Its own SHA-256 is recorded in the Developer handoff.
 
@@ -536,25 +607,40 @@ Any implementation change after runtime evidence invalidates that run family and
 Developer shall implement and run the following categories; exact package-manager invocation must use the repository's existing Bun/Vitest conventions at the current main.
 
 Static/planning/governance:
-- verify Frozen Spec blob unchanged;
+- verify Corrected Spec blob unchanged (`b489bf974032b3bfed678443cda42001ec162f63`);
 - verify changed files are exactly/subset of the seven planned test-only paths;
-- run current change-governance validator and confirm fixed-exempt test-only classification;
-- run current static guard and its self-test;
-- run canonical verify-all.
+- run current governance and change-governance validators (`node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/validate-change-governance.mjs`) and confirm fixed-exempt test-only classification;
+- run current static guard and its self-test (`node scripts/guard-static.mjs` and `node scripts/guard-static.mjs --self-test`);
+- run canonical verify-all (`bun run verify-all`).
 
 Architecture:
-- run tests/architecture/pg-jieba-readiness-evidence.test.ts;
+- run `tests/architecture/pg-jieba-readiness-evidence.test.ts`;
 - prove all five states and aggregate precedence;
-- prove provenance/fingerprint/freeze constraints.
+- prove provenance/fingerprint/freeze constraints;
+- prove failure-injection evaluator consumption, non-PG18-incompatibility classification, and failure-injection cleanup enforcement;
+- prove exception terminal-evidence state-machine invariants (`capture -> classify -> cleanup -> terminal evidence artifact`);
+- prove recomputable `run_family_id` verification and explicitly test adversarial rejection of: `fake run_family_id`, `working-tree drift`, `fixture drift`, `mixed-head evidence`, `stale evidence`, and `head mismatch`.
 
 Real Stage A-derived execution:
-- explicitly opt in with PG_JIEBA_READINESS_TEST=1;
+- explicitly opt in with `PG_JIEBA_READINESS_TEST=1`;
+- verify clean working tree and exact head before run;
 - build exact derived image from the pinned base and upstream source;
-- execute tests/db/pg-jieba-readiness.test.ts;
-- capture compatibility, baseline, loaded, tokenization, lexical query, failure-injection and cleanup evidence;
-- repeat the complete successful/terminal run once with a fresh run_family_id for rerun reproducibility.
+- execute `tests/db/pg-jieba-readiness.test.ts`;
+- capture compatibility, baseline, loaded, tokenization, lexical query, evaluator-consumed failure-injection, stage exception handling (guaranteed terminal artifact emission), and cleanup evidence;
+- repeat the complete successful/terminal run once with a fresh `attempt_identity` and freshly recomputed `run_family_id` for rerun reproducibility.
 
 No command may invoke embeddings, sparsevec, fusion, RRF, reranking or Gold Dataset evaluation.
+
+## Verification Plan
+
+Consolidated mechanical verification contract governing Developer remediation and verification closeout:
+
+| Verification Track | Required Command(s) / Target(s) | Mechanical Proof Contract |
+|---|---|---|
+| Planning & Change Governance | `node .specify/scripts/validate-governance.mjs`; `node .specify/scripts/validate-change-governance.mjs --base "$DEVELOPMENT_BASE" --head HEAD`; `node scripts/guard-static.mjs`; `node scripts/guard-static.mjs --self-test` | Corrected Spec blob `b489bf974032b3bfed678443cda42001ec162f63` unchanged; changed files remain within the frozen 7-file `tests/` fixed-exempt surface; zero product/governance drift. |
+| Architecture & Adversarial Evidence Contract | `bunx vitest run tests/architecture/pg-jieba-readiness-evidence.test.ts` | Proves 5-state machine, aggregate precedence, failure-injection evaluator consumption & non-incompatibility classification, terminal exception capture/cleanup invariants, recomputable `run_family_id`, and all 6 adversarial identity defects (`fake run_family_id`, `working-tree drift`, `fixture drift`, `mixed-head evidence`, `stale evidence`, `head mismatch`). |
+| Real Stage A Disposable DB Spike | `PG_JIEBA_READINESS_TEST=1 PG_JIEBA_EVIDENCE_OUT=/tmp/xiaoshuyin-s22-evidence.json bunx vitest run tests/db/pg-jieba-readiness.test.ts` (plus clean second rerun with distinct `attempt_identity` & `run_family_id`) | Verifies exact PG18 + pinned `pg_jieba` build/load, frozen 3-term lexicon differential, disposable CTE lexical query, evaluator-consumed failure injection + cleanup proof, `capture -> classify -> cleanup -> terminal evidence artifact` on any stage exception, and deterministic rerun reproducibility. |
+| Full Repository Regression | `bun run verify-all` | Confirms repository-wide regression passes on exact candidate `HEAD` without widening into Candidate B RAG, Slice 20/21, or Gold Dataset evaluation. |
 
 ## 20. STOP Conditions
 
@@ -580,10 +666,11 @@ Developer is authorized only to implement/execute the frozen seven-file test-onl
 
 Developer final handoff must include:
 - current main;
-- exact implementation head;
+- exact implementation head and clean working-tree proof;
 - merge base; ahead/behind; changed files;
-- Frozen Spec head/blob;
+- Corrected Spec head/blob (`210363fb3e6a739c49c4aa6e95338b80935dd465` / `b489bf974032b3bfed678443cda42001ec162f63`);
 - plan/checklist/tasks blobs;
+- all implementation and fixture Git blobs (`Dockerfile`, `readiness-state.ts`, DB harness, architecture test, lexicon/corpus manifests and dictionary);
 - governance classification;
 - base and derived image identities;
 - PG18 identity;
@@ -591,10 +678,12 @@ Developer final handoff must include:
 - execution role/security facts;
 - lexicon manifest/blob/SHA-256 and per-term provenance;
 - corpus/query manifest/blob/SHA-256;
+- `attempt_identity` and recomputable `run_family_id` verification proof;
 - raw baseline and loaded tokenization observations;
 - lexicon differential observation;
 - raw lexical query matched IDs;
-- real failure-injection observation;
+- real failure-injection observation, evaluator-consumed outcome, non-PG18-incompatibility proof, and failure-injection cleanup proof;
+- stage exception terminal-evidence confirmation (`capture -> classify -> cleanup -> terminal evidence artifact` for `startup`, `build`, `SQL`, `tokenization`, `query`, `cleanup`);
 - five lower evidence states + reason codes;
 - mechanically derived aggregate state;
 - cleanup and rerun evidence;
@@ -615,10 +704,10 @@ Developer must not perform Audit 2 or merge.
 | FR-003 | 9,12 | C22-LEX-01..12 | T003,T007,T008 |
 | FR-004 | 9,12 | C22-LEX-09, C22-TOK-09..10 | T003,T008 |
 | FR-005 | 10,13 | C22-CORP-01..10, C22-QRY-01..08 | T003,T009 |
-| FR-006 | 11,13,18 | C22-EVD-01..11 | T008,T009,T010 |
+| FR-006 | 11,13,18 | C22-EVD-01..12 | T008,T009,T010 |
 | FR-007 | 15 | C22-STATE-01..10 | T004,T010 |
-| FR-008 | 15,18 | C22-STATE-08..10, C22-HEAD-01..09 | T010,T011 |
-| FR-009 | 6,14,15 | C22-NEG-01..12, C22-STATE-01..10 | T004,T010 |
+| FR-008 | 15,18 | C22-STATE-08..10, C22-HEAD-01..12 | T010,T011 |
+| FR-009 | 6,14,15 | C22-NEG-01..15, C22-STATE-01..10 | T004,T010 |
 | FR-010 | 16 | C22-CLN-01..10 | T009,T010,T011 |
 | FR-011 | 3,20 | C22-SCOPE-01..10 | T001,T002,T011 |
 | FR-012 | 2,3,9,10,21 | C22-AUTH-01..10 | T001,T003,T012 |
@@ -626,16 +715,16 @@ Developer must not perform Audit 2 or merge.
 | AS-02 | 11,12 | C22-TOK-01..10 | T008 |
 | AS-03 | 9,12 | C22-LEX-01..12, C22-TOK-09..10 | T007,T008 |
 | AS-04 | 10,13 | C22-QRY-01..08 | T009 |
-| AS-05 | 14,15 | C22-NEG-01..12 | T004,T009,T010 |
+| AS-05 | 14,15 | C22-NEG-01..15 | T004,T009,T010 |
 | AS-06 | 3,15,21 | C22-SCOPE-01..10, C22-STATE-01..10 | T010,T012 |
 | AS-07 | 16 | C22-CLN-01..10 | T009,T010 |
-| AS-08 | 16,17,18 | C22-CLN-08..10, C22-PRIV-01..08, C22-HEAD-01..09 | T011,T012 |
+| AS-08 | 16,17,18 | C22-CLN-08..10, C22-PRIV-01..08, C22-HEAD-01..12 | T011,T012 |
 | NS-01 | 8,15 | C22-COMP-05..09, C22-NEG-01..03 | T006,T010 |
 | NS-02 | 6,8,15 | C22-NEG-01..03 | T001,T006,T010 |
 | NS-03 | 7,15,18 | C22-ENV-01..08, C22-STATE-01..10 | T006,T010 |
 | NS-04 | 9,10,14 | C22-AUTH-01..10, C22-NEG-04..06 | T003,T004 |
-| NS-05 | 9,10,18 | C22-LEX-10..12, C22-CORP-08..10, C22-HEAD-01..09 | T003,T006,T011 |
-| NS-06 | 10,18 | C22-CORP-08..10, C22-HEAD-01..09 | T003,T011 |
+| NS-05 | 9,10,18 | C22-LEX-10..12, C22-CORP-08..10, C22-HEAD-01..12 | T003,T006,T011 |
+| NS-06 | 10,18 | C22-CORP-08..10, C22-HEAD-01..12 | T003,T011 |
 | NS-07 | 11,12,14 | C22-TOK-01..10, C22-NEG-07 | T004,T008 |
 | NS-08 | 12,15 | C22-LEX-01..12, C22-TOK-01..10, C22-STATE-01..10 | T008,T010 |
 | NS-09 | 13,15 | C22-QRY-01..08, C22-STATE-01..10 | T009,T010 |

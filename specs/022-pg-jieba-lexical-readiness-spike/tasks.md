@@ -1,7 +1,39 @@
 # Slice 22 — Developer Tasks
 
 Feature: 022-pg-jieba-lexical-readiness-spike  
-These tasks implement only the frozen lexical-substrate Spike. They do not authorize Audit 2 or merge.
+Corrected Spec Head: 210363fb3e6a739c49c4aa6e95338b80935dd465 (supersedes historical head c583e7d67d3cca7bb5b9f1b533f08448c2362334)  
+Corrected Spec Blob: b489bf974032b3bfed678443cda42001ec162f63 (supersedes historical blob c11c595d3fc9390bb569651562ba52c36cf9546b)  
+Current Main Baseline: e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512  
+These tasks implement only the frozen lexical-substrate Spike and targeted remediation of PR #149 (`32599a4be8f54ee99692b9521fe1d1ae9b01176b`) findings (`F-01`, `F-02`, `F-03`). They do not authorize Audit 2 or merge.
+
+## Frozen Spec Authority Map
+
+Mechanical traceability from every Slice 22 task (`T001`–`T012`) to the Corrected Spec (`specs/022-pg-jieba-lexical-readiness-spike/spec.md`, head `210363fb3e6a739c49c4aa6e95338b80935dd465`, blob `b489bf974032b3bfed678443cda42001ec162f63`) requirements, scenarios, and approved upstream bindings (`V1-C03`, `V1-C27`, `V1-C34`, `V1-C37`, `V1-X14`, `Docs/V1技术设计.md` §4.2/§13.1–§13.2/§20, `Docs/总体技术架构.md` §11.1):
+
+| Task | Frozen Spec & Upstream Authority | Plan Section(s) | Acceptance / Exit Criteria |
+|---|---|---|---|
+| T001 | `FR-001`, `FR-008`, `FR-011`, `FR-012`; `AS-01`, `AS-06`; `NS-02`, `NS-03`, `NS-10`, `NS-12`; `V1-C03`, `V1-C27`, `V1-X14`; `Docs/V1技术设计.md` §4.2, §13.1–§13.2, §20 | §1, §2, §4, §6 | Remote truth gate OPEN with `behind = 0`, Corrected Spec blob `b489bf974032b3bfed678443cda42001ec162f63` unchanged, Stage A PG18 baseline confirmed, zero Authority conflict. |
+| T002 | `FR-011`, `FR-012`; `AS-06`; `NS-10`, `NS-11`; `V1-C34`, `V1-C37`, `V1-X14`; `Docs/总体技术架构.md` §11.1 | §3, §5 | `validate-change-governance.mjs` classifies the 7-file `tests/` surface as `TEST_ONLY_FIXED_EXEMPT` with zero product/governance mutations. |
+| T003 | `FR-003`, `FR-004`, `FR-005`, `FR-012`; `AS-03`, `AS-04`; `NS-04`, `NS-05`, `NS-06`, `NS-12`; `V1-C34`, `V1-C37` | §9, §10 | Frozen 3-term dictionary and 4-doc/2-query manifests committed with Authority-doc provenance & SHA-256 before any runtime observation. |
+| T004 | `FR-007`, `FR-008`, `FR-009`; `AS-05`, `AS-06`; `NS-01`–`NS-09`; `V1-C03`, `V1-C27`, `V1-X14` | §14, §15, §18 | Pure evaluator (`readiness-state.ts`) + adversarial suite (`tests/architecture/pg-jieba-readiness-evidence.test.ts`) enforcing `F-01` failure-injection consumption, `F-02` stage-exception terminal evidence invariants, `F-03` recomputable `run_family_id`, and all 6 identity drift rejections. |
+| T005 | `FR-001`, `FR-002`, `FR-003`, `FR-010`, `FR-011`; `AS-01`, `AS-07`; `NS-01`, `NS-07`, `NS-10`, `NS-11`; `V1-C27`, `V1-X14` | §7, §8, §15, §16 | Derived Stage A `Dockerfile` + DB harness (`tests/db/pg-jieba-readiness.test.ts`) pinning `pg_jieba`/`libjieba` without patches and enforcing `capture -> classify -> cleanup -> terminal evidence artifact` across all 6 stages (`startup`, `build`, `SQL`, `tokenization`, `query`, `cleanup`). |
+| T006 | `FR-006`, `FR-008`; `AS-01`, `AS-08`; `NS-05`, `NS-06`; `V1-C03`, `V1-X14` | §7, §18 | Clean working-tree exact-head freeze capturing `repo_head`, all implementation/fixture Git blobs (`Dockerfile`, `readiness-state.ts`, DB harness, architecture test, lexicon/corpus), upstream source/environment/attempt identity, and recomputable `run_family_id` inputs before runtime. |
+| T007 | `FR-001`, `FR-006`, `FR-007`, `FR-009`; `AS-01`, `AS-06`; `NS-01`, `NS-02`, `NS-03`; `V1-C03`, `V1-C27`, `V1-X14` | §7, §8, §15 | Actual PG18 + pinned `pg_jieba` build/load compatibility verification and truthful `PG_JIEBA_COMPATIBILITY` terminal state under `F-02` exception capture. |
+| T008 | `FR-002`, `FR-003`, `FR-004`, `FR-006`, `FR-007`; `AS-02`, `AS-03`; `NS-04`, `NS-05`, `NS-07`, `NS-08`; `V1-C03`, `V1-X14` | §9, §11, §12 | Baseline vs loaded postmaster `LEXICON_LOAD` verification + 3-connection `TOKENIZATION` determinism and primary differential (`手机使用合约` in `D02`) proof. |
+| T009 | `FR-005`, `FR-006`, `FR-009`, `FR-010`; `AS-04`, `AS-05`, `AS-07`; `NS-09`, `NS-11`; `V1-C03`, `V1-C27`, `V1-X14` | §13, §14, §16 | Disposable CTE lexical query (`Q01=[D02]`, `Q02=[D01]`), evaluator-consumed `FAILURE_INJECTION` execution (never `LEXICON_LOAD PASS`, never misclassified as PG18 incompatibility), and verified cleanup of all containers/volumes/derived image. |
+| T010 | `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-010`; `AS-05`–`AS-08`; `NS-01`–`NS-09`; `V1-C03`, `V1-C27`, `V1-X14` | §15, §16, §18 | Recomputable `run_family_id` validation, guaranteed terminal evidence JSON emission & SHA-256 even after captured stage exceptions, and fresh-`attempt_identity` clean rerun reproducibility. |
+| T011 | `FR-001`–`FR-012`; `AS-01`–`AS-08`; `NS-01`–`NS-12`; `V1-C03`, `V1-C27`, `V1-C34`, `V1-C37`, `V1-X14` | §19, §20 | Exact-head verification of governance validators, static guard + self-test, architecture suite, DB spike evidence binding, and canonical `verify-all`. |
+| T012 | `FR-006`, `FR-008`, `FR-009`, `FR-010`, `FR-012`; `AS-06`–`AS-08`; `NS-12`; `V1-C03`, `V1-C27`, `V1-C34`, `V1-C37`, `V1-X14` | §21 | Complete Audit 2 handoff report bound to exact final remote `HEAD`, artifact SHA-256, and zero scope/authority violation, then STOP. |
+
+## Acceptance Evidence Contract
+
+In mechanical fulfillment of the Corrected Spec (`## Acceptance Evidence`, `blob b489bf974032b3bfed678443cda42001ec162f63`) and targeted findings `F-01`, `F-02`, and `F-03`, every terminal Spike execution MUST bind and verify:
+
+1. **Five Lower Predicates & Mechanical Aggregation (`V1-C03`, `V1-C27`, `V1-X14`)**: `PG_JIEBA_COMPATIBILITY`, `LEXICON_LOAD`, `TOKENIZATION`, `LEXICAL_QUERY`, and `CLEANUP` with explicit states (`PASS | FAIL | BLOCKED | UNKNOWN | NOT_EVALUATED`) and reason codes; `aggregate_state` MUST be derived purely by `deriveAggregateState` / `evaluateReadinessEvidence` with zero manual `PASS` override.
+2. **Failure Injection Consumption & Cleanup (`F-01`, `V1-C03`, `V1-C27`)**: `failure_injection` results MUST be passed into `ReadinessObservation` and mechanically consumed by `evaluateReadinessEvidence` and test assertions (merely logging `failed_as_expected` is forbidden). Aggregate `PASS` MUST be rejected if `failure_injection` was not executed/consumed, produced `LEXICON_LOAD PASS`, misclassified the injected dictionary error as PG18 incompatibility (`PG_JIEBA_COMPATIBILITY` incompatibility reason codes), or lacks independent container/volume cleanup proof (`CLEANUP = FAIL`).
+3. **Exception Terminal Evidence Guarantee (`F-02`, `V1-C27`)**: Any exception thrown during `startup`, `build`, `SQL`, `tokenization`, `query`, or `cleanup` MUST follow `capture -> classify -> cleanup -> terminal evidence artifact`, writing the evaluated JSON artifact outside the committed source tree with its SHA-256. Unhandled `throw -> process exit -> no terminal evidence` is forbidden.
+4. **Exact Head, Working-Tree Cleanliness & Recomputable `run_family_id` (`F-03`, `V1-C03`, `V1-X14`)**: Evidence MUST record and verify `repo_head`, `working_tree_clean == true`, all implementation file Git blobs, `Dockerfile` blob, `readiness-state.ts` blob, DB harness blob, lexicon blob/SHA-256, corpus blob/SHA-256, upstream source identity, environment identity, and unique `attempt_identity`. `run_family_id` MUST be deterministically recomputed by `computeRunFamilyId` and equality-checked by `evaluateReadinessEvidence` (arbitrary non-empty strings MUST NOT pass). Architecture tests MUST prove rejection of `fake run_family_id`, `working-tree drift`, `fixture drift`, `mixed-head evidence`, `stale evidence`, and `head mismatch`.
+5. **Authorization & Scope Invariants (`V1-C34`, `V1-C37`, `V1-X14`)**: Zero Professional Authority invention, zero mock/fallback tokenizer, zero RRF/reranker/dense/sparsevec/Gold Dataset evaluation, zero production schema/table/index/route, and zero mutation outside the 7 test-only files plus Slice 22 planning artifacts.
 
 ## T001 — Remote Truth and Implementation Gate
 
@@ -173,23 +205,19 @@ Make PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED mechanical before real execution.
 
 **Actions**
 1. Implement the five lower predicates and exact state vocabulary from Plan §15.
-2. Implement aggregate precedence exactly.
-3. Implement mandatory reason-code validation.
-4. Add adversarial cases for unavailable source/Docker/base image => BLOCKED.
-5. Add observed compile/load incompatibility => FAIL.
-6. Add identity incomplete => UNKNOWN.
-7. Add no attempt => NOT_EVALUATED.
-8. Add lexicon/corpus fingerprint drift and unauthorized provenance.
-9. Add fallback/mock rejection.
-10. Add tokenization-only, lexicon-only and query-mismatch partial states.
-11. Add cleanup failure precedence.
-12. Add mixed-head/image/fixture evidence rejection.
+2. Implement aggregate precedence (`deriveAggregateState`) and full `evaluateReadinessEvidence` evaluator.
+3. Implement mandatory reason-code validation (including `RUN_FAMILY_ID_MISMATCH`, `WORKING_TREE_DRIFT`, `STALE_OR_MIXED_HEAD_EVIDENCE`, `FAILURE_INJECTION_NOT_CONSUMED`, `FAILURE_INJECTION_UNEXPECTED_PASS`, `FAILURE_INJECTION_MISCLASSIFIED_INCOMPATIBLE`, `STAGE_EXCEPTION_CAPTURED`).
+4. Implement deterministic `computeRunFamilyId` over: `repo_head`, `base_main`, `merge_base`, `changed_files`, `frozen_spec_blob`, `working_tree_clean`, all implementation file Git blobs, `Dockerfile` blob, `readiness-state.ts` blob, DB harness blob, lexicon blob/SHA-256, corpus blob/SHA-256, upstream source identity, environment identity, and `attempt_identity`; enforce `obs.run_family_id === recomputed` and reject arbitrary non-empty strings.
+5. Enforce evaluator consumption of structured `failure_injection` observation (rejecting unconsumed `failed_as_expected` logs, forcing `LEXICON_LOAD = FAIL` on unexpected pass, rejecting misclassification as PG18 incompatibility, and forcing `CLEANUP = FAIL` when failure-injection cleanup is unverified).
+6. Model and test exception terminal-evidence invariants across `startup`, `build`, `SQL`, `tokenization`, `query`, and `cleanup` (`capture -> classify -> cleanup -> terminal evidence artifact`).
+7. Add adversarial cases for unavailable source/Docker/base image => BLOCKED, observed compile/load incompatibility => FAIL, identity incomplete => UNKNOWN, no attempt => NOT_EVALUATED, unauthorized provenance, fallback/mock rejection, tokenization-only/lexicon-only/query-mismatch partial states, and cleanup failure precedence.
+8. Add explicit architecture tests rejecting all 6 identity/head failure modes: `fake run_family_id`, `working-tree drift`, `fixture drift`, `mixed-head evidence`, `stale evidence`, and `head mismatch`.
 
 **Verification**
-- architecture suite covers every row C22-NEG-01..12, C22-STATE-01..10 and C22-HEAD-01..07.
+- architecture suite covers every row `C22-NEG-01..15`, `C22-STATE-01..10`, `C22-EVD-12`, and `C22-HEAD-01..12` (explicitly asserting rejection of `fake run_family_id`, `working-tree drift`, `fixture drift`, `mixed-head evidence`, `stale evidence`, and `head mismatch`).
 
 **Done Criteria**
-- no constructed evidence object can reach aggregate PASS unless all five lower predicates are PASS and identities match.
+- no constructed evidence object can reach aggregate PASS unless all five lower predicates are PASS, `failure_injection` is consumed with verified cleanup and no PG18 incompatibility mislabeling, `working_tree_clean === true`, and recomputed `run_family_id` + all blobs/identities match.
 
 **STOP Conditions**
 - a state requires subjective/manual interpretation;
@@ -233,14 +261,15 @@ Build the exact upstream pg_jieba source against the exact Stage A PG18 base wit
 4. Initialize and verify libjieba exactly 391121d5db0f31dd5ce9795d4d34812f20eeb25c.
 5. Build/install without source patch.
 6. Copy the frozen custom dictionary into pg_config --sharedir / tsearch_data through the image build.
-7. In the DB test, implement unique run-family container/volume naming, startup, health, privileged CREATE EXTENSION, runtime-role connection, evidence collection and finally cleanup.
-8. Start pg_jieba through shared_preload_libraries and use startup user_dict values from Plan §9.
-9. Never use jieba_reload_dict() as the positive cross-backend mechanism.
-10. Keep all evidence secrets redacted.
+7. In the DB test, enforce `working_tree_clean` check, collect all required exact-head/blob/environment/attempt identity inputs, and compute deterministic `run_family_id` via `computeRunFamilyId`.
+8. Wrap the entire DB execution lifecycle (`startup`, `build`, `SQL`, `tokenization`, `query`, `cleanup`) in `try / catch / finally` enforcing `capture -> classify -> cleanup -> terminal evidence artifact`: any exception in any stage is captured with redacted details, classified truthfully, triggers `finally` container/volume/image cleanup + removal verification (catching cleanup exceptions too so `CLEANUP = FAIL` is recorded), and ALWAYS invokes `evaluateReadinessEvidence` and writes the terminal JSON artifact + SHA-256 before any test failure assertion.
+9. Start pg_jieba through shared_preload_libraries and use startup user_dict values from Plan §9.
+10. Never use jieba_reload_dict() as the positive cross-backend mechanism.
+11. Keep all evidence secrets redacted.
 
 **Verification**
 - Dockerfile/source scan proves exact pins and no patch;
-- test code has unconditional finally cleanup;
+- test code enforces `capture -> classify -> cleanup -> terminal evidence artifact` across `startup`, `build`, `SQL`, `tokenization`, `query`, and `cleanup` (zero uncaught `throw -> process exit -> no terminal evidence`);
 - no production path touched.
 
 **Done Criteria**
@@ -276,15 +305,15 @@ Prevent runtime evidence from being collected against a moving implementation/fi
 - runtime execution before identity freeze.
 
 **Actions**
-1. Commit all Slice22 implementation/test fixture changes.
+1. Commit all Slice22 implementation/test fixture changes and verify `git status --porcelain` is clean (`working_tree_clean == true`).
 2. Push candidate branch.
 3. Read back exact implementation head from GitHub.
-4. Read back all seven changed-file blobs.
+4. Read back Git blobs for all changed/implementation files (`Dockerfile`, `readiness-state.ts`, DB harness `pg-jieba-readiness.test.ts`, architecture test, `xiaoshuyin_022_test.dict`, `lexicon-manifest.json`, `corpus-manifest.json`).
 5. Read current main, merge base, ahead/behind and changed files.
-6. Confirm Frozen Spec and planning blobs unchanged.
+6. Confirm Corrected Spec blob (`b489bf974032b3bfed678443cda42001ec162f63`) and frozen planning blobs unchanged.
 7. Confirm changed-file set is subset of seven allowed paths.
-8. Compute fixture hashes and run_family_id seed.
-9. If head changes after this point, discard all runtime evidence and repeat T006.
+8. Compute fixture SHA-256 hashes and pre-runtime `run_family_id` seed inputs (with upstream source identity, environment identity placeholder to be filled from derived image/PG18, and unique `attempt_identity`).
+9. If head changes or working tree drifts after this point, discard all runtime evidence and repeat T006.
 
 **Verification**
 - exact head/fixture identities mechanically complete.
@@ -434,16 +463,16 @@ Prove reproducible lexical retrieval correctness and disposal behavior without b
 4. Repeat each query three times on fresh connections.
 5. Require exact Q01=[D02], Q02=[D01].
 6. Record raw SQL/config identity and matched IDs.
-7. Start FAILURE_INJECTION with a deliberately missing test dictionary identity or equivalent bounded invalid lexicon configuration.
-8. Prove the injected failure cannot yield LEXICON_LOAD PASS and is not mislabeled upstream incompatibility.
-9. Execute finally cleanup for every container/volume/image path.
-10. Inspect that exact run-family containers/volumes are absent and no host/production state changed.
+7. Start FAILURE_INJECTION with a deliberately missing test dictionary identity or equivalent bounded invalid lexicon configuration (`nonexistent_022_dict`).
+8. Feed structured `failure_injection` execution, non-PASS observation, non-PG18-incompatibility proof, and `FAILURE_INJECTION` container/volume cleanup verification directly into `ReadinessObservation` consumed by `evaluateReadinessEvidence` and test assertions (merely recording `failed_as_expected` in raw evidence is forbidden).
+9. Mechanically prove the injected failure cannot yield `LEXICON_LOAD PASS` and is NOT misclassified as PG18 incompatibility (`PG_JIEBA_COMPATIBILITY` remains independent).
+10. Execute `finally` cleanup (with exception capture) for every container/volume/image path across `BASELINE`, `LEXICON_LOADED`, and `FAILURE_INJECTION`, inspecting that exact run-family containers/volumes are absent and no host/production state changed.
 
 **Verification**
-- C22-QRY-01..08, C22-NEG-10..11, C22-CLN-01..07.
+- `C22-QRY-01..08`, `C22-NEG-10..15`, `C22-CLN-01..07`.
 
 **Done Criteria**
-- LEXICAL_QUERY and CLEANUP each have terminal states and raw evidence.
+- `LEXICAL_QUERY` and `CLEANUP` each have terminal states and raw evidence, and `failure_injection` + its cleanup are mechanically consumed by `evaluateReadinessEvidence`.
 
 **STOP Conditions**
 - query correctness would require a professional relevance judgment;
@@ -477,16 +506,16 @@ Derive one truthful Slice22 result and prove it does not depend on residue.
 - hiding attempted failures.
 
 **Actions**
-1. Populate the five lower predicate states and reason codes.
-2. Derive aggregate with readiness-state.ts only.
-3. Produce sanitized evidence artifact outside the committed tree; compute SHA-256.
-4. If the terminal result is aggregate PASS or an observed technical FAIL, remove all first-run state and execute a second clean attempt with a fresh run_family_id, same exact head/source/fixtures and fresh volumes. A compatibility FAIL must be reproduced through the same failing build/load stage; a later FAIL must be reproduced through the same failing stage from a clean environment.
+1. Populate the five lower predicate states, reason codes, structured `failure_injection` fields, captured `stage_exceptions` (if any), and full exact-head/blob/environment/`attempt_identity` tuple; compute deterministic `run_family_id` via `computeRunFamilyId` (never arbitrary UUID/non-empty string).
+2. Derive aggregate state with `evaluateReadinessEvidence` in `readiness-state.ts` only (which verifies recomputed `run_family_id`, `working_tree_clean`, `failure_injection` consumption, and cleanup evidence).
+3. Produce sanitized terminal evidence artifact outside the committed tree even when a stage exception occurs (`capture -> classify -> cleanup -> terminal evidence artifact`); compute SHA-256.
+4. If the terminal result is aggregate PASS or an observed technical FAIL, remove all first-run state and execute a second clean attempt with a fresh `attempt_identity` and freshly recomputed `run_family_id`, same exact head/source/fixtures and fresh volumes. A compatibility FAIL must be reproduced through the same failing build/load stage; a later FAIL must be reproduced through the same failing stage from a clean environment.
 5. BLOCKED/UNKNOWN may stop without a second technical run only because the recorded unavailable/inconclusive dependency prevents such a result.
 6. Compare the declared technical outputs/states between applicable runs.
-7. Record all attempts, including failures.
+7. Record all attempts, including failures and stage exceptions.
 
 **Verification**
-- C22-EVD-01..11, C22-STATE-01..10, C22-CLN-08..10, C22-HEAD-01..08.
+- `C22-EVD-01..12`, `C22-STATE-01..10`, `C22-CLN-08..10`, `C22-HEAD-01..12`.
 
 **Done Criteria**
 - one truthful aggregate PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED is mechanically derived;
@@ -526,19 +555,19 @@ Prove the terminal evidence belongs to the final exact implementation head and t
 **Actions**
 1. Re-read current main and exact implementation head from GitHub.
 2. Read merge base, ahead/behind and changed files.
-3. Re-read Frozen Spec, Plan, Checklist, Tasks blobs.
+3. Re-read Corrected Spec (`b489bf974032b3bfed678443cda42001ec162f63`), Plan, Checklist, Tasks blobs.
 4. Confirm changed files remain within the frozen seven implementation paths plus planning artifacts.
-5. Confirm runtime evidence repo_head equals exact final head.
-6. Run new architecture suite.
+5. Confirm runtime evidence `repo_head`, `implementation_file_blobs`, `Dockerfile` blob, `readiness-state.ts` blob, DB harness blob, lexicon/corpus blobs & hashes, `working_tree_clean`, and recomputed `run_family_id` match exact final head.
+6. Run new architecture suite (`tests/architecture/pg-jieba-readiness-evidence.test.ts`).
 7. Run explicit real DB Spike suite as applicable to the claimed terminal state.
-8. Run current change-governance validator.
+8. Run current governance and change-governance validators (`validate-governance.mjs` and `validate-change-governance.mjs`).
 9. Run static guard and self-test.
 10. Run canonical verify-all.
 11. Run secret/privacy/scope scans.
 12. If any source file changes, return to T006 and rerun all affected runtime evidence.
 
 **Verification**
-- C22-REG-01..06 and C22-HEAD-01..09.
+- `C22-REG-01..06` and `C22-HEAD-01..12`.
 
 **Done Criteria**
 - exact-head regression/gov/scope checks PASS while the terminal Spike result remains truthful.
@@ -586,16 +615,17 @@ Report:
 8. lexicon and corpus/query identities/provenance/fingerprints;
 9. raw baseline/loaded tokenization and differential;
 10. raw lexical query outputs;
-11. failure-injection result;
-12. five lower states/reasons;
-13. mechanically derived aggregate state;
-14. cleanup/rerun result;
-15. runtime evidence artifact SHA-256;
-16. canonical regression/governance results;
-17. limitations and explicit statement that no production readiness/route selection is implied.
+11. failure-injection result, evaluator-consumed outcome, non-PG18-incompatibility proof, and failure-injection cleanup proof;
+12. stage-exception capture/terminal-artifact confirmation across startup/build/SQL/tokenization/query/cleanup;
+13. five lower states/reasons;
+14. mechanically derived aggregate state;
+15. cleanup/rerun result and recomputable `run_family_id` + all implementation/fixture Git blobs;
+16. runtime evidence artifact SHA-256;
+17. canonical regression/governance results;
+18. limitations and explicit statement that no production readiness/route selection is implied.
 
 **Verification**
-- C22-EVD-01..11, C22-HO-01..05 and exact-head checklist all satisfied.
+- `C22-EVD-01..12`, `C22-HO-01..05`, `C22-NEG-13..15`, and exact-head checklist `C22-HEAD-01..12` all satisfied.
 
 **Done Criteria**
 - READY FOR INDEPENDENT AUDIT 2 for a complete PASS or reproducible FAIL execution;

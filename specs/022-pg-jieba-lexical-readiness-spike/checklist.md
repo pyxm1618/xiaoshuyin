@@ -11,8 +11,8 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 
 | ID | Mechanical Check | Required Result | Evidence |
 |---|---|---|---|
-| C22-BASE-01 | Frozen Spec head | c583e7d67d3cca7bb5b9f1b533f08448c2362334 | GitHub remote read-back |
-| C22-BASE-02 | Frozen Spec blob | c11c595d3fc9390bb569651562ba52c36cf9546b | Git blob read-back |
+| C22-BASE-01 | Corrected Spec head | 210363fb3e6a739c49c4aa6e95338b80935dd465 (supersedes c583e7d67d3cca7bb5b9f1b533f08448c2362334) | GitHub remote read-back |
+| C22-BASE-02 | Corrected Spec blob | b489bf974032b3bfed678443cda42001ec162f63 (supersedes c11c595d3fc9390bb569651562ba52c36cf9546b) | Git blob read-back |
 | C22-BASE-03 | Planning branch ancestry contains Frozen Spec | YES | commit parents/history |
 | C22-BASE-04 | Developer start base is current main | behind = 0 | compare commits |
 | C22-BASE-05 | No competing 022 implementation | NONE | branch/PR search |
@@ -111,8 +111,11 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 | C22-NEG-08 | tokenization PASS + lexicon unproven aggregate | not PASS | classifier test |
 | C22-NEG-09 | lexicon PASS + query mismatch aggregate | FAIL | classifier test |
 | C22-NEG-10 | real missing/invalid dictionary environment attempted | YES | runtime evidence |
-| C22-NEG-11 | injected negative mislabeled upstream incompatibility | NO | reason code |
+| C22-NEG-11 | injected negative mislabeled upstream incompatibility | NO | reason code & PG_JIEBA_COMPATIBILITY predicate |
 | C22-NEG-12 | inconclusive identity/output classification | UNKNOWN | classifier test |
+| C22-NEG-13 | failure_injection observation consumed by evaluateReadinessEvidence (not unconsumed failed_as_expected log) | YES | evaluator input + architecture test |
+| C22-NEG-14 | injected invalid dictionary yields LEXICON_LOAD PASS | NO; forces LEXICON_LOAD FAIL + prevents aggregate PASS | evaluator + architecture test |
+| C22-NEG-15 | failure_injection container & volume cleanup verified as CLEANUP evidence | YES; missing/failed cleanup forces CLEANUP FAIL | runtime cleanup evidence + architecture test |
 | C22-EVD-01 | raw ts_debug observations retained | YES when TOKENIZATION executed; otherwise short-circuit N/A rule | runtime evidence |
 | C22-EVD-02 | raw to_tsvector observations retained | YES when TOKENIZATION executed; otherwise short-circuit N/A rule | runtime evidence |
 | C22-EVD-03 | raw lexical matched doc IDs retained | YES when LEXICAL_QUERY executed; otherwise short-circuit N/A rule | runtime evidence |
@@ -124,6 +127,7 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 | C22-EVD-09 | attempted failures/negative observations retained, not hidden | YES | artifact attempt list |
 | C22-EVD-10 | evidence contains no secret/private-family/unauthorized professional content | YES | evidence scan |
 | C22-EVD-11 | evidence binds one exact head/environment/lexicon/corpus/run family | YES | identity tuple validation |
+| C22-EVD-12 | stage exception (startup/build/SQL/tokenization/query/cleanup) executes capture -> classify -> cleanup -> terminal evidence artifact without uncaught process exit | YES | harness try/catch/finally + terminal JSON artifact + architecture test |
 | C22-STATE-01 | lower predicates present | exactly 5 | evidence schema |
 | C22-STATE-02 | state vocabulary | PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED only | architecture test |
 | C22-STATE-03 | cleanup FAIL precedence | aggregate FAIL | architecture test |
@@ -137,8 +141,8 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 | C22-CLN-01 | success containers removed | YES | Docker inspect |
 | C22-CLN-02 | success volumes removed | YES | Docker inspect |
 | C22-CLN-03 | exact derived image tag removed after capture | YES | Docker inspect |
-| C22-CLN-04 | expected-failure containers/volumes removed | YES | Docker inspect |
-| C22-CLN-05 | unexpected-failure cleanup executed in finally | YES | test path + injected failure |
+| C22-CLN-04 | expected-failure (including failure-injection) containers/volumes removed and verified | YES | Docker inspect + CLEANUP evidence |
+| C22-CLN-05 | unexpected-failure cleanup across all stages (startup/build/SQL/tokenization/query/cleanup) executed via capture -> classify -> cleanup -> terminal evidence artifact | YES | harness try/catch/finally + terminal artifact |
 | C22-CLN-06 | host PostgreSQL config/tsearch_data modified | NO | path/environment proof |
 | C22-CLN-07 | production retrieval objects/business rows created | NO | catalog/diff |
 | C22-CLN-08 | final PASS or observed technical FAIL has second clean attempt with fresh run_family_id/volumes | YES; N/A only for BLOCKED/UNKNOWN | rerun evidence |
@@ -154,13 +158,16 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 | C22-PRIV-08 | Slice22 PASS represented as production RAG readiness | NO | handoff claims scan |
 | C22-HEAD-01 | one exact implementation head per run family | YES | evidence |
 | C22-HEAD-02 | one base main/merge base per run family | YES | evidence |
-| C22-HEAD-03 | one derived image/build identity per run family | YES | evidence |
-| C22-HEAD-04 | one frozen lexicon identity per run family | YES | evidence |
-| C22-HEAD-05 | one frozen corpus/query identity per run family | YES | evidence |
+| C22-HEAD-03 | one derived image/build identity & upstream source identity per run family | YES | evidence |
+| C22-HEAD-04 | one frozen lexicon blob/SHA-256 identity per run family | YES | evidence |
+| C22-HEAD-05 | one frozen corpus/query blob/SHA-256 identity per run family | YES | evidence |
 | C22-HEAD-06 | mixed-head evidence accepted | NO | architecture test |
 | C22-HEAD-07 | implementation changes after evidence | require complete rerun | git/evidence chronology |
 | C22-HEAD-08 | runtime evidence artifact SHA-256 recorded | YES | handoff |
 | C22-HEAD-09 | final remote head equals evidence repo head | YES | remote read-back |
+| C22-HEAD-10 | run_family_id mechanically recomputed from repo HEAD, all implementation blobs, Dockerfile blob, readiness-state blob, DB harness blob, lexicon/corpus blobs & hashes, upstream source identity, environment identity, and attempt identity (arbitrary non-empty string rejected) | YES | computeRunFamilyId + evaluator + architecture test |
+| C22-HEAD-11 | clean working tree required (working-tree drift rejected) | YES | git status + architecture test |
+| C22-HEAD-12 | architecture suite explicitly rejects fake run_family_id, working-tree drift, fixture drift, mixed-head evidence, stale evidence, and head mismatch | YES | tests/architecture/pg-jieba-readiness-evidence.test.ts |
 | C22-REG-01 | new architecture test passes | YES | test output |
 | C22-REG-02 | new real DB spike test reaches a truthful terminal state when explicitly enabled | YES | test output/evidence |
 | C22-REG-03 | current change-governance validator passes | YES | command output |
@@ -175,4 +182,4 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 
 ## Audit 2 handoff gate
 
-Audit 2 handoff is mechanically complete only when C22-HO-01..05 and C22-HEAD-01..09 pass. A reproducible aggregate FAIL can still be handed to Audit 2. BLOCKED/UNKNOWN/NOT_EVALUATED must remain labeled as such.
+Audit 2 handoff is mechanically complete only when C22-HO-01..05, C22-NEG-13..15, C22-EVD-12, and C22-HEAD-01..12 pass. A reproducible aggregate FAIL can still be handed to Audit 2. BLOCKED/UNKNOWN/NOT_EVALUATED must remain labeled as such.
