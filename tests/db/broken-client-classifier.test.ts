@@ -2,6 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { isBrokenClientError } from '../../apps/server/api/src/db/tx.js';
 
 describe('Finding #31: Broken DB Client Classifier', () => {
+  it.each(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', '08006', '57P01', '25P02'])(
+    'recognizes nested cause %s', (code) => {
+      expect(isBrokenClientError({ cause: { cause: { code } } })).toBe(true);
+      expect(isBrokenClientError({ cause: { errno: code } })).toBe(true);
+    }
+  );
+
+  it('bounds cyclic and excessively deep cause chains', () => {
+    const cyclic: { cause?: unknown } = {};
+    cyclic.cause = cyclic;
+    expect(isBrokenClientError(cyclic)).toBe(false);
+    let deep: unknown = { code: 'ECONNRESET' };
+    for (let index = 0; index < 32; index++) deep = { cause: deep };
+    expect(isBrokenClientError(deep)).toBe(false);
+    expect(isBrokenClientError({ cause: { code: '23505' } })).toBe(false);
+  });
+
   it('classifies Node transport errors as broken client connection', () => {
     // ECONNRESET
     expect(isBrokenClientError({ code: 'ECONNRESET' })).toBe(true);

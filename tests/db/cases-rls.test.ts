@@ -271,6 +271,7 @@ export async function seedTwoFamilies(admin: Client) {
       [accountId]
     );
     const personId = per[0].id;
+    await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountId]);
     const familyId = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
     await admin.query('SELECT app.create_family($1, $2, $3)', [familyId, personId, `T022-${key}`]);
     await admin.query(

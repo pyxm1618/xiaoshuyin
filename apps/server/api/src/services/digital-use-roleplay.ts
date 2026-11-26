@@ -8,6 +8,9 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import {
   createServerFeatureDescriptor,
   evaluateComplianceAtTransactionTime,
+  getComplianceProfileForUpdate,
+  lockComplianceFeatureEvaluationBasis,
+  type ComplianceEvaluationResult,
   type ComplianceObligation,
 } from '@xiaoshuyin/compliance';
 import {
@@ -116,18 +119,7 @@ async function resolveRoleplayExecution(
   ) throw roleplayError('SCENE_NODE_UNREACHABLE');
   return {caseRow,node,scene};
 }
-async function authorizeRoleplay(
-  tx:pg.PoolClient,
-  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
-  allowCompleted=false
-){
-  const caseRow=await lockRoleplayAuthority(tx,input);
-  return resolveRoleplayExecution(tx,input,caseRow,allowCompleted);
-}
-async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
-  const result=await evaluateComplianceAtTransactionTime(drizzle(tx),tx,{
-    descriptor:ROLEPLAY_FEATURE,actorPersonId:personId,targetPersonId:personId,supportedObligations:SUPPORTED_ROLEPLAY_OBLIGATIONS,
-  });
+function requireRoleplayComplianceAllow(result:ComplianceEvaluationResult){
   if(result.gate!=='ALLOW') {
     if(result.reasonCode==='COMPLIANCE_FEATURE_BLOCKED') {
       throw roleplayError('FORBIDDEN','A4003_ADULT_ONLY');
@@ -138,6 +130,15 @@ async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
     throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
   }
   return result;
+}
+async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
+  // Pin mutable person/policy authority for the write-side revalidation.
+  await getComplianceProfileForUpdate(tx,personId);
+  await lockComplianceFeatureEvaluationBasis(tx,ROLEPLAY_FEATURE);
+  const result=await evaluateComplianceAtTransactionTime(drizzle(tx),tx,{
+    descriptor:ROLEPLAY_FEATURE,actorPersonId:personId,targetPersonId:personId,supportedObligations:SUPPORTED_ROLEPLAY_OBLIGATIONS,
+  });
+  return requireRoleplayComplianceAllow(result);
 }
 function requireProfessionalContentAuthority(
   requestedVersion:string,
@@ -275,8 +276,8 @@ export async function createPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   const {scene}=await authorizeRoleplay(tx,input);
-   const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
+   const caseRow=await lockRoleplayAuthority(tx,input);
+   if(isSafetyHoldStatus(caseRow.status)) throw roleplayError('SAFETY_HOLD_BLOCKED');
    const professionalContent=requireProfessionalContentAuthority(
      input.professionalContentVersion,
      professionalContentAuthority
@@ -296,6 +297,8 @@ export async function createPhoneUseRoleplay(
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_CREATE',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
+     const {scene}=await resolveRoleplayExecution(tx,input,caseRow);
      if(professionalContent===null){
        return {
          status:200,
@@ -359,8 +362,8 @@ export async function addPhoneUseRoleplayTurn(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   const {scene}=await authorizeRoleplay(tx,input);
-   await assertRoleplayCompliance(tx,input.actor.personId);
+   const caseRow=await lockRoleplayAuthority(tx,input);
+   if(isSafetyHoldStatus(caseRow.status)) throw roleplayError('SAFETY_HOLD_BLOCKED');
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
    );
@@ -374,6 +377,8 @@ export async function addPhoneUseRoleplayTurn(
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_TURN',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     await assertRoleplayCompliance(tx,input.actor.personId);
+     const {scene}=await resolveRoleplayExecution(tx,input,caseRow);
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      assertRoleplaySessionCurrent(session,professionalContentAuthority);
@@ -458,13 +463,15 @@ export async function ratePhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   await authorizeRoleplay(tx,input);
-   await assertRoleplayCompliance(tx,input.actor.personId);
+   const caseRow=await lockRoleplayAuthority(tx,input);
+   if(isSafetyHoldStatus(caseRow.status)) throw roleplayError('SAFETY_HOLD_BLOCKED');
    const requestHash=hashPayload({sessionId:input.sessionId,turnId:input.turnId,rating:input.rating});
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_RATE',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     await assertRoleplayCompliance(tx,input.actor.personId);
+     await resolveRoleplayExecution(tx,input,caseRow);
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      assertRoleplaySessionCurrent(session,professionalContentAuthority);
@@ -486,7 +493,7 @@ export async function selectPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   // Current identity, tenant, authorization, Safety and compliance remain
+   // Current identity, tenant, authorization and Safety remain
    // mandatory on replay. Mutable execution preconditions belong below the
    // idempotency decision; preserve family/case lock order.
    const caseRow=await lockRoleplayAuthority(tx,input);
@@ -494,7 +501,6 @@ export async function selectPhoneUseRoleplay(
    // Hold blocks a historical replay here. WAITING/CLOSED and other mutable
    // lifecycle eligibility are enforced by resolveRoleplayExecution on EXECUTE.
    if(isSafetyHoldStatus(caseRow.status)) throw roleplayError('SAFETY_HOLD_BLOCKED');
-   await assertRoleplayCompliance(tx,input.actor.personId);
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
    );
@@ -511,6 +517,7 @@ export async function selectPhoneUseRoleplay(
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_SELECT',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     await assertRoleplayCompliance(tx,input.actor.personId);
      const {scene}=await resolveRoleplayExecution(tx,input,caseRow,true);
      if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
      const correction=scene.status==='COMPLETED';

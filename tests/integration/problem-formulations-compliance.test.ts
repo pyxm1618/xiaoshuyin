@@ -284,7 +284,10 @@ describe('problem formulation authoritative evidence closure (S8-PA-001)', () =>
     const person = await admin.query('INSERT INTO persons (account_id, created_by_account_id) VALUES ($1,$1) RETURNING id', [accountB]);
     const personB = person.rows[0].id as string;
     const family = (await admin.query('SELECT uuidv7() AS id')).rows[0].id as string;
-    await admin.query('SELECT app.create_family($1,$2,$3)', [family, personB, 'T8PA1-ORPHAN']);
+    await admin.query(
+      'INSERT INTO families (id,display_name,created_by_person_id) VALUES ($1,$2,$3)',
+      [family, 'T8PA1-ORPHAN', personB]
+    );
     await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2)', [family, personB]);
     return { familyId: family, accountId: accountB, personId: personB };
   }

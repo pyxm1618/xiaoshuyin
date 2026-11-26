@@ -9,7 +9,9 @@ import type pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import {
   createServerFeatureDescriptor,
+  getComplianceProfileForUpdate,
   loadComplianceEvaluationSnapshot,
+  lockComplianceFeatureEvaluationBasis,
   evaluateCompliance,
   assertComplianceObligationsSupported,
   type ComplianceObligation,
@@ -135,6 +137,11 @@ export async function assertAssessmentCompliance(
   actorPersonId: string,
   targetPersonId: string
 ): Promise<void> {
+  // Reused by Assessment, Phone Contract and other Digital Use consumers:
+  // pin the mutable person + feature-policy authority before the multi-read
+  // compliance evaluation instead of widening the whole business transaction.
+  await getComplianceProfileForUpdate(tx, targetPersonId);
+  await lockComplianceFeatureEvaluationBasis(tx, DIGITAL_USE_ASSESSMENT_FEATURE);
   const snapshot = await loadComplianceEvaluationSnapshot(drizzle(tx), tx, {
     descriptor: DIGITAL_USE_ASSESSMENT_FEATURE,
     processingCategory: 'ASSESSMENT',
@@ -193,7 +200,8 @@ export async function materializeRoutedSceneNode(
     readonly caseId: string;
     readonly scenePackageVersion: string;
     readonly nodeCode: string;
-    readonly sourceNodeCode: string;
+    readonly predecessorNodeCode: string;
+    readonly targetSourceNodeCode: string;
     readonly reasonCode: string;
     readonly inputRefs?: readonly StoredSceneRef[];
   }
@@ -203,7 +211,7 @@ export async function materializeRoutedSceneNode(
     caseId: input.caseId,
     scenePackageVersion: input.scenePackageVersion,
     nodeCode: input.nodeCode,
-    sourceNodeCode: input.sourceNodeCode,
+    sourceNodeCode: input.targetSourceNodeCode,
     branchReasonCodes: [input.reasonCode],
     inputRefs: input.inputRefs ?? [],
   });
@@ -211,7 +219,7 @@ export async function materializeRoutedSceneNode(
   if (existing.status !== 'COMPLETED') return existing;
   if (
     !authorizeRoutedReactivation({
-      sourceNodeCode: input.sourceNodeCode,
+      sourceNodeCode: input.predecessorNodeCode,
       targetNodeCode: input.nodeCode,
     })
   ) {
@@ -570,7 +578,8 @@ export async function startOrResumeDigitalUseAssessment(
       purpose: 'FAMILY_MANAGEMENT',
     },
     async (tx) => {
-      await requireFamilyAction(tx, {
+      try {
+        await requireFamilyAction(tx, {
         accountId: input.actor.accountId,
         personId: input.actor.personId,
         familyId: input.familyId,
@@ -578,7 +587,11 @@ export async function startOrResumeDigitalUseAssessment(
         action: 'CASE_START_ASSESSMENT',
         purpose: 'FAMILY_MANAGEMENT',
         resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
-      });
+        });
+      } catch (error) {
+        if (!isKnownAuthorizationDenial(error)) throw error;
+        throw sceneError('CASE_NOT_FOUND', 'Case not found');
+      }
 
       const visibleCase = await getCaseById(tx, input.caseId);
       if (!visibleCase) throw sceneError('CASE_NOT_FOUND', 'Case not found');

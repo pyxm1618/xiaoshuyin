@@ -23066,6 +23066,118 @@
         }
       }
     },
+    "/api/v1/cases/{id}/digital-use/contract/{version}/review": {
+      "post": {
+        "tags": [
+          "digital-use-phone-contract"
+        ],
+        "operationId": "reviewPhoneUseContractVersion",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CaseId"
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPhoneUseContractRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unchanged ACTIVE Contract review completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrency, contract state or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR` / contract payload invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneUseContractRuntimeError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases/{id}/digital-use/contract/faq": {
       "get": {
         "tags": [
@@ -27571,6 +27683,13 @@
               "PAUSED"
             ]
           },
+          "reviewState": {
+            "type": "string",
+            "enum": [
+              "CURRENT",
+              "NEEDS_REVIEW"
+            ]
+          },
           "adultPartyPersonId": {
             "type": "string",
             "format": "uuid",
@@ -28410,6 +28529,7 @@
           "version",
           "draftRevision",
           "status",
+          "reviewState",
           "adultPartyPersonId",
           "childPartyPersonId",
           "childParticipationId",
@@ -29754,6 +29874,37 @@
           "expectedActiveDraftRevision",
           "updateTrigger",
           "updateReason"
+        ],
+        "additionalProperties": false
+      },
+      "ReviewPhoneUseContractRequest": {
+        "type": "object",
+        "properties": {
+          "expectedCaseVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "expectedDraftRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "expectedUpdatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "outcome": {
+            "type": "string",
+            "const": "NO_MATERIAL_CHANGE"
+          }
+        },
+        "required": [
+          "expectedCaseVersion",
+          "expectedDraftRevision",
+          "expectedUpdatedAt",
+          "outcome"
         ],
         "additionalProperties": false
       },

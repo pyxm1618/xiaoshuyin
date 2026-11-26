@@ -89,7 +89,7 @@ export const businessAuditEvents = pgTable('business_audit_events', {
   id: uuid('id')
     .primaryKey()
     .default(sql`uuidv7()`),
-  familyId: uuid('family_id').notNull(),
+  familyId: uuid('family_id'),
   actorAccountId: uuid('actor_account_id').notNull(),
   eventType: text('event_type').notNull(),
   resourceType: text('resource_type').notNull(),
@@ -168,6 +168,9 @@ export const staffAssignments = pgTable('staff_assignments', {
   familyId: uuid('family_id'),
   caseId: uuid('case_id'),
   capabilityGrantId: uuid('capability_grant_id'),
+  capabilityGrantScopeType: text('capability_grant_scope_type').generatedAlwaysAs(
+    sql`CASE WHEN "scope_type" = 'CASE' THEN 'GLOBAL'::text ELSE NULL::text END`
+  ),
   grantedByAccountId: uuid('granted_by_account_id').notNull(),
   grantedAt: timestamp('granted_at', { withTimezone: true })
     .notNull()

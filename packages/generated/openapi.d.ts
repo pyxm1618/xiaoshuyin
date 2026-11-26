@@ -692,6 +692,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/digital-use/contract/{version}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reviewPhoneUseContractVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}/digital-use/contract/faq": {
         parameters: {
             query?: never;
@@ -1558,6 +1574,8 @@ export interface components {
             draftRevision: number;
             /** @enum {string} */
             status: "DRAFT" | "PENDING_CONFIRMATION" | "ACTIVE" | "SUPERSEDED" | "PAUSED";
+            /** @enum {string} */
+            reviewState: "CURRENT" | "NEEDS_REVIEW";
             /** Format: uuid */
             adultPartyPersonId: string;
             /** Format: uuid */
@@ -2043,6 +2061,14 @@ export interface components {
             /** @enum {string} */
             updateTrigger: "PERIOD_COMPLETE" | "NEW_PROBLEM";
             updateReason: string;
+        };
+        ReviewPhoneUseContractRequest: {
+            expectedCaseVersion: number;
+            expectedDraftRevision: number;
+            /** Format: date-time */
+            expectedUpdatedAt: string;
+            /** @constant */
+            outcome: "NO_MATERIAL_CHANGE";
         };
         PhoneUseContractTemplateResponse: {
             meta: {
@@ -8986,6 +9012,90 @@ export interface operations {
         responses: {
             /** @description New superseding A4012 Contract draft */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    reviewPhoneUseContractVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPhoneUseContractRequest"];
+            };
+        };
+        responses: {
+            /** @description Unchanged ACTIVE Contract review completed */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
