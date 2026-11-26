@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 4,
+  "provenanceKind": "POST_MERGE_CLOSEOUT",
+  "featureId": "020-embedding-provider-adapter-foundation",
+  "taskFile": "specs/020-embedding-provider-adapter-foundation/tasks.md",
+  "closeoutBindingId": "s20-post-merge-closeout",
+  "taskIds": [
+    "T001",
+    "T002",
+    "T003",
+    "T004",
+    "T005",
+    "T006",
+    "T007",
+    "T008",
+    "T009",
+    "T010",
+    "T012"
+  ],
+  "taskVerifications": [
+    {
+      "taskId": "T001",
+      "reqContract": "FR-047,FR-051; NS-017,NS-018,NS-027,NS-029,NS-030",
+      "verifyContract": ".specify/scripts/validate-change-governance.mjs scripts/guard-static.mjs",
+      "verificationPaths": [
+        ".specify/scripts/validate-change-governance.mjs",
+        "scripts/guard-static.mjs"
+      ]
+    },
+    {
+      "taskId": "T002",
+      "reqContract": "FR-051; NS-027,NS-029,NS-030,NS-031,NS-032,NS-039,NS-040",
+      "verifyContract": ".specify/implementation-ownership.json .specify/scripts/validate-change-governance.mjs",
+      "verificationPaths": [
+        ".specify/scripts/validate-change-governance.mjs"
+      ]
+    },
+    {
+      "taskId": "T003",
+      "reqContract": "FR-051; NS-027,NS-029,NS-030,NS-039,NS-040",
+      "verifyContract": ".specify/scripts/tests/run-change-governance-tests.mjs scripts/guard-static.mjs",
+      "verificationPaths": [
+        ".specify/scripts/tests/run-change-governance-tests.mjs",
+        "scripts/guard-static.mjs"
+      ]
+    },
+    {
+      "taskId": "T004",
+      "reqContract": "FR-048,FR-051; NS-003,NS-017",
+      "verifyContract": ".specify/scripts/validate-change-governance.mjs",
+      "verificationPaths": [
+        ".specify/scripts/validate-change-governance.mjs"
+      ]
+    },
+    {
+      "taskId": "T005",
+      "reqContract": "FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-052",
+      "verifyContract": "tests/ai/embedding-provider-contract.test.ts",
+      "verificationPaths": [
+        "tests/ai/embedding-provider-contract.test.ts"
+      ]
+    },
+    {
+      "taskId": "T006",
+      "reqContract": "FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045,FR-068,FR-069",
+      "verifyContract": "tests/ai/embedding-dashscope-adapter.test.ts",
+      "verificationPaths": [
+        "tests/ai/embedding-dashscope-adapter.test.ts"
+      ]
+    },
+    {
+      "taskId": "T007",
+      "reqContract": "FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067,FR-068,FR-069",
+      "verifyContract": "tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts",
+      "verificationPaths": [
+        "tests/ai/embedding-dashscope-adapter.test.ts",
+        "tests/ai/embedding-provider-contract.test.ts"
+      ]
+    },
+    {
+      "taskId": "T008",
+      "reqContract": "FR-010,FR-037,FR-038,FR-039,FR-040,FR-041,FR-042,FR-043,FR-053,FR-054,FR-055",
+      "verifyContract": "tests/ai/embedding-provider-contract.test.ts",
+      "verificationPaths": [
+        "tests/ai/embedding-provider-contract.test.ts"
+      ]
+    },
+    {
+      "taskId": "T009",
+      "reqContract": "FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055,FR-068,FR-069",
+      "verifyContract": "tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts",
+      "verificationPaths": [
+        "tests/ai/embedding-provider-contract.test.ts",
+        "tests/ai/embedding-dashscope-adapter.test.ts",
+        "tests/integration/embedding-provider-no-persistence.test.ts"
+      ]
+    },
+    {
+      "taskId": "T010",
+      "reqContract": "FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062;NS-041,NS-042",
+      "verifyContract": "tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs",
+      "verificationPaths": [
+        "tests/architecture/embedding-provider-boundary.test.ts",
+        "scripts/guard-static.mjs"
+      ]
+    },
+    {
+      "taskId": "T012",
+      "reqContract": "FR-051,FR-053,FR-055,FR-059; NS-003,NS-018,NS-039",
+      "verifyContract": "scripts/verify-all.mjs scripts/guard-static.mjs",
+      "verificationPaths": [
+        "scripts/verify-all.mjs",
+        "scripts/guard-static.mjs"
+      ]
+    }
+  ],
+  "ciRuns": [
+    {
+      "sourceId": "governance",
+      "name": "CI",
+      "runId": 45341943810,
+      "headSha": "bc57af6c8960c92799e50a83c743ac82664ce220",
+      "conclusion": "success"
+    },
+    {
+      "sourceId": "governance",
+      "name": "Spec Governance",
+      "runId": 45341943844,
+      "headSha": "bc57af6c8960c92799e50a83c743ac82664ce220",
+      "conclusion": "success"
+    },
+    {
+      "sourceId": "implementation",
+      "name": "CI",
+      "runId": 45367758512,
+      "headSha": "27a0ac5761b16ff7837a28936438f30aca1d68e0",
+      "conclusion": "success"
+    },
+    {
+      "sourceId": "implementation",
+      "name": "Spec Governance",
+      "runId": 45367758372,
+      "headSha": "27a0ac5761b16ff7837a28936438f30aca1d68e0",
+      "conclusion": "success"
+    }
+  ]
+}
