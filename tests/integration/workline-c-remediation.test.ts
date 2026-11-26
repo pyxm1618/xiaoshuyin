@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import crypto from 'node:crypto';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   auth,
@@ -10,8 +11,10 @@ import {
   createFamily,
   createMember,
   loginWithLabel,
+  revokeConsent,
   type LoginResult,
 } from '../setup/api.js';
+import { buildConsentEvidence, getAcceptanceTextHash, getCurrentNoticeHash, runtimeConsentChannel } from '@xiaoshuyin/compliance';
 import { createCase } from '../setup/participation.js';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
@@ -415,7 +418,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(mismatchDraft.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
   });
 
-  it('Finding #10: Roleplay select idempotency exact replay succeeds after completion', async () => {
+  it('B2 Roleplay create exact replay bypasses mutable execution and compliance gates',async()=>{
     const adapter = {
       adapterRef: 'test:deterministic-roleplay-v1',
       async isAvailable() { return true; },
@@ -453,7 +456,74 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     await roleplayApp.ready();
 
     try {
-      const f = await createTestFixture('finding10');
+      const f = await createTestFixture(`b2-create-${crypto.randomUUID()}`);
+
+      // Enable A4003 node state
+      await admin.query(
+        `INSERT INTO scene_node_states
+           (family_id, case_id, scene_package_version, node_code, source_node_code,
+            status, revision, branch_reason_codes, input_refs, output_refs)
+         VALUES ($1, $2, $3, 'A4003', 'A4002', 'AVAILABLE', 1, ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb)`,
+        [f.familyId, f.caseId, DIGITAL_USE_PACKAGE_VERSION]
+      );
+
+      const key=`b2-create-${crypto.randomUUID()}`;
+      const payload={expectedCaseVersion:f.caseVersion,professionalContentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION};
+      const request=(idempotencyKey=key)=>roleplayApp.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/roleplays`,headers:{...auth(f.manager.token),'idempotency-key':idempotencyKey},payload});
+      const first=await request();
+      expect(first.statusCode,first.body).toBe(201);
+      await admin.query(`UPDATE person_compliance_profiles SET age_band='UNKNOWN',minor_mode=false WHERE person_id=$1`,[f.manager.personId]);
+      const replay=await request();
+      expect(replay.statusCode,replay.body).toBe(201);
+      expect(replay.json()).toEqual(first.json());
+      const blocked=await request(`${key}-new`);
+      expect(blocked.statusCode,blocked.body).toBe(403);
+      expect(blocked.json().code).toBe('AGE_BAND_UNKNOWN');
+      expect((await admin.query('SELECT count(*)::int AS n FROM roleplay_sessions WHERE case_id=$1',[f.caseId])).rows[0].n).toBe(1);
+    }finally{await roleplayApp.close();}
+  });
+
+  it.each(['WAITING', 'CLOSED', 'SAFETY_HOLD'] as const)(
+    'Finding #10: Roleplay select exact replay after completion and %s lifecycle drift',
+    async (lifecycleStatus) => {
+    const adapter = {
+      adapterRef: 'test:deterministic-roleplay-v1',
+      async isAvailable() { return true; },
+      async createTurn() {
+        return {
+          simulatedParentOutput: 'simulated parent',
+          adapterRef: 'test:deterministic-roleplay-v1',
+          modelRef: 'test-model',
+          promptVersionRef: 'test-prompt-v1',
+        };
+      },
+    };
+    const roleplayApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: PHONE_USE_CONTRACT_CONTENT_VERSION,
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: 'test-model',
+            authorityRef: 'test-authority:model-v1',
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: 'test-prompt-v1',
+            authorityRef: 'test-authority:prompt-v1',
+          },
+        }),
+      },
+    });
+    await roleplayApp.ready();
+
+    try {
+      const f = await createTestFixture(`finding10-${lifecycleStatus.toLowerCase()}`);
 
       // Enable A4003 node state
       await admin.query(
@@ -503,7 +573,33 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       });
       expect(firstSelect.statusCode, firstSelect.body).toBe(200);
 
-      // 2. Retry exact same select
+      // Advance the Case through the actual Common Core primary-switch command,
+      // then restore the original Case as primary. Do not fake the version.
+      const other = await createCase(roleplayApp, f.manager.token, 'f10-version-advance');
+      expect(other.statusCode, other.body).toBe(201);
+      const switchTo = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${other.json().id}/switch-primary`,
+        headers: commandHeaders(f.manager.token, 'f10-switch-away'),
+        payload: { reason: 'version advance', expectedPrimaryCaseId: f.caseId, expectedPrimaryVersion: f.caseVersion },
+      });
+      expect(switchTo.statusCode, switchTo.body).toBe(200);
+      const switchBack = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/switch-primary`,
+        headers: commandHeaders(f.manager.token, 'f10-switch-back'),
+        payload: { reason: 'restore primary', expectedPrimaryCaseId: other.json().id, expectedPrimaryVersion: switchTo.json().primary.version },
+      });
+      expect(switchBack.statusCode, switchBack.body).toBe(200);
+      const newVersion = switchBack.json().primary.version as number;
+      expect(newVersion).toBeGreaterThan(f.caseVersion);
+      const mutations = async () => (await admin.query(
+        `SELECT (SELECT count(*)::int FROM scene_artifacts WHERE case_id=$1 AND artifact_type='PHONE_USE_ROLEPLAY_SELECTION') AS artifacts,
+                (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS events,
+                (SELECT count(*)::int FROM business_audit_events WHERE family_id=$2) AS audits`,
+        [f.caseId, f.familyId]
+      )).rows[0];
+      const beforeReplay = await mutations();
+
+      // 2. Retry exact same select with its original Case revision
       const retrySelect = await roleplayApp.inject({
         method: 'POST',
         url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
@@ -525,6 +621,97 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       });
       expect(mismatchSelect.statusCode).toBe(409);
       expect(mismatchSelect.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+      const versionMismatch = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+        payload: { ...selectPayload, expectedCaseVersion: newVersion },
+      });
+      expect(versionMismatch.statusCode, versionMismatch.body).toBe(409);
+      expect(versionMismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      const outsider = await loginWithLabel(roleplayApp, 'f10-outsider');
+      const denied = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(outsider.token), 'idempotency-key': selectKey },
+        payload: selectPayload,
+      });
+      expect(denied.statusCode).toBe(404);
+      expect(await mutations()).toEqual(beforeReplay);
+
+      // No public WAITING/CLOSED transition command exists in the current
+      // Case route surface. Seed a valid post-transition state via the same
+      // admin fixture seam as case-primary-switch-waiting.test.ts; exercise
+      // the REAL production Select route with the existing committed key.
+      // Each parameter starts from its own successful OPEN Case.
+      const transitioned = await admin.query<{ version: number }>(
+        `UPDATE cases SET status=$2::case_status,
+                phase=CASE WHEN $2::case_status='CLOSED' THEN 'CLOSED'::case_phase ELSE phase END,
+                is_primary=CASE WHEN $2::case_status='CLOSED' THEN false ELSE is_primary END,
+                version=version+1, updated_at=now()
+          WHERE id=$1 AND status='OPEN' RETURNING version`,
+        [f.caseId, lifecycleStatus]
+      );
+      expect(transitioned.rowCount).toBe(1);
+      const transitionedVersion = transitioned.rows[0]!.version;
+      expect(transitionedVersion).toBe(newVersion + 1);
+      const visible = await roleplayApp.inject({
+        method: 'GET', url: `/api/v1/cases/${f.caseId}`, headers: auth(f.manager.token),
+      });
+      expect(visible.statusCode, visible.body).toBe(200);
+      expect(visible.json()).toMatchObject({ status: lifecycleStatus, version: transitionedVersion });
+
+      const snapshot = async () => ({
+        mutations: await mutations(),
+        caseRow: (await admin.query('SELECT * FROM cases WHERE id=$1', [f.caseId])).rows[0],
+        session: (await admin.query('SELECT * FROM roleplay_sessions WHERE id=$1', [sessionId])).rows[0],
+        node: (await admin.query("SELECT * FROM scene_node_states WHERE case_id=$1 AND node_code='A4003'", [f.caseId])).rows[0],
+        idempotency: (await admin.query(
+          "SELECT count(*)::int AS n FROM idempotency_keys WHERE actor_account_id=$1 AND command_type='PHONE_USE_ROLEPLAY_SELECT'",
+          [f.manager.accountId]
+        )).rows[0],
+      });
+      const beforeLifecycleReplay = await snapshot();
+      const lifecycleReplay = await roleplayApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+        payload: selectPayload,
+      });
+      const lifecycleCode = lifecycleStatus === 'SAFETY_HOLD'
+        ? 'SAFETY_HOLD_BLOCKED'
+        : lifecycleStatus === 'CLOSED' ? 'CASE_CLOSED' : 'CASE_NOT_OPEN';
+      if (lifecycleStatus === 'SAFETY_HOLD') {
+        expect(lifecycleReplay.statusCode, lifecycleReplay.body).toBe(409);
+        expect(lifecycleReplay.json().code).toBe(lifecycleCode);
+      } else {
+        expect(lifecycleReplay.statusCode, lifecycleReplay.body).toBe(200);
+        expect(lifecycleReplay.json()).toEqual(firstSelect.json());
+        const lifecycleMismatch = await roleplayApp.inject({
+          method: 'POST',
+          url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+          headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+          payload: { ...selectPayload, expectedCaseVersion: transitionedVersion },
+        });
+        expect(lifecycleMismatch.statusCode, lifecycleMismatch.body).toBe(409);
+        expect(lifecycleMismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      }
+      // A fresh operation must still fail the ordinary execution gate, even
+      // with the current Case/session/node revisions. No new reservation,
+      // selection, event or audit can survive the rejected transaction.
+      const fresh = await roleplayApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: commandHeaders(f.manager.token, `f10-new-${lifecycleStatus.toLowerCase()}`),
+        payload: {
+          ...selectPayload,
+          expectedCaseVersion: transitionedVersion,
+          expectedSessionRevision: beforeLifecycleReplay.session.revision,
+          expectedNodeRevision: beforeLifecycleReplay.node.revision,
+        },
+      });
+      expect(fresh.statusCode, fresh.body).toBe(409);
+      expect(fresh.json().code).toBe(lifecycleCode);
+      expect(await snapshot()).toEqual(beforeLifecycleReplay);
     } finally {
       await roleplayApp.close();
     }
@@ -571,6 +758,8 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       type: 'EVIDENCE',
       evidence: { type: 'ASSERTION', id: a2Id },
     };
+    const a1ContractDependency = { type: 'ASSERTION', id: a1Id };
+    const a2ContractDependency = { type: 'ASSERTION', id: a2Id };
 
     // 2. Link upstream dependency a1 into the fixture's Problem Formulation
     const pfRes = await admin.query<{ id: string }>(
@@ -662,7 +851,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       [
         f.familyId, f.caseId, f.manager.personId, child.personId, childParticipation.rows[0]!.id,
         JSON.stringify(v('rule')), PHONE_USE_CONTRACT_CONTENT_VERSION,
-        JSON.stringify([a1Dependency]),
+        JSON.stringify([a1ContractDependency]),
         c1ParentConf, c1ChildConf,
       ]
     );
@@ -696,7 +885,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       [
         f2.familyId, f2.caseId, f2.manager.personId, child2.personId, child2Part.rows[0]!.id,
         JSON.stringify(v('rule')), PHONE_USE_CONTRACT_CONTENT_VERSION,
-        JSON.stringify([a2Dependency]),
+        JSON.stringify([a2ContractDependency]),
         c2ParentConf, c2ChildConf,
       ]
     );
@@ -711,6 +900,57 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     await expect(
       admin.query(`UPDATE digital_use_contract_versions SET review_state = 'NEEDS_REVIEW' WHERE id = $1`, [c1Id])
     ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
+
+    // A1: a normal runtime session cannot forge propagation authority by
+    // manually setting the historical custom GUC.
+    const appAttack = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+    await appAttack.connect();
+    try {
+      await appAttack.query('BEGIN');
+      await appAttack.query(
+        `SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`,
+        [f.manager.accountId]
+      );
+      await appAttack.query(
+        `SELECT app.set_family_context($1, $2, 'FAMILY_MANAGEMENT')`,
+        [f.familyId, f.manager.personId]
+      );
+      await appAttack.query(
+        `SELECT set_config('app.dependency_review_propagation', 'on', true)`
+      );
+      const authority = await appAttack.query<{ authorized: boolean }>(
+        `SELECT app.dependency_review_propagation_authorized() AS authorized`
+      );
+      expect(authority.rows[0]?.authorized).toBe(false);
+      await expect(
+        appAttack.query(
+          `UPDATE digital_use_contract_versions
+              SET review_state='NEEDS_REVIEW'
+            WHERE id=$1`,
+          [c1Id]
+        )
+      ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
+      await appAttack.query('ROLLBACK');
+
+      // The formal primitive itself also rejects forged account/person context.
+      await appAttack.query('BEGIN');
+      await appAttack.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, child.personId]
+      );
+      await expect(
+        appAttack.query(
+          `SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,
+          [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
+        )
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_IDENTITY_INVALID');
+      await appAttack.query('ROLLBACK');
+    } finally {
+      await appAttack.end();
+    }
 
     // 6a. Negative tests: BLOCKER C-01 & C-02 privilege boundary and strict dependency validation
     // C-01: Unauthenticated caller fails closed
@@ -854,22 +1094,112 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(audits.rows.map(r => r.event_type)).toContain('GOAL_REVIEW_STATE_CHANGED');
     expect(audits.rows.map(r => r.event_type)).toContain('PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED');
 
-    // 9. Verify Execution Gate:
-    // Future execution (e.g. revise contract c1) MUST be blocked because review_state is NEEDS_REVIEW
-    const reviseBlocked = await app.inject({
+    // 9. A2: ACTIVE + NEEDS_REVIEW must recover through a NEW revision.
+    // The predecessor remains immutable and cannot resume execution directly.
+    const recoveryRevision = await app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,
-      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-blocked-${crypto.randomUUID()}` },
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-recovery-${crypto.randomUUID()}` },
       payload: {
         expectedCaseVersion: f.caseVersion,
         expectedActiveDraftRevision: 1,
-        updateTrigger: 'PERIOD_COMPLETE',
-        updateReason: 'Attempting revision with invalid dependency',
+        updateTrigger: 'NEW_PROBLEM',
+        updateReason: 'Upstream dependency changed; create a reviewed successor',
       },
     });
-    expect(reviseBlocked.statusCode).toBe(409);
-    expect(reviseBlocked.json().code).toBe('PHONE_USE_CONTRACT_STALE_REVISION');
-    expect(reviseBlocked.json().message).toContain('Contract requires review');
+    expect(recoveryRevision.statusCode, recoveryRevision.body).toBe(201);
+    expect(recoveryRevision.json()).toMatchObject({ version: 2, status: 'DRAFT' });
+
+    const beforeCorrection = await admin.query<{
+      version: number;
+      status: string;
+      review_state: string;
+      supersedes_id: string | null;
+    }>(
+      `SELECT version,status,review_state,supersedes_id
+         FROM digital_use_contract_versions
+        WHERE case_id=$1
+        ORDER BY version`,
+      [f.caseId]
+    );
+    expect(beforeCorrection.rows).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'ACTIVE',
+        review_state: 'NEEDS_REVIEW',
+        supersedes_id: null,
+      }),
+      expect.objectContaining({
+        version: 2,
+        status: 'DRAFT',
+        review_state: 'NEEDS_REVIEW',
+        supersedes_id: c1Id,
+      }),
+    ]);
+
+    const corrected = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts/2`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-correct-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 1,
+        dependencyRefs: [a2ContractDependency],
+        terms: defaultTerms,
+      },
+    });
+    expect(corrected.statusCode, corrected.body).toBe(200);
+    expect(corrected.json()).toMatchObject({ version: 2, status: 'DRAFT', draftRevision: 2 });
+
+    const correctedDb = await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE case_id=$1 AND version=2`,
+      [f.caseId]
+    );
+    expect(correctedDb.rows[0]?.review_state).toBe('CURRENT');
+
+    const adultConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-adult-${crypto.randomUUID()}` },
+      payload: { expectedCaseVersion: f.caseVersion, expectedDraftRevision: 2 },
+    });
+    expect(adultConfirm.statusCode, adultConfirm.body).toBe(200);
+
+    const childConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+      headers: { ...auth(child.token), 'idempotency-key': `f24-active-child-${crypto.randomUUID()}` },
+      payload: { expectedCaseVersion: f.caseVersion, expectedDraftRevision: 2 },
+    });
+    expect(childConfirm.statusCode, childConfirm.body).toBe(200);
+
+    const recoveredChain = await admin.query<{
+      id: string;
+      version: number;
+      status: string;
+      review_state: string;
+      supersedes_id: string | null;
+      superseded_at: Date | null;
+    }>(
+      `SELECT id,version,status,review_state,supersedes_id,superseded_at
+         FROM digital_use_contract_versions
+        WHERE case_id=$1
+        ORDER BY version`,
+      [f.caseId]
+    );
+    expect(recoveredChain.rows[0]).toMatchObject({
+      id: c1Id,
+      version: 1,
+      status: 'SUPERSEDED',
+      review_state: 'NEEDS_REVIEW',
+    });
+    expect(recoveredChain.rows[0]?.superseded_at).not.toBeNull();
+    expect(recoveredChain.rows[1]).toMatchObject({
+      version: 2,
+      status: 'ACTIVE',
+      review_state: 'CURRENT',
+      supersedes_id: c1Id,
+    });
 
     // 10. Verify idempotency of propagation:
     // Repeating propagation when already in NEEDS_REVIEW affects 0 rows and does not fail
@@ -892,6 +1222,203 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       expect(repeatResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(0);
     } finally {
       repeatClient.release();
+    }
+  });
+
+  it('A3: Consent propagation supports identity-only and exact-version Goal/Contract dependencies', async () => {
+    async function seedGoal(
+      fixture: Fixture,
+      dependency: Record<string, unknown>,
+      suffix: string
+    ): Promise<string> {
+      const formulation = await admin.query<{ id: string }>(
+        `SELECT id FROM problem_formulations WHERE case_id=$1 AND version=1`,
+        [fixture.caseId]
+      );
+      const evidence = await admin.query<{ id: string }>(
+        `SELECT id FROM dialogue_messages WHERE case_id=$1 ORDER BY id LIMIT 1`,
+        [fixture.caseId]
+      );
+      const row = await admin.query<{ id: string }>(
+        `INSERT INTO goals
+           (family_id,case_id,version,lifecycle_status,confirmation_state,review_state,
+            problem_formulation_id,problem_formulation_version,baseline_refs,target_description,
+            observation_method,observation_window,protective_conditions,parent_actions,
+            review_point,dependency_refs,participant_responsibilities,saved_by_person_id)
+         VALUES
+           ($1,$2,1,'ACTIVE','UNCONFIRMED','CURRENT',$3,1,$4::jsonb,$5,
+            'Direct check','7 days','["No harm"]'::jsonb,'["Support"]'::jsonb,
+            'Weekly review',$6::jsonb,'[]'::jsonb,$7)
+         RETURNING id`,
+        [
+          fixture.familyId,
+          fixture.caseId,
+          formulation.rows[0]!.id,
+          JSON.stringify([{ type: 'DIALOGUE_MESSAGE', id: evidence.rows[0]!.id }]),
+          `Consent propagation ${suffix}`,
+          JSON.stringify([dependency]),
+          fixture.manager.personId,
+        ]
+      );
+      return row.rows[0]!.id;
+    }
+
+    async function seedDraftContract(
+      fixture: Fixture,
+      child: LoginResult,
+      dependency: Record<string, unknown>
+    ): Promise<string> {
+      const row = await admin.query<{ id: string }>(
+        `INSERT INTO digital_use_contract_versions
+           (family_id,case_id,version,draft_revision,status,review_state,
+            adult_party_person_id,child_party_person_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,source_template_version,
+            dependency_refs,created_by_person_id)
+         VALUES
+           ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,
+            $5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$6,$7::jsonb,$3)
+         RETURNING id`,
+        [
+          fixture.familyId,
+          fixture.caseId,
+          fixture.manager.personId,
+          child.personId,
+          JSON.stringify(v('rule')),
+          PHONE_USE_CONTRACT_CONTENT_VERSION,
+          JSON.stringify([dependency]),
+        ]
+      );
+      return row.rows[0]!.id;
+    }
+
+    async function propagate(
+      fixture: Fixture,
+      dependency: Record<string, unknown>
+    ): Promise<{ goalsAffected: number; contractsAffected: number }> {
+      const client = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+      await client.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`,
+          [fixture.manager.accountId]
+        );
+        await client.query(
+          `SELECT app.set_family_context($1, $2, 'FAMILY_MANAGEMENT')`,
+          [fixture.familyId, fixture.manager.personId]
+        );
+        const result = await client.query<{
+          propagate_downstream_dependency_review: {
+            goalsAffected: number;
+            contractsAffected: number;
+          };
+        }>(
+          `SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,
+          [fixture.familyId, fixture.caseId, JSON.stringify(dependency)]
+        );
+        await client.query('COMMIT');
+        return result.rows[0]!.propagate_downstream_dependency_review;
+      } finally {
+        await client.end();
+      }
+    }
+
+    const revokeChild = await loginWithLabel(app, `a3-revoke-${crypto.randomUUID()}`);
+    const revokeFixture = await createTestFixture(`a3-revoke-${crypto.randomUUID()}`, revokeChild);
+    const noticeHash = getCurrentNoticeHash();
+    const request = await admin.query<{id:string}>(
+      `INSERT INTO guardian_consent_requests
+       (family_id,guardian_person_id,subject_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',now()+interval '24 hours',now()) RETURNING id`,
+      [revokeFixture.familyId,revokeFixture.manager.personId,revokeChild.personId,noticeHash]);
+    const evidence = buildConsentEvidence({channel:runtimeConsentChannel(process.env),acceptedTextHash:getAcceptanceTextHash('v1')!,clientIp:null,userAgent:null,pepper:'a3-real-revoke'});
+    const consent = await admin.query<{id:string}>(
+      `INSERT INTO consent_records
+       (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),'v1',$6,'v1',$7::jsonb) RETURNING id`,
+      [revokeFixture.familyId,revokeFixture.manager.personId,revokeFixture.manager.accountId,request.rows[0]!.id,revokeChild.personId,noticeHash,JSON.stringify(evidence)]);
+    await admin.query(`UPDATE person_compliance_profiles SET age_band='UNDER_14',minor_mode=true,verified_source='GUARDIAN_RELAY',guardian_person_id=$2,guardian_consent_record_id=$3,guardian_consent_version=1 WHERE person_id=$1`,[revokeChild.personId,revokeFixture.manager.personId,consent.rows[0]!.id]);
+    const reference = {type:'CONSENT',id:consent.rows[0]!.id.toUpperCase(),version:1};
+    const revokeGoal = await seedGoal(revokeFixture,reference,'real-revoke');
+    const revokeContract = await seedDraftContract(revokeFixture,revokeChild,reference);
+    const revoked = await revokeConsent(app,revokeFixture.manager.token,`a3-${crypto.randomUUID()}`,consent.rows[0]!.id,{reason:'A3 regression'});
+    expect(revoked.statusCode,revoked.body).toBe(200);
+    expect((await admin.query('SELECT review_state FROM goals WHERE id=$1',[revokeGoal])).rows[0].review_state).toBe('NEEDS_REVIEW');
+    expect((await admin.query('SELECT review_state FROM digital_use_contract_versions WHERE id=$1',[revokeContract])).rows[0].review_state).toBe('NEEDS_REVIEW');
+
+    const targetConsentId = crypto.randomUUID();
+    const otherConsentId = crypto.randomUUID();
+    const scenarios: Array<{
+      label: string;
+      stored: Record<string, unknown>;
+      invalidated: Record<string, unknown>;
+      affected: boolean;
+    }> = [
+      {
+        label: 'identity-to-identity',
+        stored: { type: 'CONSENT', id: targetConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: true,
+      },
+      {
+        label: 'identity-invalidation-to-versioned-storage',
+        stored: { type: 'CONSENT', id: targetConsentId, version: 3 },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: false,
+      },
+      {
+        label: 'versioned-invalidation-to-identity-storage',
+        stored: { type: 'CONSENT', id: targetConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: false,
+      },
+      {
+        label: 'mixed-case-exact-version',
+        stored: { type: 'CONSENT', id: targetConsentId.toUpperCase(), version: 2 },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: true,
+      },
+      {
+        label: 'different-version',
+        stored: { type: 'CONSENT', id: targetConsentId, version: 1 },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: false,
+      },
+      {
+        label: 'different-consent',
+        stored: { type: 'CONSENT', id: otherConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: false,
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const child = await loginWithLabel(
+        app,
+        `a3-child-${scenario.label}-${crypto.randomUUID()}`
+      );
+      const fixture = await createTestFixture(`a3-${scenario.label}`, child);
+      const goalId = await seedGoal(fixture, scenario.stored, scenario.label);
+      const contractId = await seedDraftContract(fixture, child, scenario.stored);
+
+      const result = await propagate(fixture, scenario.invalidated);
+      expect(result, scenario.label).toEqual({
+        goalsAffected: scenario.affected ? 1 : 0,
+        contractsAffected: scenario.affected ? 1 : 0,
+      });
+
+      const goal = await admin.query<{ review_state: string }>(
+        `SELECT review_state FROM goals WHERE id=$1`,
+        [goalId]
+      );
+      const contract = await admin.query<{ review_state: string }>(
+        `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
+        [contractId]
+      );
+      const expectedState = scenario.affected ? 'NEEDS_REVIEW' : 'CURRENT';
+      expect(goal.rows[0]?.review_state, scenario.label).toBe(expectedState);
+      expect(contract.rows[0]?.review_state, scenario.label).toBe(expectedState);
     }
   });
 
@@ -1104,4 +1631,84 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(finalContractDb.rows[0]!.status).toBe('ACTIVE');
     expect(finalContractDb.rows[0]!.review_state).toBe('CURRENT');
   });
+
+  it('C-A2-02: exact nested RECORD_MARKER evidence invalidates once through runtime-role RLS', async () => {
+    const appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']! });
+    try {
+      for (const variant of ['ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE', 'unrelated', 'wrong-marker', 'empty', 'malformed'] as const) {
+        const child = await loginWithLabel(app, `f24-nested-${variant}`);
+        const f = await createTestFixture(`f24-nested-${variant}`, child);
+        const part = await admin.query<{ id: string }>(
+          `INSERT INTO case_participants
+             (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+           VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+          [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+        );
+        // Stored reference fixtures exercise the actual propagation matcher,
+        // including malformed legacy JSON that public commands must reject.
+        const positive = variant === 'ASSERTION' || variant === 'OBSERVATION' || variant === 'DIALOGUE_MESSAGE';
+        const type = positive ? variant : 'ASSERTION';
+        // The invalidated reference is a real carrier in this Case.
+        const evidence = type === 'DIALOGUE_MESSAGE'
+          ? await admin.query<{id:string}>(
+              "INSERT INTO dialogue_messages (family_id,case_id,actor_account_id,source_person_id,content) VALUES ($1,$2,$3,$4,'nested evidence') RETURNING id",
+              [f.familyId,f.caseId,f.manager.accountId,f.manager.personId])
+          : type === 'OBSERVATION'
+          ? await admin.query<{id:string}>(
+              `INSERT INTO observations (family_id,case_id,subject_person_id,source_kind,source_person_id,occurred_time_state,confirmation_status,observation_code,value_state,value_type,value_text)
+               VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN','UNCONFIRMED','test.nested','KNOWN','TEXT','nested evidence') RETURNING id`,
+              [f.familyId,f.caseId,child.personId,f.manager.personId])
+          : await admin.query<{id:string}>(
+              `INSERT INTO assertions (family_id,case_id,subject_person_id,source_kind,source_person_id,occurred_time_state,confirmation_status,kind,content)
+               VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN','UNCONFIRMED','STATEMENT','nested evidence') RETURNING id`,
+              [f.familyId,f.caseId,child.personId,f.manager.personId]);
+        const id = evidence.rows[0]!.id;
+        const reference = { type, id };
+        const nested = variant === 'unrelated' ? { type, id: crypto.randomUUID() } : reference;
+        const marker = {
+          type: 'RECORD_MARKER',
+          markerCode: variant === 'wrong-marker' ? 'A200499' : 'A200401',
+          evidenceRefs: variant === 'empty' ? [] : variant === 'malformed' ? [nested, {}] : [nested],
+        };
+        const c = await admin.query<{ id: string }>(
+          `INSERT INTO digital_use_contract_versions
+             (family_id,case_id,version,draft_revision,status,review_state,
+              adult_party_person_id,child_party_person_id,child_participation_id,
+              contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+              supervision_measures,incentives,breach_responsibilities,source_template_version,
+              dependency_refs,created_by_person_id)
+           VALUES ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,$5,
+              $6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$7,$8::jsonb,$3)
+           RETURNING id`,
+          [f.familyId,f.caseId,f.manager.personId,child.personId,part.rows[0]!.id,
+           JSON.stringify(v('rule')),PHONE_USE_CONTRACT_CONTENT_VERSION,JSON.stringify([marker])]
+        );
+        const ctx = { familyId:f.familyId, accountId:f.manager.accountId, personId:f.manager.personId, purpose:'FAMILY_MANAGEMENT' };
+        const propagate = (familyId:string,caseId:string,dependency:unknown) => withRlsTransaction(appPool,ctx,async tx=>{
+          const role = await tx.query("SELECT current_user AS role, rolbypassrls, rolsuper FROM pg_roles WHERE rolname=current_user");
+          expect(role.rows[0]).toMatchObject({role:'xiaoshuyin_app',rolbypassrls:false,rolsuper:false});
+          return (await tx.query(
+            'SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb) AS result',
+            [familyId,caseId,JSON.stringify(dependency)]
+          )).rows[0].result;
+        });
+        await expect(propagate(crypto.randomUUID(),f.caseId,reference)).rejects.toMatchObject({code:'42501'});
+        await expect(propagate(f.familyId,crypto.randomUUID(),reference)).rejects.toMatchObject({code:'42501'});
+        // Exercise both direct and typed EVIDENCE input forms.
+        const dep = variant === 'OBSERVATION' ? {type:'EVIDENCE',evidence:reference} : reference;
+        expect(await propagate(f.familyId,f.caseId,dep)).toEqual({goalsAffected:0,contractsAffected:positive?1:0});
+        expect(await propagate(f.familyId,f.caseId,dep)).toEqual({goalsAffected:0,contractsAffected:0});
+        const row = await admin.query('SELECT review_state,status,draft_revision,dependency_refs FROM digital_use_contract_versions WHERE id=$1',[c.rows[0]!.id]);
+        expect(row.rows[0]).toMatchObject({review_state:positive?'NEEDS_REVIEW':'CURRENT',status:'DRAFT',draft_revision:1,dependency_refs:[marker]});
+        const audit = await admin.query(
+          "SELECT count(*)::int AS n FROM business_audit_events WHERE resource_id=$1 AND event_type='PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED'",
+          [c.rows[0]!.id]
+        );
+        expect(audit.rows[0].n).toBe(positive?1:0);
+      }
+    } finally {
+      await appPool.end();
+    }
+  }, 30000);
+
 });

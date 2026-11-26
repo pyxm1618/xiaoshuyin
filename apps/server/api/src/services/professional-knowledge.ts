@@ -656,10 +656,20 @@ export const resolveCurrentInterventionDefinition:
       if (definition === null) {
         return { status: 'INVALID', reason: 'INTERVENTION_DEFINITION_NOT_EXACT' };
       }
-      if (definition.state === 'SUPERSEDED' || definition.state === 'RETIRED') {
+      if (definition.state !== 'CURRENT') {
+        if (
+          definition.state === 'CANDIDATE' ||
+          definition.state === 'SUPERSEDED' ||
+          definition.state === 'RETIRED'
+        ) {
+          return {
+            status: 'INVALID',
+            reason: `INTERVENTION_DEFINITION_${definition.state}`,
+          };
+        }
         return {
           status: 'INVALID',
-          reason: `INTERVENTION_DEFINITION_${definition.state}`,
+          reason: 'INTERVENTION_DEFINITION_INVALID',
         };
       }
       return {

@@ -28,7 +28,7 @@ import {
   deriveParticipationInviteToken,
 } from '@xiaoshuyin/domain';
 import { CreateParticipationInviteResponse } from '@xiaoshuyin/contracts';
-import { withTransactionClient } from './db/tx.js';
+import { withTransactionClient, assertIdentityContextMatches } from './db/tx.js';
 import { toHttpError } from './plugins/error-handler.js';
 
 export interface CommandResponse {
@@ -318,11 +318,23 @@ export async function runIdempotentCommand(
   cfg: IdempotentCommandConfig,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
-  const early = await peekIdempotency(pool, cfg);
-  if (early) return early;
+  // FAMILY_CREATE must establish authoritative Account/Person identity
+  // before even a historical replay or mismatch decision. Keep the other
+  // commands' existing fast path and business-state replay semantics.
+  if (cfg.commandType !== 'FAMILY_CREATE') {
+    const early = await peekIdempotency(pool, cfg);
+    if (early) return early;
+  }
 
   return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [cfg.accountId, cfg.purpose]);
+    if (cfg.personId || cfg.commandType === 'FAMILY_CREATE') {
+      await assertIdentityContextMatches(client, {
+        accountId: cfg.accountId,
+        personId: cfg.personId,
+        purpose: cfg.purpose,
+      });
+    }
     return runIdempotentCommandInTransaction(client, cfg, fn);
   });
 }
@@ -378,7 +390,10 @@ export function rehydrateParticipationInviteReplay(
 export function sendCommandOutcome(reply: FastifyReply, outcome: CommandOutcome) {
   if (outcome.action === 'MISMATCH') {
     const err = toHttpError('IDEMPOTENCY_PAYLOAD_MISMATCH');
-    return reply.status(err.statusCode).send(err);
+    return reply.status(err.statusCode).send({
+      code: err.code,
+      message: err.message,
+    });
   }
   return reply.status(outcome.status).send(outcome.body);
 }

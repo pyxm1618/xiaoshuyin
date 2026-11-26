@@ -69,7 +69,8 @@ describe('Slice 4 participation authorization matrix', () => {
   it('manager read is manager authority, not ordinary membership or guardian relationship', () => {
     const input=base({
       family:{familyId:FAMILY},
-      participation:{personId:OTHER,state:'ACTIVE'},
+      participation:{participationId:'part-123',familyId:FAMILY,personId:OTHER,state:'ACTIVE'},
+      resource:{type:'PARTICIPATION',participationId:'part-123'},
       action:'PARTICIPATION_READ_MANAGER',
       purpose:'FAMILY_MANAGEMENT',
       facts:{...facts,guardianPersonId:OTHER},
@@ -77,6 +78,68 @@ describe('Slice 4 participation authorization matrix', () => {
     expect(authorize(input).decision).toBe('ALLOW');
     expect(authorize({...input,facts:{...facts,familyCreatedByPersonId:OTHER,guardianPersonId:ACTOR}}))
       .toEqual({decision:'DENY',reason:'NOT_FAMILY_MANAGER'});
+  });
+
+  it('Finding #26: manager read enforces resource and family binding', () => {
+    const input = base({
+      family: { familyId: FAMILY },
+      participation: {
+        participationId: 'part-123',
+        familyId: FAMILY,
+        personId: OTHER,
+        state: 'ACTIVE',
+      },
+      resource: { type: 'PARTICIPATION', participationId: 'part-123' },
+      action: 'PARTICIPATION_READ_MANAGER',
+      purpose: 'FAMILY_MANAGEMENT',
+      facts: { ...facts, familyCreatedByPersonId: ACTOR },
+    });
+    expect(authorize(input).decision).toBe('ALLOW');
+
+    // 1. Resource id mismatch -> PARTICIPATION_CONTEXT_REQUIRED
+    expect(
+      authorize({
+        ...input,
+        resource: { type: 'PARTICIPATION', participationId: 'different-part' },
+      })
+    ).toEqual({ decision: 'DENY', reason: 'PARTICIPATION_CONTEXT_REQUIRED' });
+
+    // 2. Missing participationId fact -> PARTICIPATION_CONTEXT_REQUIRED
+    expect(
+      authorize({
+        ...input,
+        participation: {
+          familyId: FAMILY,
+          personId: OTHER,
+          state: 'ACTIVE',
+        },
+      })
+    ).toEqual({ decision: 'DENY', reason: 'PARTICIPATION_CONTEXT_REQUIRED' });
+
+    // 3. Cross-family participation -> NOT_FAMILY_MEMBER
+    expect(
+      authorize({
+        ...input,
+        participation: {
+          participationId: 'part-123',
+          familyId: 'other-family-id',
+          personId: OTHER,
+          state: 'ACTIVE',
+        },
+      })
+    ).toEqual({ decision: 'DENY', reason: 'NOT_FAMILY_MEMBER' });
+
+    // 4. Missing familyId fact -> NOT_FAMILY_MEMBER
+    expect(
+      authorize({
+        ...input,
+        participation: {
+          participationId: 'part-123',
+          personId: OTHER,
+          state: 'ACTIVE',
+        },
+      })
+    ).toEqual({ decision: 'DENY', reason: 'NOT_FAMILY_MEMBER' });
   });
 
   it('self RLS visibility is not a substitute for authorization context', () => {

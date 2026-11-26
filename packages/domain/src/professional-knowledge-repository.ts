@@ -554,6 +554,7 @@ export async function releaseProfessionalKnowledgeVersion(
     versionId: string;
     expectedRevision: number;
     effectiveFrom: Date;
+    effectiveTo?: Date | null;
   }
 ): Promise<number> {
   const updated = await tx.query<{ revision: number }>(
@@ -561,6 +562,7 @@ export async function releaseProfessionalKnowledgeVersion(
         SET lifecycle_status = 'PUBLISHED',
             released_at = clock_timestamp(),
             effective_from = $3,
+            effective_to = $4,
             revision = revision + 1
       WHERE id = $1
         AND revision = $2
@@ -568,7 +570,7 @@ export async function releaseProfessionalKnowledgeVersion(
         AND review_state = 'CURRENT'
         AND validity_state = 'VALID'
       RETURNING revision`,
-    [input.versionId, input.expectedRevision, input.effectiveFrom]
+    [input.versionId, input.expectedRevision, input.effectiveFrom, input.effectiveTo ?? null]
   );
   if (updated.rowCount !== 1) {
     throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_RELEASE_CONFLICT'), {

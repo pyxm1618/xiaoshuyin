@@ -19,7 +19,11 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { eq, sql } from 'drizzle-orm';
 import { buildApp } from '../../apps/server/api/src/app.js';
-import { withDrizzleRlsTransaction } from '../../apps/server/api/src/db/drizzle-tx.js';
+import {
+  withDrizzleIdentityTransaction,
+  withDrizzleRlsTransaction,
+} from '../../apps/server/api/src/db/drizzle-tx.js';
+import { withTransactionClient } from '../../apps/server/api/src/db/tx.js';
 import { safetySchema } from '@xiaoshuyin/domain';
 import { createAdminPool } from '../setup/db.js';
 
@@ -221,4 +225,54 @@ describe('T902 Drizzle RLS transaction seam', () => {
     });
     expect(recovered).toBe(1);
   });
+
+
+  it.each(['ECONNRESET', 'ETIMEDOUT', 'EPIPE'] as const)(
+    'B1 evicts broken raw, Drizzle identity and Drizzle RLS clients for %s',
+    async (code) => {
+      const transportPool = new pg.Pool({
+        connectionString: process.env['DATABASE_URL'],
+        max: 1,
+      });
+      const injected = () => Object.assign(new Error(`injected ${code}`), { code });
+      try {
+        await expect(
+          withTransactionClient(transportPool, async () => {
+            throw injected();
+          })
+        ).rejects.toMatchObject({ code });
+        expect(transportPool.totalCount).toBe(0);
+        expect(transportPool.idleCount).toBe(0);
+
+        await expect(
+          withDrizzleIdentityTransaction(
+            transportPool,
+            { accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
+            async () => {
+              throw injected();
+            }
+          )
+        ).rejects.toMatchObject({ code });
+        expect(transportPool.totalCount).toBe(0);
+        expect(transportPool.idleCount).toBe(0);
+
+        await expect(
+          withDrizzleRlsTransaction(transportPool, rlsOpts(), async () => {
+            throw injected();
+          })
+        ).rejects.toMatchObject({ code });
+        expect(transportPool.totalCount).toBe(0);
+        expect(transportPool.idleCount).toBe(0);
+
+        const recovered = await withDrizzleRlsTransaction(
+          transportPool,
+          rlsOpts(),
+          async (tx) => (await tx.select({ id: cases.id }).from(cases).limit(1)).length
+        );
+        expect(recovered).toBe(1);
+      } finally {
+        await transportPool.end();
+      }
+    }
+  );
 });

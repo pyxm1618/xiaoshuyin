@@ -49,7 +49,7 @@ export type Action =
   | 'PARTICIPATION_INVITE_CREATE'
   | 'PARTICIPATION_READ_SELF' | 'PARTICIPATION_ACCEPT_SELF'
   | 'PARTICIPATION_DECLINE_SELF' | 'PARTICIPATION_WITHDRAW_SELF'
-  | 'PARTICIPATION_READ_MANAGER'
+  | 'PARTICIPATION_READ_MANAGER' | 'PARTICIPATION_RESPOND_SELF'
   // Slice 006 identity binding (plan D-12). Registered closed set; every entry
   // is fail-closed when its actor / facts / resource do not match.
   | 'IDENTITY_BINDING_BOOTSTRAP'
@@ -245,6 +245,7 @@ const REGISTERED_ACTIONS: Action[] = [
   'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
   'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF', 'PARTICIPATION_READ_MANAGER',
+  'PARTICIPATION_RESPOND_SELF',
   'IDENTITY_BINDING_BOOTSTRAP', 'IDENTITY_BINDING_CANDIDATE_DECIDE',
   'IDENTITY_BINDING_STATUS_SELF', 'IDENTITY_BINDING_SESSION_EXCHANGE',
   'IDENTITY_BINDING_CONFIRMER_LIST', 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
@@ -296,6 +297,7 @@ const PARTICIPATION_ACTIONS: Action[] = [
   'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF',
   'PARTICIPATION_READ_MANAGER',
+  'PARTICIPATION_RESPOND_SELF',
 ];
 
 const EMPTY_FACTS: AuthorizeFacts = {
@@ -445,6 +447,12 @@ function decideCaseAction(
 ): Decision {
   // a. Family context is mandatory for every Case action.
   if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
+
+  // Finding #14: CASE_ENTER_SAFETY_HOLD is a deterministic system transition authority,
+  // NOT a user-initiated household business action. Direct business authorization is denied.
+  if (input.action === 'CASE_ENTER_SAFETY_HOLD') {
+    return deny('UNSUPPORTED_ACTION');
+  }
 
   // AUTH-007: ResolveRisk is a Staff authority decision, not a household
   // management decision. It stays inside the one authorize() seam but never
@@ -644,12 +652,50 @@ function decideParticipationAction(
   }
   if (participation === null) return deny('PARTICIPATION_CONTEXT_REQUIRED');
 
+  // Finding #26: Resource fact binding: resource.participationId must match verified participation fact
+  if (
+    participation.participationId !== undefined &&
+    input.resource.participationId !== participation.participationId
+  ) {
+    return deny('PARTICIPATION_CONTEXT_REQUIRED');
+  }
+
   if (input.action === 'PARTICIPATION_READ_MANAGER') {
     if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
     if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
     if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
     if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
+    // Finding #26: PARTICIPATION_READ_MANAGER requires authoritative participationId and familyId facts (fail-closed)
+    if (
+      !participation.participationId ||
+      input.resource.participationId !== participation.participationId
+    ) {
+      return deny('PARTICIPATION_CONTEXT_REQUIRED');
+    }
+    if (
+      !participation.familyId ||
+      participation.familyId !== input.family.familyId
+    ) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
+    // Runtime facts must be complete; a TS interface alone does not validate
+    // a caller's authoritative snapshot. All existing lifecycle states remain readable.
+    if (
+      typeof participation.personId !== 'string' ||
+      participation.personId.trim().length === 0 ||
+      !['PENDING', 'ACTIVE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'].includes(participation.state)
+    ) {
+      return deny('PARTICIPATION_CONTEXT_REQUIRED');
+    }
     return allow(true, input.purpose);
+  }
+
+  if (input.action === 'PARTICIPATION_RESPOND_SELF') {
+    if (input.purpose !== 'PARTICIPATION') return deny('UNSUPPORTED_PURPOSE');
+    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+    if (participation.personId !== actorPersonId) return deny('NOT_PARTICIPANT');
+    if (participation.state !== 'ACTIVE') return deny('PARTICIPATION_NOT_ACTIVE');
+    return allow(false, input.purpose, false);
   }
 
   if (input.purpose !== 'PARTICIPATION') return deny('UNSUPPORTED_PURPOSE');

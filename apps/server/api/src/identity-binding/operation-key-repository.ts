@@ -19,11 +19,13 @@ export interface BindingOperationKeyRow {
   idempotencyKey: string;
   requestHash: string;
   attemptId: string | null;
+  reusedAccountId: string | null;
+  reusedPersonId: string | null;
   createdAt: Date;
 }
 
 const COLUMNS = `id, scope_kind, scope_key, command_type, idempotency_key,
-  request_hash, attempt_id, created_at`;
+  request_hash, attempt_id, reused_account_id, reused_person_id, created_at`;
 
 function mapRow(row: any): BindingOperationKeyRow {
   return {
@@ -34,6 +36,8 @@ function mapRow(row: any): BindingOperationKeyRow {
     idempotencyKey: row.idempotency_key,
     requestHash: row.request_hash,
     attemptId: row.attempt_id ?? null,
+    reusedAccountId: row.reused_account_id ?? null,
+    reusedPersonId: row.reused_person_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -176,4 +180,23 @@ export async function mapAttempt(
   const settled = mapRow(reread.rows[0]);
   if (settled.attemptId === input.attemptId) return settled;
   throw new Error('BINDING_OPERATION_ATTEMPT_CONFLICT');
+}
+
+export async function recordReused(
+  tx: pg.PoolClient,
+  input: {
+    operationKeyId: string;
+    accountId: string;
+    personId: string;
+  }
+): Promise<void> {
+  const result = await tx.query(
+    `UPDATE binding_operation_keys
+     SET reused_account_id = $2, reused_person_id = $3
+     WHERE id = $1`,
+    [input.operationKeyId, input.accountId, input.personId]
+  );
+  if (result.rowCount === 0) {
+    throw new Error('FAILED_TO_RECORD_REUSED_OPERATION');
+  }
 }
