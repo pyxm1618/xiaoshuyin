@@ -476,4 +476,51 @@ describe('Consent Revoke Integration (T058)', () => {
 
     expect(await countFamilyMembers(actor.familyId)).toBe(peopleBefore);
   });
+
+
+  it('C3 same-family non-guardian cannot distinguish current from stale Consent chain state', async () => {
+    const guardian = await setupManagerAndFamily('c3-ordering');
+    const v1 = await createAndGrantConsent(guardian, 'c3-ordering');
+    const member = await createMember(app, guardian.token, guardian.familyId, 'c3-ordering', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: v1.id,
+    });
+    expect(member.statusCode).toBe(201);
+    const subjectId = member.json().personId as string;
+
+    const v2Res = await revokeConsent(app, guardian.token, 'c3-ordering-v2', v1.id);
+    expect(v2Res.statusCode).toBe(200);
+    const v3 = await createAndGrantConsent(
+      guardian,
+      'c3-ordering-v3',
+      subjectId
+    );
+    expect(v3.version).toBe(3);
+
+    const nonGuardian = await loginWithLabel(app, 'crv_c3_non_guardian');
+    await queryDb(
+      `INSERT INTO family_members(family_id,person_id) VALUES($1,$2)
+       ON CONFLICT DO NOTHING`,
+      [guardian.familyId, nonGuardian.personId]
+    );
+
+    const currentAttempt = await revokeConsent(
+      app,
+      nonGuardian.token,
+      'c3-current-non-guardian',
+      v3.id
+    );
+    const staleAttempt = await revokeConsent(
+      app,
+      nonGuardian.token,
+      'c3-stale-non-guardian',
+      v1.id
+    );
+
+    expect(currentAttempt.statusCode).toBe(403);
+    expect(staleAttempt.statusCode).toBe(403);
+    expect(staleAttempt.json()).toEqual(currentAttempt.json());
+    expect(currentAttempt.json().code).toBe('NOT_GUARDIAN');
+  });
 });

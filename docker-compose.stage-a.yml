@@ -3,12 +3,12 @@ services:
     image: pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
       POSTGRES_DB: xiaoshuyin
       POSTGRES_MIGRATOR_PASSWORD: ${POSTGRES_MIGRATOR_PASSWORD}
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d:ro
@@ -32,6 +32,15 @@ services:
       EVIDENCE_HASH_PEPPER: ${EVIDENCE_HASH_PEPPER}
       WECHAT_APP_ID: ${WECHAT_APP_ID}
       WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
+      # Required by apps/server/api/src/runtime-env.ts in every mode.
+      # Deliberately no defaults: an unset value must fail the container at
+      # startup instead of silently selecting a fallback secret or TTL.
+      IDENTITY_BINDING_SECRET: ${IDENTITY_BINDING_SECRET}
+      IDENTITY_BINDING_CONTEXT_TTL_SECONDS: ${IDENTITY_BINDING_CONTEXT_TTL_SECONDS}
+      IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: ${IDENTITY_BINDING_ATTEMPT_TTL_SECONDS}
+      IDENTITY_BINDING_PAIRING_TTL_SECONDS: ${IDENTITY_BINDING_PAIRING_TTL_SECONDS}
+      PARTICIPATION_INVITE_TTL_SECONDS: ${PARTICIPATION_INVITE_TTL_SECONDS}
+      PARTICIPATION_INVITE_TOKEN_SECRET: ${PARTICIPATION_INVITE_TOKEN_SECRET}
     ports:
       - "8787:8787"
 

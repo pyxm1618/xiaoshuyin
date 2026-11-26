@@ -401,6 +401,11 @@ function parseAuthorityTime(value: unknown): number | null {
   ) {
     return null;
   }
+  const calendarDate = value.slice(0, 10);
+  const midnight = new Date(`${calendarDate}T00:00:00Z`);
+  if (!Number.isFinite(midnight.getTime()) || midnight.toISOString().slice(0, 10) !== calendarDate) {
+    return null;
+  }
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -629,6 +634,7 @@ export function evaluateProfessionalKnowledgeEligibility(input: {
   readonly exclusionFacts: readonly string[] | null;
   readonly riskLevel: ProfessionalKnowledgeRiskLevel | 'UNKNOWN' | null;
   readonly intervention: OptionalInterventionResolution;
+  readonly now?: Date;
 }): ProfessionalKnowledgeEligibility {
   const v = input.version;
   if (v.lifecycleStatus !== 'PUBLISHED') {
@@ -639,6 +645,20 @@ export function evaluateProfessionalKnowledgeEligibility(input: {
   }
   if (v.validityState !== 'VALID') {
     return { status: 'INELIGIBLE', reason: 'VALIDITY_NOT_VALID' };
+  }
+
+  // Version effective window enforcement (Finding #21)
+  const currentTime = (input.now ?? new Date()).getTime();
+  const fromTime = parseAuthorityTime(v.effectiveFrom);
+  const end = parseOptionalAuthorityEnd(v.effectiveTo);
+  if (!Number.isFinite(currentTime) || fromTime === null || !end.valid) {
+    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_INVALID' };
+  }
+  if (fromTime > currentTime) {
+    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_FUTURE' };
+  }
+  if (end.value !== null && currentTime >= end.value) {
+    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_EXPIRED' };
   }
 
   if (input.approval.status === 'UNAVAILABLE') {

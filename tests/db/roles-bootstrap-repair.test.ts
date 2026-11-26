@@ -134,6 +134,7 @@ describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQ
     await adminClient.query(`
       ALTER ROLE xiaoshuyin_app WITH SUPERUSER BYPASSRLS;
       ALTER ROLE xiaoshuyin_migrator WITH CREATEROLE CREATEDB;
+      GRANT CREATE ON SCHEMA public TO xiaoshuyin_app;
     `);
 
     // Verify tampering took effect
@@ -142,6 +143,10 @@ describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQ
     `);
     expect(tampered.rows[0]?.rolsuper).toBe(true);
     expect(tampered.rows[0]?.rolbypassrls).toBe(true);
+    const tamperedSchemaPrivilege = await adminClient.query<{ can_create: boolean }>(
+      `SELECT has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS can_create`
+    );
+    expect(tamperedSchemaPrivilege.rows[0]?.can_create).toBe(true);
 
     // Run repair
     const result = runBootstrapScript();
@@ -166,6 +171,34 @@ describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQ
       expect(r.rolcreaterole).toBe(false);
       expect(r.rolcreatedb).toBe(false);
     }
+    const repairedSchemaPrivileges = await adminClient.query<{
+      can_create: boolean;
+      can_use: boolean;
+    }>(`
+      SELECT
+        has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS can_create,
+        has_schema_privilege('xiaoshuyin_app', 'public', 'USAGE') AS can_use
+    `);
+    expect(repairedSchemaPrivileges.rows[0]).toEqual({
+      can_create: false,
+      can_use: true,
+    });
+  });
+
+  it('repairs CREATE privilege drift on public schema for the app role', async () => {
+    await adminClient.query('GRANT CREATE ON SCHEMA public TO xiaoshuyin_app');
+    const before = await adminClient.query<{ can_create: boolean }>(
+      "SELECT has_schema_privilege('xiaoshuyin_app','public','CREATE') AS can_create"
+    );
+    expect(before.rows[0]?.can_create).toBe(true);
+
+    const result = runBootstrapScript();
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+    const after = await adminClient.query<{ can_create: boolean }>(
+      "SELECT has_schema_privilege('xiaoshuyin_app','public','CREATE') AS can_create"
+    );
+    expect(after.rows[0]?.can_create).toBe(false);
   });
 
   it('safely handles passwords with quotes, backslashes, dollars, and shell characters', async () => {

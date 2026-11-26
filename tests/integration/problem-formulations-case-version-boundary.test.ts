@@ -47,11 +47,22 @@ describe('S8-FINAL-04 Case version boundary (pre-SQL)', () => {
       )
     ).rows[0].id;
     familyId = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
-    await admin.query('SELECT app.create_family($1, $2, $3)', [
-      familyId,
-      personId,
-      'T8FINAL04',
-    ]);
+    const familySetup = await admin.connect();
+    try {
+      await familySetup.query('BEGIN');
+      await familySetup.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountId]);
+      await familySetup.query('SELECT app.create_family($1, $2, $3)', [
+        familyId,
+        personId,
+        'T8FINAL04',
+      ]);
+      await familySetup.query('COMMIT');
+    } catch (error) {
+      await familySetup.query('ROLLBACK');
+      throw error;
+    } finally {
+      familySetup.release();
+    }
     await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)', [
       familyId,
       personId,

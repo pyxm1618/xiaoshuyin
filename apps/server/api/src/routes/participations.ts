@@ -85,6 +85,7 @@ import { recordDialogueMessage } from '../../../../../packages/domain/src/intern
 const TAG = ['participation'];
 const BEARER = [{ bearerAuth: [] }];
 const IdParams = z.object({ id: z.string().meta({ format: 'uuid' }) });
+const ParticipationIdParams = z.object({ id: z.string().uuid() });
 const TokenParams = z.object({ token: z.string() });
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -347,6 +348,14 @@ async function runSelfStateCommand(
     return stateConflict(plan.currentState);
   }
 
+  if (input.command === 'ACCEPT') {
+    const caseRow = await getCaseById(tx, locked.case_id);
+    if (!caseRow) throw participationNotFound();
+    if (caseRow.status === 'CLOSED') {
+      throw typedError('CASE_CLOSED', 'Case is closed');
+    }
+  }
+
   if (
     input.command === 'ACCEPT' &&
     input.requireCompliance &&
@@ -494,6 +503,9 @@ export function registerParticipationRoutes(
             async (tx) => {
               const caseRow = await getCaseById(tx, caseId);
               if (!caseRow) throw caseNotFound();
+              if (caseRow.status === 'CLOSED') {
+                throw typedError('CASE_CLOSED', 'Case is closed');
+              }
 
               const targetMember = await isFamilyMember(tx, familyId, parsed.data.personId);
               if (!targetMember) throw targetIneligible();
@@ -920,11 +932,12 @@ export function registerParticipationRoutes(
   app.post(
     '/api/v1/participations/:id/responses',
     {
+      onRequest: app.authenticate,
       schema: {
         tags: TAG,
         summary: 'Submit a child-authored participation response message',
         security: BEARER,
-        params: IdParams,
+        params: ParticipationIdParams,
         body: CreateParticipationResponseRequest,
         response: {
           201: ParticipationResponseDto,
@@ -942,7 +955,7 @@ export function registerParticipationRoutes(
       const actorAccountId = actor.accountId;
       const actorPersonId = actor.personId;
 
-      const params = IdParams.safeParse(req.params);
+      const params = ParticipationIdParams.safeParse(req.params);
       if (!params.success) {
         throw typedError('VALIDATION_ERROR', 'Invalid participation id');
       }

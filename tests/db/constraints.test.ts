@@ -33,6 +33,7 @@ describe('Database Constraints', () => {
       [accountId]
     );
     const personId = perRows[0].id;
+    await client.query(`SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`, [accountId]);
 
     // First family creation should succeed
     await client.query(`SELECT app.create_family(uuidv7(), $1, 'Test Family')`, [personId]);
@@ -57,6 +58,7 @@ describe('Database Constraints', () => {
       [accountId]
     );
     const personId = perRows[0].id;
+    await client.query(`SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`, [accountId]);
     const familyId = crypto.randomUUID();
     await client.query(`SELECT app.create_family($1, $2, 'Dup Test')`, [familyId, personId]);
 
