@@ -35,7 +35,7 @@ Aligned with Frozen Spec (`092c18d514d46a1e4e40f3544d428302cde00fa8` / `4354ecac
 | Offline contract & protocol evidence | `T002`–`T007` (module surfaces and task-owned focused RED/GREEN evidence), `T008` (adversarial matrix completion) | Per-task named focused tests with observed RED before production edits and GREEN before advancing, plus complete offline matrix test execution outputs of `bunx vitest run tests/ai/reranker-provider-contract.test.ts` and `bunx vitest run tests/ai/reranker-dashscope.test.ts` on synthetic/non-personal fixtures proving `CONTRACT_MECHANICS` only (never `LIVE_PROVIDER_CAPABILITY = PASS`). |
 | Live-provider truthfulness evidence | `T010` (execution & external JSON), `T012` (handoff provenance) | When opted in via `RERANKER_LIVE_VERIFY=1`, external sanitized JSON at `RERANKER_LIVE_EVIDENCE_PATH` + SHA-256 bound to exact `HEAD`, clean tracked tree, provider/endpoint fingerprint, `qwen3-rerank` / `UNKNOWN_NOT_DOCUMENTED` revision state, request ID(s), usage, attempts, and lower/aggregate states; when unconfigured/not opted in, truthful `BLOCKED` / `NOT_EVALUATED` / `UNVERIFIED`. |
 | Exact-head & regression evidence | `T010`, `T011`, `T012` | Final exact `HEAD` matching any live evidence head (`AS-15`), plus exit-0 outputs from `bun run typecheck` and `bun run verify-all` on that exact `HEAD`. |
-| Scope-negative & secret/non-persistence evidence | `T009`, `T011` | Exit-0 outputs from `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts`, `node scripts/guard-static.mjs`, `node scripts/guard-static.mjs --self-test`, `git diff --name-only "$DEVELOPMENT_BASE"...HEAD` allowlist check, and zero-diff checks on `package.json`, `bun.lock`, `apps/server/api/package.json`, `app.ts`, `routes`, `db`, and `.specify`. |
+| Scope-negative & secret/non-persistence evidence | `T009`, `T011` | Exit-0 outputs from `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts`, `node scripts/guard-static.mjs`, `node scripts/guard-static.mjs --self-test`, `git diff --name-only "$DEVELOPMENT_BASE"...HEAD` allowlist check, and zero-diff checks on `package.json`, `bun.lock`, `apps/server/api/package.json`, `app.ts`, `routes`, `db`, `.specify/implementation-ownership.json` and `.specify/scripts/`; exact `.specify` changed-path equality to the sole authorized manifest (`.specify/change-bindings/023-reranker-provider-adapter-foundation.json`), with final exact-head change-governance exit 0. |
 | Audit 2 handoff evidence | `T012` | Complete provenance bundle containing base/head SHAs, Spec/Planning blobs, changed files, governance prerequisite evidence, official provider source list + `UNKNOWN` items, offline/live/regression outputs, preserved `APPROVED PROFESSIONAL REVIEWER — UNASSIGNED` & Gold Eval `BLOCKED` state, and explicit Developer `STOP`. |
 
 ## T001 — Development-start Remote Truth / Governance / Dependency Gate
@@ -69,7 +69,7 @@ Re-establish exact remote truth and mechanically decide whether Developer mutati
 10. Verify exact candidate model identity remains qwen3-rerank; record immutable revision/latest-alias status truthfully as documented/undocumented.
 11. Re-read .specify/implementation-ownership.json and prove apps/server/api/src/ai/reranker/ resolves to 023-reranker-provider-adapter-foundation through one narrow rule.
 12. Record governance prerequisite PR, merge SHA and independent governance audit verdict.
-13. Verify scripts/guard-static.mjs and change-governance behavior still permit the planned native-HTTP seam without a new provider SDK allowance.
+13. Verify scripts/guard-static.mjs and change-governance behavior still permit the planned native-HTTP seam without a new provider SDK allowance; read-only confirm the required single manifest in Plan §8/T011 matches the current validator and no incompatible planning prohibition remains. Do not create it in T001.
 14. Define DEVELOPMENT_BASE = exact current origin/main after all prerequisite merges.
 15. Confirm approved credential/egress availability status for optional live verification; absence does not block offline implementation, but must be recorded.
 
@@ -766,10 +766,11 @@ Prove the final implementation head is internally consistent and remains within 
 **Allowed Paths**
 - No new feature mutation.
 - Only corrective changes within already-authorized implementation/test paths if a verification failure is found; any correction requires rerunning all affected verification and invalidates prior live evidence if head changes.
+- Sole governance-metadata exception: T011 must create or finalize exactly one required Slice 23 change-binding manifest at `.specify/change-bindings/023-reranker-provider-adapter-foundation.json`. This is not feature implementation. Any manifest commit changes HEAD and triggers the existing exact-head live-evidence invalidation rule.
 
 **Forbidden Paths**
 - new scope;
-- governance registry;
+- governance registry (`.specify/implementation-ownership.json`), governance scripts/validator/self-tests (`.specify/scripts/**`), a second change-binding manifest, and all other `.specify/**` mutations;
 - Authority/Frozen Spec;
 - Audit 2;
 - merge.
@@ -780,14 +781,14 @@ Prove the final implementation head is internally consistent and remains within 
 3. Run architecture test.
 4. Run static guard + self-test.
 5. Run validate-governance + governance self-tests.
-6. Run validate-change-governance with exact DEVELOPMENT_BASE + change-governance self-tests.
+6. Create or finalize and commit the single authorized Slice 23 change-binding manifest (Plan §8) before running validate-change-governance with exact DEVELOPMENT_BASE + change-governance self-tests. Use the current validator schema and Slice 20 schema v2 precedent: `schemaVersion: 2`, valid `changeId`, `classification: FEATURE_IMPLEMENTATION`, exactly one `featureBindings` entry with `feature: 023-reranker-provider-adapter-foundation`, `specPath: specs/023-reranker-provider-adapter-foundation`, and `implementationPaths` exactly equal to the actual final changed Slice 23 production paths from Plan §8 (no tests, unrelated files, duplicate bindings or other features). If later corrections change the final production diff, reconcile and commit the same manifest and rerun mandatory final-head verification.
 7. Run bun run typecheck.
 8. Run bun run verify-all.
 9. Run changed-file allowlist scan.
 10. Prove package.json/bun.lock/apps/server/api/package.json unchanged.
 11. Prove app.ts/routes unchanged.
 12. Prove db/ unchanged.
-13. Prove .specify/ unchanged in implementation diff.
+13. Prove the entire .specify changed-path set exactly equals `.specify/change-bindings/023-reranker-provider-adapter-foundation.json`, with no second manifest or other .specify changes; prove ownership registry and governance scripts/self-tests unchanged (commands below).
 14. Re-run secret/scope architecture scan.
 15. Record final exact implementation head.
 16. If final head differs from T010 live evidence head, mark prior live evidence invalid and rerun T010 if retaining a live claim.
@@ -811,16 +812,17 @@ git diff --name-only "$DEVELOPMENT_BASE"...HEAD
 git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- package.json bun.lock apps/server/api/package.json
 git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- apps/server/api/src/app.ts apps/server/api/src/routes
 git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- db
-git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- .specify
+specify_changed=$(git diff --name-only --no-renames "$DEVELOPMENT_BASE"...HEAD -- .specify) && test "$specify_changed" = '.specify/change-bindings/023-reranker-provider-adapter-foundation.json'
+git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- .specify/implementation-ownership.json .specify/scripts/
 ~~~
 
-Expected: all mandatory commands exit 0; final diff is within Plan §8. A live lower state may remain BLOCKED/UNKNOWN/NOT_EVALUATED; that is evidence truth, not a regression failure.
+Expected: all mandatory commands exit 0 on the stable committed final exact HEAD; final diff is within Plan §8, with exactly the one required manifest as the entire .specify delta and unchanged registry/governance scripts. A live lower state may remain BLOCKED/UNKNOWN/NOT_EVALUATED; that is evidence truth, not a regression failure.
 
 **Done Criteria**
 - final exact implementation head is stable;
 - all mandatory offline/governance/static/type/regression checks pass;
 - live evidence state is truthful and exact-head bound if present;
-- no scope/secret/governance drift;
+- no scope/secret/governance drift; the committed manifest binds exactly the final changed production paths and is the entire .specify delta; registry and governance scripts/self-tests unchanged;
 - terminal technical state is mechanically derived.
 
 **STOP Conditions**
@@ -831,7 +833,7 @@ Expected: all mandatory commands exit 0; final diff is within Plan §8. A live l
 - lower evidence state would need prose override to claim success.
 
 **Evidence Ownership**
-- final command outputs; changed-file list; final implementation SHA; lower-state/aggregate record; scope/secret scans; exact-head binding record.
+- final command outputs; changed-file list; single manifest path/blob and exact production-path binding, .specify path-equality and registry/governance-script zero-diff evidence; final implementation SHA; lower-state/aggregate record; scope/secret scans; exact-head binding record.
 
 **Coverage**
 - FR-012, FR-014..FR-020; AS-09..AS-15.
