@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const seam = 'apps/server/api/src/ai/embedding';
+const rerankerSeam = 'apps/server/api/src/ai/reranker';
 const expectedSeamFiles = [
   'config.ts', 'contracts.ts', 'cost.ts', 'dashscope-protocol.ts', 'errors.ts',
   'evidence.ts', 'index.ts', 'port.ts', 'telemetry.ts', 'transport.ts',
@@ -22,6 +23,15 @@ function walkTs(root: string): string[] {
     else if (path.endsWith('.ts')) out.push(path);
   }
   return out;
+}
+
+// Slice 23 has a separately governed provider seam, not access to Slice 20 internals.
+function assertProviderBoundary(file: string, text: string): void {
+  if (file.startsWith(`${seam}/`)) return;
+  if (!file.startsWith(`${rerankerSeam}/`)) {
+    expect(text, relative('.', file)).not.toMatch(/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/);
+  }
+  expect(text, relative('.', file)).not.toMatch(/(?:ai\/embedding\/|\.\.\/embedding\/)(?:transport|dashscope-protocol)/);
 }
 
 describe('Slice 20 architecture and negative-scope boundary', () => {
@@ -91,13 +101,34 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
     expect(all).not.toMatch(/\bINSERT\s+INTO\b|\bDELETE\s+FROM\b|\bUPDATE\s+[A-Za-z_][\\w."]*\s+SET\b|\bCREATE\s+(?:TABLE|INDEX|EXTENSION|TYPE|SCHEMA)\b/i);
   });
 
-  it('permits direct provider integration only inside the seam and consumers cannot import protocol/transport internals', () => {
-    const production = walkTs('apps/server/api/src');
-    for (const file of production) {
-      if (file.startsWith(`${seam}/`)) continue;
-      const text = read(file);
-      expect(text, relative('.', file)).not.toMatch(/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/);
-      expect(text, relative('.', file)).not.toMatch(/ai\/embedding\/(?:transport|dashscope-protocol)/);
+  it('permits direct provider integration only inside the governed seams and consumers cannot import embedding protocol/transport internals', () => {
+    for (const file of walkTs('apps/server/api/src')) {
+      assertProviderBoundary(file, read(file));
+    }
+  });
+
+  it.each([
+    ['apps/server/api/src/ai/embedding/config.ts', true],
+    ['apps/server/api/src/ai/reranker/config.ts', true],
+    ['apps/server/api/src/ai/other/config.ts', false],
+    ['apps/server/api/src/providers/config.ts', false],
+    ['apps/server/api/src/ai/reranker-other/config.ts', false],
+  ] as const)('enforces provider token boundary for %s', (file, allowed) => {
+    for (const token of ['ALIBABA_DASHSCOPE', 'DASHSCOPE_API_KEY', 'workspace.maas.aliyuncs.com']) {
+      const check = () => assertProviderBoundary(file, token);
+      if (allowed) expect(check).not.toThrow();
+      else expect(check).toThrow();
+    }
+  });
+
+  it.each([
+    'apps/server/api/src/ai/reranker/dashscope.ts',
+    'apps/server/api/src/ai/other/consumer.ts',
+  ])('rejects embedding-private imports from %s even when provider tokens are absent', (file) => {
+    for (const internal of ['transport', 'dashscope-protocol']) {
+      for (const prefix of ['../../ai/embedding/', '../embedding/']) {
+        expect(() => assertProviderBoundary(file, `import '${prefix}${internal}'`)).toThrow();
+      }
     }
   });
 
