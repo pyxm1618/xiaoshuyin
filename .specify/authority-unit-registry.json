@@ -1,6 +1,41 @@
 {
   "schemaVersion": 2,
-  "policy": "Authority Units are stable repository-owned heading-bounded units. IMPLEMENTED normative units have finite downstream bindings. FUTURE_UNIMPLEMENTED units fail closed until topology lands separately. Version/date front-matter metadata is the only NO_DOWNSTREAM_IMPACT maintenance class.",
+  "policy": "Authority Units are stable repository-owned heading-bounded units. IMPLEMENTED normative units have finite downstream bindings. FUTURE_UNIMPLEMENTED units fail closed until topology lands separately. Version/date front-matter metadata is the only NO_DOWNSTREAM_IMPACT maintenance class. exactWordingCorrections are single-use literal corrections pre-registered here, bound to exact before/after unit SHA-256, consumed only by a later separate Authority change classified EXACT_WORDING_CORRECTION; they grant no topology, downstream binding or semantic change.",
+  "exactWordingCorrections": [
+    {
+      "id": "f09-miniprogram-name-v1p-008",
+      "authorityUnitId": "AUTH-V1P-008",
+      "path": "Docs/V1产品需求.md",
+      "from": "小树英助手",
+      "to": "小树荫助手",
+      "expectedOccurrences": 1,
+      "beforeUnitSha256": "6b81c0b4c9d1ade9947e3def35cbecfdb42c9b0e9c59626fac5703fd7fb073af",
+      "afterUnitSha256": "3de1ba4539f287f300327be58d99d286de9ecef761e21dfd2dd17b8c8d5fc0af",
+      "rationale": "Owner-confirmed official WeChat Mini Program name correction (F-09): 小树英助手 -> 小树荫助手. Literal-only; no product, scope or downstream semantic change."
+    },
+    {
+      "id": "f09-miniprogram-name-v1p-135",
+      "authorityUnitId": "AUTH-V1P-135",
+      "path": "Docs/V1产品需求.md",
+      "from": "小树英助手",
+      "to": "小树荫助手",
+      "expectedOccurrences": 1,
+      "beforeUnitSha256": "2b74dc4e620a528fcab632062081db530113dbbd267dd44223a1e7deecb0ee2c",
+      "afterUnitSha256": "afd5a718d0ddf13ffd30f31169c23c9f30a602177bcf1e38fafec3f7d7febe4f",
+      "rationale": "Owner-confirmed official WeChat Mini Program name correction (F-09): 小树英助手 -> 小树荫助手. Literal-only; no product, scope or downstream semantic change."
+    },
+    {
+      "id": "f09-miniprogram-name-v1t-002",
+      "authorityUnitId": "AUTH-V1T-002",
+      "path": "Docs/V1技术设计.md",
+      "from": "小树英助手",
+      "to": "小树荫助手",
+      "expectedOccurrences": 1,
+      "beforeUnitSha256": "99ec5f607507c1d235274c7bfe8fc87ecb57dba469725679495738b2f64403f8",
+      "afterUnitSha256": "94ec9f5a627c03e1cd8b095a638e9dbbee59eb9b5301847ab0e8a552d6a578f9",
+      "rationale": "Owner-confirmed official WeChat Mini Program name correction (F-09): 小树英助手 -> 小树荫助手. Literal-only; no product, scope or downstream semantic change."
+    }
+  ],
   "documents": [
     {
       "path": "Docs/总产品需求.md",
