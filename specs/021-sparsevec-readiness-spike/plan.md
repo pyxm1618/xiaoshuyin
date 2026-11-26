@@ -418,8 +418,18 @@ On F (no new provider call): architecture suite; DB deterministic suite (manual 
 ### 13.4 Secret and privacy scans (frozen commands)
 
 ```bash
-git grep -nIE 'sk-[A-Za-z0-9]{16,}|DASHSCOPE_API_KEY\s*[:=]\s*\S|Authorization:\s*Bearer\s+\S' "$F" -- tests/   # must be empty
+! git grep -nIE \
+  'sk-[A-Za-z0-9]{16,}|DASHSCOPE_API_KEY[[:space:]]*[:=][[:space:]]*[^[:space:]]|Authorization:[[:space:]]*Bearer[[:space:]]+[^[:space:]]' \
+  "$F" -- \
+  tests/helpers/sparsevec-readiness.ts \
+  tests/architecture/sparsevec-readiness-evidence.test.ts \
+  tests/db/sparsevec-readiness.test.ts \
+  tests/ai/sparsevec-readiness-provider-db.test.ts \
+  tests/fixtures/sparsevec-readiness/chinese-sample-manifest.json \
+  tests/evidence/sparsevec-readiness-stage-a.json
 ```
+
+This negated POSIX ERE check exits `0` with empty stdout iff none of the six Slice 21 paths contains a secret pattern (`-- tests/` is intentionally NOT used because `origin/main` contains pre-existing Slice 20 test stubs). Slice 21 test code must construct `env` fixtures dynamically (never write `DASHSCOPE_API_KEY:` or `DASHSCOPE_API_KEY=` literals in Slice 21 source).
 
 Privacy scan (architecture test on the evidence file): no manifest excerpt substring of 20 code points appears in the evidence; forbidden keys `apiKey, api_key, authorization, raw_body, raw_response, excerpt, text, sparse_embedding, embedding` absent; no dense/sparse vector arrays stored (hashes and stats only).
 
@@ -447,7 +457,7 @@ items[] (lineage per §10.3), observed_nnz_max, observed_min_index, observed_max
 mapping_result, db_roundtrip_result, distance_result, independent_calculation
 tolerances {sparse_ip_rel: 1e-5, dense_cosine_abs: 1.25e-4, fusion_recompute_abs: 1e-12}
 index_behavior {hnsw_explain_index_used, planner_restored, synthetic_boundaries[], actual_hnsw_compatible}
-chinese_manifest_id, chinese_manifest_sha256, source_fingerprints[], queries[] {query_id, expected_doc_id, ranked_doc_ids, raw_dense, raw_sparse, norm_dense, norm_sparse, fused, strict_first}
+chinese_manifest_id, chinese_manifest_sha256, source_fingerprints[] {doc_id, source_url, text_sha256, excerpt_code_points} (never include anchor or source_title), queries[] {query_id, expected_doc_id, ranked_doc_ids, raw_dense, raw_sparse, norm_dense, norm_sparse, fused, strict_first}
 chinese_queries_passed (0..3)
 fusion_reference {formula_id: "S21-MINMAX-0.5-0.5-V1", recompute_max_abs_diff}
 negative_probes[], cleanup_status ("CLEAN" | "FAILED"), limitations[]
@@ -461,6 +471,8 @@ rag_readiness = "NOT_DERIVED", production_route_selection = "DEFERRED_TO_GOLD_DA
 
 Bounded status vocabularies (values outside these sets fail the schema test):
 
+- `candidate_a_readiness_state` ∈ {`PASS`, `FAIL`, `BLOCKED`, `UNKNOWN`, `NOT_EVALUATED`} — derived aggregate state.
+- `execution_completion_state` ∈ {`COMPLETED_WITH_PASS`, `COMPLETED_WITH_FAIL`, `BLOCKED`, `INCONCLUSIVE`, `NOT_EVALUATED`} — execution outcome state.
 - `sparsevec_spike_status` ∈ {`PASS_STAGE_A`, `FAIL`, `BLOCKED`, `UNKNOWN`, `NOT_EVALUATED`} — the Spike technical result.
 - `rag_candidate_status` ∈ {`CANDIDATE_A_SPARSEVEC_PREREQUISITE_MET_STAGE_A`, `CANDIDATE_A_SPARSEVEC_PREREQUISITE_FAILED`, `CANDIDATE_A_SPARSEVEC_PREREQUISITE_BLOCKED`, `CANDIDATE_A_SPARSEVEC_PREREQUISITE_UNKNOWN`, `CANDIDATE_A_SPARSEVEC_PREREQUISITE_NOT_EVALUATED`} — Candidate A prerequisite / technical compatibility state only.
 - `readiness_status` ∈ {`PASS_STAGE_A`, `FAIL`, `BLOCKED`, `UNKNOWN`, `NOT_EVALUATED`} with `readiness_scope = "CANDIDATE_A_SPARSEVEC_SPIKE_STAGE_A_ONLY"`.
@@ -485,18 +497,19 @@ Aggregate:
 ```text
 SPARSEVEC_SPIKE_PASS_STAGE_A = all four flags VERIFIED && cleanup_status = CLEAN && gate/lineage identities valid
 
-candidate_a_readiness_state / execution_completion_state / sparsevec_spike_status / readiness_status / rag_candidate_status:
-  PASS     : aggregate true                                   → COMPLETED_WITH_PASS / PASS_STAGE_A / PASS_STAGE_A / …_MET_STAGE_A
-  FAIL     : any flag FAIL or cleanup FAILED (deterministic technical incompatibility, e.g. mapping incorrect,
-             dimension incompatible, float representation incorrect, insert/readback incorrect, distance/reference mismatch,
-             required pgvector behavior incorrect, payload incompatible with sparsevec limits, cleanup failure,
-             deterministically invalid execution)                → COMPLETED_WITH_FAIL / FAIL / FAIL / …_FAILED
-  BLOCKED  : no FAIL and any flag BLOCKED (gate, credential, permission, source unavailable)
-                                                              → BLOCKED / BLOCKED / BLOCKED / …_BLOCKED
-  UNKNOWN  : no FAIL/BLOCKED, technical chain VERIFIED, FUSION_PROTOTYPE_VERIFIED = UNKNOWN (tiny-sample ranking miss)
-                                                              → INCONCLUSIVE / UNKNOWN / UNKNOWN / …_UNKNOWN
-  NOT_EVALUATED : required execution did not run              → NOT_EVALUATED / NOT_EVALUATED / NOT_EVALUATED / …_NOT_EVALUATED
-precedence: FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS (PASS only if all positive)
+Outcome mapping (precedence: FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS; PASS only if all positive):
+  (1) candidate_a_readiness_state / (2) execution_completion_state / (3) sparsevec_spike_status / (4) readiness_status / (5) rag_candidate_status
+
+  PASS (aggregate true):
+    PASS / COMPLETED_WITH_PASS / PASS_STAGE_A / PASS_STAGE_A / CANDIDATE_A_SPARSEVEC_PREREQUISITE_MET_STAGE_A
+  FAIL (any flag FAIL or cleanup FAILED — deterministic technical incompatibility: mapping/dimension/float/readback/distance/pgvector/limit/cleanup/invalid execution):
+    FAIL / COMPLETED_WITH_FAIL / FAIL / FAIL / CANDIDATE_A_SPARSEVEC_PREREQUISITE_FAILED
+  BLOCKED (no FAIL and any flag BLOCKED — gate, credential, permission, source unavailable):
+    BLOCKED / BLOCKED / BLOCKED / BLOCKED / CANDIDATE_A_SPARSEVEC_PREREQUISITE_BLOCKED
+  UNKNOWN (no FAIL/BLOCKED, technical chain VERIFIED, FUSION_PROTOTYPE_VERIFIED = UNKNOWN — tiny-sample ranking miss):
+    UNKNOWN / INCONCLUSIVE / UNKNOWN / UNKNOWN / CANDIDATE_A_SPARSEVEC_PREREQUISITE_UNKNOWN
+  NOT_EVALUATED (required execution did not run):
+    NOT_EVALUATED / NOT_EVALUATED / NOT_EVALUATED / NOT_EVALUATED / CANDIDATE_A_SPARSEVEC_PREREQUISITE_NOT_EVALUATED
 ```
 
 A tiny 6×3 relevance miss with a valid technical chain is `UNKNOWN / INCONCLUSIVE`, never PASS and never, by itself, a deterministic Candidate A FAIL; route quality and A/B/C selection are DEFERRED TO GOLD DATASET.
@@ -535,11 +548,11 @@ STOP (no improvisation) if: Frozen Spec blob drifts; Slice 20 Audit 2 durable ev
 | FR-002 consume Slice 20 public normalized result only | §§4, 10 | C21-07, C21-08, C21-25, C21-70..C21-73 | T001, T007 |
 | FR-003 stage/privilege/disposable DB | §§7, 12 | C21-12..C21-14, C21-50..C21-53, C21-62 | T005, T006, T010 |
 | FR-004 Chinese retrieval + bounded fusion | §§10.4, 11 | C21-30..C21-38, C21-74..C21-80 | T003, T008, T009 |
-| FR-005 truthful evidence/failure states | §§13–15 | C21-39..C21-46, C21-64..C21-69 | T010–T012 |
+| FR-005 truthful evidence/failure states | §§13–15 | C21-39..C21-46, C21-54, C21-60, C21-64..C21-69 | T010–T012 |
 | FR-006 approved test content / no professional approval | §10.4 | C21-32, C21-33, C21-47, C21-76, C21-77 | T003, T008 |
 | FR-007 defer production retrieval / Gold / pinning; protect B/C | §§3, 14, 16 | C21-03..C21-06, C21-48, C21-68 | all |
-| FR-008 governance / no lasting schema | §§5, 12 | C21-09..C21-11, C21-49, C21-81 | T002, T010, T011 |
-| §21 Implementation Gate | §4 | C21-07, C21-82 | T001 |
+| FR-008 governance / no lasting schema | §§5, 12 | C21-01, C21-02, C21-09..C21-11, C21-49, C21-81, C21-83..C21-85 | T001, T002, T010, T011 |
+| §21 Implementation Gate | §4 | C21-01, C21-02, C21-07, C21-82, C21-85 | T001 |
 
 AS-01..AS-08 and NS-01..NS-08 are assigned in `tasks.md` (Frozen Spec Authority Map) and represented in `checklist.md`.
 

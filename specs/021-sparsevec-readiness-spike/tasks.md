@@ -73,7 +73,7 @@ Every Frozen Spec FR, AS and NS appears in at least one row; no task is unmapped
 - Any validator/CI blob drift vs Plan §1 is listed and re-read before T002.
 
 **Done**
-- Gate report with all seven predicates TRUE (a–g) and every SHA recorded.
+- Gate report with all seven predicates TRUE (a–g) and every SHA recorded (C21-01, C21-02, C21-07, C21-82, C21-85 PASS).
 
 **STOP**
 - Predicate (d) FALSE → `STOP: DEVELOPER IMPLEMENTATION GATE CLOSED — Slice 20 durable Audit 2 evidence not established` (the expected result at planning time).
@@ -428,7 +428,7 @@ tests/evidence/sparsevec-readiness-stage-a.json    (run output)
 ### Verification
 - `bunx vitest run tests/architecture/sparsevec-readiness-evidence.test.ts` exits 0 with the evidence file present (schema/state/privacy tests executed, not skipped).
 - `node -e` read of the evidence shows `implementation_subject_head = S` and the state fields equal the helper derivation.
-- Plan §13.4 secret grep returns nothing.
+- Plan §13.4 negated secret grep exits 0 with empty stdout on the Slice 21 paths.
 
 **Done**
 - One sanitized artifact truthfully representing PASS / FAIL / BLOCKED / UNKNOWN / NOT_EVALUATED.
@@ -464,7 +464,7 @@ tests/evidence/sparsevec-readiness-stage-a.json   (the only file in the evidence
 4. Re-read remote: F, changed files vs `origin/main` (exactly the six paths), spec blob, ownership file equality, `.github/` equality.
 
 ### Verification
-- Every command in Actions 2–4 exits 0 on F; C21-56..C21-59, C21-63, C21-69, C21-81, C21-83 PASS.
+- Every command in Actions 2–4 exits 0 on F; C21-54, C21-56..C21-59, C21-63, C21-69, C21-81, C21-83 PASS.
 - `git merge-base --is-ancestor S F` exits 0 and `git diff --name-only S F` = `tests/evidence/sparsevec-readiness-stage-a.json`.
 - No new provider call is made on F.
 
@@ -500,7 +500,7 @@ Report: repository; current main; S; F; merge base / ahead / behind; Frozen Spec
 - Remote read-back confirms F, S ancestry, spec blob `77d1caf4…`, changed files and evidence blob; the report lists every field above with no placeholder.
 
 **Done**
-- Developer status: `READY FOR INDEPENDENT AUDIT 2` (PASS or reproducible FAIL evidence complete), `BLOCKED` (dependency/credential/source/permission unavailable) or `INCONCLUSIVE` (UNKNOWN). Developer stops.
+- Developer status (`C21-60`): `READY FOR INDEPENDENT AUDIT 2` (PASS or reproducible FAIL evidence complete), `BLOCKED` (dependency/credential/source/permission unavailable) or `INCONCLUSIVE` (UNKNOWN). Developer stops.
 
 **STOP**
 - Do not perform Audit 2; do not merge; no production retrieval work.

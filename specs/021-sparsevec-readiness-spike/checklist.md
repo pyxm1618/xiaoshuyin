@@ -118,7 +118,7 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-51 | Failure cleanup | injected failure leaves no `s21_%` relation | real DB |
 | C21-52 | Rerun | two consecutive runs succeed without collision | real DB |
 | C21-53 | Planner cleanup | `enable_seqscan` equals pre-probe value | real DB |
-| C21-54 | Secret hygiene | Plan §13.4 grep returns nothing on F | scan |
+| C21-54 | Secret hygiene | Plan §13.4 negated grep exits 0 with empty stdout on F | scan |
 | C21-55 | Privacy of evidence | no 20-code-point excerpt substring; forbidden keys absent; no vector arrays | architecture test |
 | C21-56 | Governance validators | `validate-governance`, governance self-tests, `validate-change-governance --base origin/main --head HEAD`, change-governance self-tests PASS on F | command output |
 | C21-57 | Static guard | `guard-static` + `--self-test` PASS without guard edits | command output |
