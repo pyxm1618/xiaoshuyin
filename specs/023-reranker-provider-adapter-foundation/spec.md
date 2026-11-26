@@ -3,9 +3,13 @@
 Repository: pyxm1618/xiaoshuyin  
 Feature: 023-reranker-provider-adapter-foundation  
 Phase: 3 — Professional Knowledge & AI  
-Role: Plan AI 1 — Selection / Specify / Clarify only  
-Status: FROZEN SPEC CANDIDATE — becomes authoritative only after remote commit/blob read-back  
-Base main at branch creation: c8a71bd1d4e699a48b757f0e4731bda640935e1a
+Role: Plan AI 1 — Selection / Specify / Clarify only (Targeted Governance Compatibility Correction)  
+Status: TARGETED GOVERNANCE COMPATIBILITY CORRECTION — non-semantic / additive-only reconciliation with repository Spec Governance  
+Previous Frozen Spec Head: 8fae7497df58446ad034d2986168f6a912444eb3 — SUPERSEDED BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION  
+Previous Frozen Spec Blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b — SUPERSEDED BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION  
+Original Planning Freeze Reference (for Plan AI 2 reconciliation): 2c03ca64a53f92acf837816c65630c9546ff7cda  
+Base main at branch creation: c8a71bd1d4e699a48b757f0e4731bda640935e1a  
+Current main at governance correction: e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512
 
 This specification freezes what Slice 23 is allowed to be. It does not authorize Plan, Checklist, Tasks, Audit 1, implementation, Audit 2, merge, production route selection, or production release.
 
@@ -54,6 +58,28 @@ Relevant authority is explicit:
 - unknown, unavailable, unreviewed or unevaluated capability must fail closed rather than being represented as READY.
 
 No Authority Doc is modified by Slice 23.
+
+---
+
+## Upstream Traceability
+
+Mechanical traceability from existing approved Authority Docs and admitted upstream slice specs to Slice 23 (no new requirement or product capability is introduced):
+
+| Upstream ID / Anchor | Exact Source | Exact Requirement Meaning | Slice 23 Consequence |
+|---|---|---|---|
+| `V1-C03` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§5/§7.2) | `UNKNOWN`, `NOT_COLLECTED`, `DECLINED`, `CONFLICT`, `N/A` and other true unknown states must not be fabricated into deterministic values. | Unpinned, unavailable, malformed, partial, or unverified reranker evidence must fail closed as explicit `BLOCKED` / `UNVERIFIED` / `NOT_EVALUATED` / `UNKNOWN` / `FAIL` states rather than zero-filled scores or `READY` claims; unavailable telemetry/usage/cost remains `UNKNOWN` (FR-005–FR-010, FR-014, FR-015, FR-019, FR-020; AS-03–AS-09). |
+| `V1-C24` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§5/§23) | AI may only propose candidate judgments/suggestions and cannot independently confirm facts, consents, formal Plans, Closure, or Safety resolution. | Reranker outputs and scores are technical ranking signals only—never Domain Commands, business truth, Professional Authority, Gold labels, or route approval (§8.1, §8.3, §10 #4/#5/#8, FR-016, AS-11). |
+| `V1-C27` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§30/§36) | Model, network, notification, or background failures must surface truthful status rather than faking success. | Auth, authorization, rate-limit, timeout, unavailable, malformed-response, and unsupported-capability failures normalize truthfully without silent cross-provider/model fallback or fake `PASS`; offline contract checks never imply live provider availability (FR-009–FR-011, FR-014, FR-015, FR-020; AS-05–AS-09, AS-15). |
+| `V1-C28` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§30/§36) | Retries, concurrency, duplicate submissions, or background recovery must not create duplicate business effects. | Any contract-permitted retry is bounded, stateless with respect to business truth, and never creates duplicate business effects or silently switches providers/models (FR-011, FR-012). |
+| `V1-C34` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§28.10/§40); also referenced by `specs/017-professional-knowledge-foundation/spec.md` and `specs/020-embedding-provider-adapter-foundation/spec.md` | Internal admin/staff workflows expose only real human/professional capabilities with explicit scoped assignment—no universal `ADMIN`, fake experts, or empty placeholder queues. | Slice 23 creates no fake Professional Reviewer, approval queue, or staff authority; `APPROVED PROFESSIONAL REVIEWER` remains `UNASSIGNED` externally, and verification uses synthetic/permitted non-personal fixtures (FR-013, FR-016; AS-10, AS-11). |
+| `V1-C37` | `Docs/V1产品需求.md` §25; `Docs/V1技术设计.md` §39 (§7.3/§7.5/§12.8/§32.9A) | Formal Interventions must bind an approved, versioned Intervention Contract with applicability/exclusion/safety gates; neither AI nor RAG may bypass this contract. | Reranker verification and future reranking never bypass Authorization, Consent, Compliance, Safety, lifecycle, or upstream hard filters and never confer Intervention or RAG eligibility truth (§8.2, §10 #6/#7, FR-016, FR-017). |
+| `V1-X11` | `Docs/V1产品需求.md` §26; `Docs/V1技术设计.md` §39 (§7.9/§37) | Real model, cloud, notification, and human costs must be recorded; unconfirmed cost remains `UNKNOWN` and cannot be zero-filled. | Telemetry/cost/usage fields record only facts returned by the provider/runtime; unavailable cost/usage stays `UNKNOWN` rather than fabricated or zero-filled (FR-007, FR-019). |
+| `V1-X14` | `Docs/V1产品需求.md` §26; `Docs/V1技术设计.md` §39 (§28.10/§40); also referenced by `specs/019-professional-retrieval-pgvector-readiness/spec.md` and `specs/020-embedding-provider-adapter-foundation/spec.md` | Staff, exception, and professional review processes verify only genuinely existing capabilities—never placeholder surfaces or fake passes. | Offline fixture/mock verification establishes contract mechanics only; live provider verification requires real controlled invocation on the exact audited head/config; absent Gold Dataset / Professional Reviewer remains explicitly blocked/unverified (FR-014, FR-015, FR-020; AS-01, AS-02, AS-09, AS-10, AS-15). |
+| Provider / Model Replaceability | `Docs/总产品需求.md` §28（「AI 模型不是小树荫真正的地基」）; `Docs/V1技术设计.md` §19–§20 | Models will evolve so the product must never permanently depend on one model/vendor; V1 uses lightweight capability boundaries and `TaskModelRegistry` rather than building a generic Model Gateway platform. | Slice 23 establishes one capability-specific, provider-replaceable reranker port/contract without leaking raw provider response shapes and without constructing a generic provider/model gateway (FR-001, FR-018; AS-14). |
+| `qwen3-rerank` Candidate & Pinned Provenance | `Docs/总体技术架构.md` §11.5; `Docs/V1技术设计.md` §19, §20（「embedding / retrieval」） | `qwen3-rerank` is the first V1 reranker candidate; production `rerank_route_version` must bind to Xiaoshuyin Gold Dataset evidence and a pinned model version (no silent-drifting `latest` alias). | Slice 23 targets `qwen3-rerank` solely as first candidate (not production approval), enforces explicit configured provider/model/version provenance, and rejects floating aliases (FR-002, FR-005, FR-017; AS-02, AS-07). |
+| A/B/C Reranker Stage & Upstream Hard Filters | `Docs/总体技术架构.md` §11.1; `Docs/V1技术设计.md` §13.2, §13.4, §40（「RAG」） | V1 RAG candidates A (dense+sparse), B (dense+`pg_jieba`), and C (dense-only baseline) all pass through `qwen3-rerank` before `Top Context`, preceded by `Authorization -> Published -> Scenario -> Stage -> Age / Applicability -> Version` hard filters. | Slice 23 remains route-neutral (implements neither A/B/C retrieval nor hard filters), enforces caller-owned candidate identity preservation across reranking, and leaves hard filtering upstream (FR-003, FR-004; AS-03, AS-04, AS-12). |
+| No Professional Authority & Gold Eval Boundary | `Docs/总产品需求.md` §31A; `Docs/V1产品需求.md` Preamble (Rules 5–6); `Docs/总体技术架构.md` §11.1, §19A.2, §19A.4; `Docs/V1技术设计.md` §32.13, §40（「RAG」） | Professional Gold labels/rubrics require authentic `APPROVED PROFESSIONAL REVIEWER` authority (currently `UNASSIGNED`); AI/specs/fixtures/code flags cannot self-approve; A/B/C quality metrics (`Recall`, `nDCG`, `MRR`) require the same Gold Dataset; external eval/tests default to synthetic/de-identified non-personal data. | Slice 23 uses synthetic or permitted non-personal fixtures only, prohibits Gold quality or professional correctness claims, and leaves Gold Dataset evaluation downstream (FR-013, FR-016; AS-10, AS-11). |
+| Admitted Upstream Slice Boundaries | `specs/017-professional-knowledge-foundation/spec.md`; `specs/019-professional-retrieval-pgvector-readiness/spec.md`; `specs/020-embedding-provider-adapter-foundation/spec.md`; Slice 18 Frozen Gold Dataset Spec (spec branch boundary) | Slice 17 owns Knowledge item/version/review/publication truth; Slice 18 owns Gold Dataset evaluation truth; Slice 19 owns PG18/pgvector dense substrate; Slice 20 owns Embedding Provider Port / DashScope embedding adapter. | Slice 23 creates no knowledge store/chunks/embeddings, no DB migration or persistence, no second embedding adapter or generic shared gateway, and no Gold evaluation runtime (FR-012, FR-016, FR-018; AS-10, AS-12–AS-14). |
 
 ---
 
@@ -499,6 +525,25 @@ A final technical claim is backed by evidence from a different code head/config/
 
 ---
 
+## Acceptance Evidence
+
+This contract freezes only which class of evidence is required per requirement class so downstream planning and verification remain auditable without prescribing Plan AI 2 or Developer implementation details:
+
+| Requirement / Boundary Class | Covered FR / AS / Section | Evidence Category | Required Evidence Contract |
+|---|---|---|---|
+| Technical contract mechanics & identity preservation | `FR-001`, `FR-003`–`FR-011`, `FR-014`, `FR-019`; `AS-01`, `AS-03`–`AS-07`, `AS-09` | Technical contract evidence (offline unit / contract verification on synthetic or non-personal fixtures) | Reproducible verification demonstrating capability-specific port isolation, unique caller-owned identity checks, exact identity preservation, strict response parsing (missing/duplicate/unknown/malformed/ambiguous/non-finite fail closed), deterministic ordering, distinguishable error normalization, bounded retry without silent fallback, and secret-free/fact-only telemetry (`UNKNOWN` preserved when unavailable). Offline passes establish contract mechanics only and never imply live provider verification. |
+| Controlled live-provider truthfulness | `FR-002`, `FR-005`, `FR-013`, `FR-015`, `FR-020`; `AS-02`, `AS-07`, `AS-08`, `AS-09` | Live-provider evidence truthfulness | If controlled live verification is executed with approved credentials/egress, evidence must bind exact head, provider, pinned candidate model/version/config, request mode, observed contract, and result on safe non-personal fixtures. If credentials/egress/provider are unavailable or config is unpinned, evidence must truthfully record `BLOCKED` / `NOT_EVALUATED` / `UNVERIFIED`—never `PASS` or `READY`. Reproducible provider/contract `FAIL` must be recorded honestly without relaxing validation or adding fallback. |
+| Exact-head & governance provenance | `§9.2`, `§10 #13`, `§16.3`; `AS-15` | Exact-head & governance evidence | Exact audited commit head SHA, config/model/version tuple matching the verified run, separate governance ownership registration prerequisite (where any production path is introduced), and passing repository governance/static verification on that exact head. |
+| Scope-negative & non-persistence boundaries | `FR-012`, `FR-017`, `FR-018`; `AS-12`, `AS-13`, `AS-14` | Scope-negative evidence | Changed-file diff, schema/migration inspection, and static/dependency checks proving zero DB migrations/tables/caches (`FR-012`), zero retrieval/sparsevec/`pg_jieba`/RRF/fusion/hard-filter/A-B-C-eval implementation (`AS-12`), zero production `rag_route_version` / `rerank_route_version` activation (`FR-017`), zero duplicate embedding path, and zero generic provider/model gateway (`FR-018`, `AS-14`). |
+| No Gold quality / no Professional Authority claim | `FR-013`, `FR-016`; `AS-10`, `AS-11` | No Gold / professional claim evidence | Fixture and evidence audit confirming zero real family/minor/private content, zero self-approved professional labels, zero `Recall` / `nDCG` / `MRR` / rerank-delta / route-winner / production-approval claims, and explicit preservation of `Gold / Production Reranker Eval Gate: BLOCKED`. |
+
+Evidence gate invariants:
+1. Offline contract evidence and live-provider evidence are strictly non-interchangeable (`AS-09`).
+2. Absent or unpinned live-provider evidence fails closed (`BLOCKED` / `UNVERIFIED` / `NOT_EVALUATED`) and never produces `READY` (`AS-07`, `AS-08`).
+3. No evidence artifact in Slice 23 may assert Gold Dataset quality, route selection, or Professional Reviewer approval (`AS-10`, `AS-11`).
+
+---
+
 ## 13. Explicit Non-Goals
 
 To prevent later scope expansion, Slice 23 is explicitly NOT:
@@ -840,3 +885,28 @@ Next authorized role after successful remote freeze:
 > Plan AI 2.
 
 STOP after Frozen Spec.
+
+---
+
+## 19. Targeted Governance Compatibility Correction Record
+
+Bounded, additive-only governance compatibility correction of the previously frozen Slice 23 Spec:
+
+- **Previous Frozen Spec Head**: `8fae7497df58446ad034d2986168f6a912444eb3` — **SUPERSEDED BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION**
+- **Previous Frozen Spec Blob**: `311511af1cfcda979d2b6896103c0a0c1d227b0b` — **SUPERSEDED BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION**
+- **Previous Planning Freeze Reference** (not modified by this correction; requires Plan AI 2 reconciliation + full Audit 1 rerun): `2c03ca64a53f92acf837816c65630c9546ff7cda`
+- **Current Main Baseline at Correction**: `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (the four Authority Doc blobs remain identical to the `c8a71bd1` selection baseline)
+
+Only the following mechanical Spec Governance compatibility gaps are closed:
+
+1. `S23-SPEC-GOV-01 — CLOSED`: Added `## Upstream Traceability` mapping existing canonical upstream requirement IDs (`V1-C03`, `V1-C24`, `V1-C27`, `V1-C28`, `V1-C34`, `V1-C37`, `V1-X11`, `V1-X14`) and exact Authority Doc / admitted slice sections to Slice 23 consequences without inventing any requirement ID or product capability.
+2. `S23-SPEC-GOV-02 — CLOSED`: Added `## Acceptance Evidence` freezing only evidence categories and gate invariants (technical contract, live-provider truthfulness, exact-head/governance, scope-negative/non-persistence, no Gold/professional claim) without importing Plan AI 2 or Developer implementation details.
+3. `S23-SPEC-GOV-03 — CLOSED`: Recorded freeze/supersession metadata retaining the historical `8fae7497` / `311511af` freeze identity as `SUPERSEDED BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION`.
+
+Non-semantic-drift declaration:
+
+- Selected Slice (`023-reranker-provider-adapter-foundation`), Purpose, Scope (In Scope / Out of Scope), Truth Ownership, Dependencies (Planning / Implementation / Production), Domain / Technical Invariants, FR-001..FR-020 (`20 / 20`), AS-01..AS-15 (`15 / 15`), Explicit Non-Goals, Clarify Record (`Q01`–`Q12`), Implementation Gate, Production Gate, and Professional Authority Gap remain unchanged.
+- Remaining planning compatibility work (`plan.md`, `checklist.md`, `tasks.md` reconciliation + full Audit 1 rerun) belongs exclusively to **Plan AI 2**.
+- Developer AI / implementation / admission remain **NOT AUTHORIZED**.
+
+STOP after Targeted Governance Compatibility Correction.
