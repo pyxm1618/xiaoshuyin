@@ -26,7 +26,10 @@ describe('S8 direct RLS and migration rollback', () => {
 
     const makeFamily = async (label: string, creatorPersonId: string) => {
       const id = (await admin.query('SELECT uuidv7() AS id')).rows[0].id as string;
-      await admin.query('SELECT app.create_family($1,$2,$3)', [id, creatorPersonId, label]);
+      await admin.query(
+        'INSERT INTO families (id,display_name,created_by_person_id) VALUES ($1,$2,$3)',
+        [id, label, creatorPersonId]
+      );
       await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, creatorPersonId]);
       await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, personId]);
       await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, personBId]);

@@ -18,10 +18,12 @@ import {
   ParticipationInvitePublicView,
   ParticipationNotFoundError,
   ParticipationResource,
+  ParticipationResponseDto,
   ParticipationStateConflictError,
   ParticipationTargetIneligibleError,
   ParticipationValidationError,
   WithdrawParticipationRequest,
+  CreateParticipationResponseRequest,
 } from '@xiaoshuyin/contracts';
 import {
   allocateParticipationId,
@@ -37,6 +39,7 @@ import {
   getPublicParticipationInvite,
   hasLiveParticipation,
   hashParticipationInviteToken,
+  hashPayload,
   insertParticipationAudit,
   insertParticipationInvite,
   isFamilyMember,
@@ -52,6 +55,7 @@ import {
 } from '@xiaoshuyin/domain';
 import { authorize } from '@xiaoshuyin/authorization';
 import {
+  assertIdentityContextMatches,
   setFamilyContext,
   withIdentityTransaction,
   setInviteTokenContext,
@@ -64,18 +68,24 @@ import {
   requireFamilyAction,
 } from '../authz.js';
 import {
+  lockIdempotentCommandInTransaction,
+  runLockedIdempotentCommandInTransaction,
   participationInviteSnapshot,
   rehydrateParticipationInviteReplay,
   runIdempotentCommand,
   runIdempotentCommandInTransaction,
   sendCommandOutcome,
   type CommandResponse,
+  type CommandOutcome,
+  type IdempotentCommandConfig,
 } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
+import { recordDialogueMessage } from '../../../../../packages/domain/src/internal/message-writer.js';
 
 const TAG = ['participation'];
 const BEARER = [{ bearerAuth: [] }];
 const IdParams = z.object({ id: z.string().meta({ format: 'uuid' }) });
+const ParticipationIdParams = z.object({ id: z.string().uuid() });
 const TokenParams = z.object({ token: z.string() });
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -247,7 +257,13 @@ function requireSelfDecision(
     product: 'V1',
     family: null,
     case: null,
-    participation: { personId: row.person_id, state: row.state },
+    participation: {
+      participationId: row.id,
+      familyId: row.family_id,
+      caseId: row.case_id,
+      personId: row.person_id,
+      state: row.state,
+    },
     resource: { type: 'PARTICIPATION', participationId: row.id },
     action,
     purpose: 'PARTICIPATION',
@@ -330,6 +346,14 @@ async function runSelfStateCommand(
   }
   if (plan.action === 'CONFLICT' || plan.action === 'EXPIRE_AND_CONFLICT') {
     return stateConflict(plan.currentState);
+  }
+
+  if (input.command === 'ACCEPT') {
+    const caseRow = await getCaseById(tx, locked.case_id);
+    if (!caseRow) throw participationNotFound();
+    if (caseRow.status === 'CLOSED') {
+      throw typedError('CASE_CLOSED', 'Case is closed');
+    }
   }
 
   if (
@@ -479,6 +503,9 @@ export function registerParticipationRoutes(
             async (tx) => {
               const caseRow = await getCaseById(tx, caseId);
               if (!caseRow) throw caseNotFound();
+              if (caseRow.status === 'CLOSED') {
+                throw typedError('CASE_CLOSED', 'Case is closed');
+              }
 
               const targetMember = await isFamilyMember(tx, familyId, parsed.data.personId);
               if (!targetMember) throw targetIneligible();
@@ -873,8 +900,11 @@ export function registerParticipationRoutes(
               familyId,
               action: 'PARTICIPATION_READ_MANAGER',
               purpose: 'FAMILY_MANAGEMENT',
-              resource: { type: 'PARTICIPATION', participationId },
+              resource: { type: 'PARTICIPATION', participationId: visible.id },
               participation: {
+                participationId: visible.id,
+                familyId: visible.family_id,
+                caseId: visible.case_id,
                 personId: visible.person_id,
                 state: visible.state,
               },
@@ -896,6 +926,145 @@ export function registerParticipationRoutes(
 
       if (!managed) throw participationNotFound();
       return reply.status(200).send(participationBody(managed));
+    }
+  );
+
+  app.post(
+    '/api/v1/participations/:id/responses',
+    {
+      onRequest: app.authenticate,
+      schema: {
+        tags: TAG,
+        summary: 'Submit a child-authored participation response message',
+        security: BEARER,
+        params: ParticipationIdParams,
+        body: CreateParticipationResponseRequest,
+        response: {
+          201: ParticipationResponseDto,
+          401: ErrorSchema,
+          403: ErrorSchema,
+          404: ParticipationNotFoundError,
+          409: z.union([ParticipationStateConflictError, ErrorSchema]),
+          422: ParticipationValidationError,
+        },
+      },
+    },
+    async (req, reply) => {
+      const actor = req.actor;
+      if (!actor?.accountId || !actor.personId) throw typedError('UNAUTHENTICATED', 'Unauthenticated');
+      const actorAccountId = actor.accountId;
+      const actorPersonId = actor.personId;
+
+      const params = ParticipationIdParams.safeParse(req.params);
+      if (!params.success) {
+        throw typedError('VALIDATION_ERROR', 'Invalid participation id');
+      }
+      const participationId = params.data.id;
+
+      const parsed = CreateParticipationResponseRequest.safeParse(req.body);
+      if (!parsed.success) {
+        throw typedError('VALIDATION_ERROR', 'Invalid response body');
+      }
+      const content = parsed.data.content;
+      const idempotencyKey =
+        (req.headers['idempotency-key'] as string | undefined) ??
+        parsed.data.idempotencyKey;
+      if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+        throw typedError('VALIDATION_ERROR', 'Valid idempotencyKey is required');
+      }
+      const requestHash = hashPayload({ participationId, content });
+
+      // Finding #32: current authorization and idempotency replay must share
+      // one transaction. The generic fast path would otherwise allow a stale
+      // result after withdrawal or a change of processing authority.
+      const cfg: IdempotentCommandConfig = {
+        accountId: actorAccountId,
+        personId: actorPersonId,
+        purpose: 'PARTICIPATION',
+        commandType: 'CASE_MESSAGE_CREATE',
+        idempotencyKey,
+        requestHash,
+      };
+      const checkResponse = (row: ParticipationRow): CommandResponse | null => {
+        const decision = authorize({
+          actor: { accountId: actorAccountId, personId: actorPersonId },
+          product: 'V1',
+          family: null,
+          case: null,
+          participation: {
+            participationId: row.id,
+            familyId: row.family_id,
+            caseId: row.case_id,
+            personId: row.person_id,
+            state: row.state,
+          },
+          resource: { type: 'PARTICIPATION', participationId },
+          action: 'PARTICIPATION_RESPOND_SELF',
+          purpose: 'PARTICIPATION',
+        });
+
+        if (decision.decision === 'DENY') {
+          if (decision.reason === 'NOT_PARTICIPANT') throw participationNotFound();
+          if (decision.reason === 'PARTICIPATION_NOT_ACTIVE') return stateConflict(row.state);
+          throw typedError('FORBIDDEN', decision.reason);
+        }
+        return null;
+      };
+
+      const outcome = await withIdentityTransaction(
+        pool,
+        { accountId: actorAccountId, purpose: 'PARTICIPATION' },
+        async (tx): Promise<CommandOutcome> => {
+          await assertIdentityContextMatches(tx, cfg);
+          const visible = await getParticipationById(tx, participationId);
+          if (!visible) throw participationNotFound();
+          const initialConflict = checkResponse(visible);
+          if (initialConflict) return { action: 'EXECUTED', ...initialConflict };
+
+          await setFamilyContext(tx, visible.family_id, actorPersonId, 'PARTICIPATION');
+
+          // Preserve the command lock-before-business-lock order used by
+          // accept/withdraw. No cached body is read before current authority.
+          await lockIdempotentCommandInTransaction(tx, cfg);
+          const locked = await lockParticipationById(tx, participationId);
+          if (!locked) throw participationNotFound();
+          const currentConflict = checkResponse(locked);
+          if (currentConflict) return { action: 'EXECUTED', ...currentConflict };
+
+          // The participation row and the compliance profile remain locked
+          // through both the replay decision and any new message commit.
+          if (!(await isParticipationProcessingAllowed(tx, locked.person_id))) {
+            throw typedError('FORBIDDEN', 'PARTICIPATION_PROCESSING_DISALLOWED');
+          }
+
+          return runLockedIdempotentCommandInTransaction(tx, cfg, async (tx) => {
+            const message = await recordDialogueMessage(
+              tx,
+              {
+                familyId: locked.family_id,
+                caseId: locked.case_id,
+                actorAccountId,
+                actorPersonId,
+                purpose: 'PARTICIPATION',
+              },
+              content
+            );
+            return {
+              status: 201,
+              body: {
+                id: message.id,
+                caseId: locked.case_id,
+                participationId: locked.id,
+                authorPersonId: actorPersonId,
+                content,
+                createdAt: message.recordedAt.toISOString(),
+              },
+            };
+          });
+        }
+      );
+
+      return sendCommandOutcome(reply, outcome);
     }
   );
 }

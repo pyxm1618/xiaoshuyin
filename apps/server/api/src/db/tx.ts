@@ -19,28 +19,19 @@ type TxClient = pg.PoolClient;
  * transaction rollbacks) must NOT mark the client broken.
  */
 export function isBrokenClientError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-
-  const code = (error as { code?: unknown }).code;
-  if (typeof code === 'string') {
-    // 1. Node.js network / transport level system errors (Finding #31)
-    if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'EPIPE') {
-      return true;
+  const visited = new Set<object>();
+  let current = error;
+  for (let depth = 0; depth < 16; depth++) {
+    if (!current || typeof current !== 'object' || visited.has(current)) break;
+    visited.add(current);
+    const failure = current as { code?: unknown; errno?: unknown; cause?: unknown };
+    for (const code of [failure.code, failure.errno]) {
+      if (typeof code === 'string' && (
+        code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'EPIPE' ||
+        /^08/.test(code) || code === '57P01' || code === '25P02'
+      )) return true;
     }
-    // 2. PostgreSQL connection exceptions (08xxx), admin shutdown (57P01),
-    // and "current transaction is aborted" (25P02 — a failed ROLLBACK leaves the
-    // session unusable for further work).
-    if (/^08/.test(code) || code === '57P01' || code === '25P02') {
-      return true;
-    }
-  }
-
-  const errno = (error as { errno?: unknown }).errno;
-  if (
-    typeof errno === 'string' &&
-    (errno === 'ECONNRESET' || errno === 'ETIMEDOUT' || errno === 'EPIPE')
-  ) {
-    return true;
+    current = failure.cause;
   }
 
   return false;
@@ -57,7 +48,8 @@ export function isBrokenClientError(error: unknown): boolean {
  */
 export async function withTransactionClient<T>(
   pool: pg.Pool,
-  fn: (tx: TxClient) => Promise<T>
+  fn: (tx: TxClient) => Promise<T>,
+  options: { isolationLevel?: 'REPEATABLE READ' } = {}
 ): Promise<T> {
   const client = await pool.connect();
   let broken = false;
@@ -68,7 +60,11 @@ export async function withTransactionClient<T>(
   client.on('error', onClientError);
 
   try {
-    await client.query('BEGIN');
+    await client.query(
+      options.isolationLevel === 'REPEATABLE READ'
+        ? 'BEGIN ISOLATION LEVEL REPEATABLE READ'
+        : 'BEGIN'
+    );
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -102,7 +98,7 @@ function identityContextMismatch(): never {
  * from account_id. Verify that authoritative result before set_family_context()
  * is allowed to overwrite app.person_id with a caller-supplied value.
  */
-async function assertIdentityContextMatches(
+export async function assertIdentityContextMatches(
   tx: TxClient,
   opts: { accountId: string; personId: string; purpose: string }
 ): Promise<void> {
@@ -151,6 +147,11 @@ export async function withFamilyCreationTransaction<T>(
 ): Promise<T> {
   return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [opts.accountId, 'FAMILY_MANAGEMENT']);
+    await assertIdentityContextMatches(client, {
+      accountId: opts.accountId,
+      personId: opts.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    });
     await client.query('SELECT app.create_family($1, $2, $3)', [
       opts.newFamilyId,
       opts.personId,
@@ -162,7 +163,13 @@ export async function withFamilyCreationTransaction<T>(
 
 export async function withRlsTransaction<T>(
   pool: pg.Pool,
-  opts: { familyId: string; accountId: string; personId: string; purpose: string },
+  opts: {
+    familyId: string;
+    accountId: string;
+    personId: string;
+    purpose: string;
+    isolationLevel?: 'REPEATABLE READ';
+  },
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
   return withTransactionClient(pool, async (client) => {
@@ -174,7 +181,7 @@ export async function withRlsTransaction<T>(
       opts.purpose,
     ]);
     return fn(client);
-  });
+  }, opts.isolationLevel ? { isolationLevel: opts.isolationLevel } : {});
 }
 // ── Slice 006 identity-binding wrappers ─────────────────────
 // Five thin wrappers reusing the same BEGIN/COMMIT/ROLLBACK + transaction-bound
@@ -265,6 +272,16 @@ export interface BindingTargetTxOptions {
 }
 
 /** Target-person-only Gate context (used to resolve P1's unique Family). */
+export async function setBindingTargetContext(
+  tx: TxClient,
+  opts: { targetPersonId: string; actorAccountId?: string | null }
+): Promise<void> {
+  await tx.query('SELECT app.set_binding_target_context($1, $2)', [
+    opts.targetPersonId,
+    opts.actorAccountId ?? null,
+  ]);
+}
+
 export async function withBindingTargetTransaction<T>(
   pool: pg.Pool,
   opts: BindingTargetTxOptions,
@@ -431,6 +448,16 @@ export async function setBindingCandidateAccountId(
   accountId: string
 ): Promise<void> {
   await tx.query('SELECT app.set_binding_candidate_account_id($1)', [accountId]);
+}
+
+export async function setBindingIdentityContext(
+  tx: TxClient,
+  opts: { identityDigest: string; purpose?: string }
+): Promise<void> {
+  await tx.query('SELECT app.set_binding_identity_context($1, $2)', [
+    opts.identityDigest,
+    opts.purpose ?? 'IDENTITY_BINDING_PENDING',
+  ]);
 }
 
 /**

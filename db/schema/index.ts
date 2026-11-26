@@ -10,5 +10,6 @@
 
 export * from '../../packages/domain/src/safety/schema.js';export * from '../../packages/domain/src/compliance/schema.js';
 export * from '../../packages/domain/src/scene-runtime-schema.js';
+export * from '../../packages/domain/src/phone-use-contract-schema.js';
 
 export * from '../../packages/domain/src/intervention-definition-schema.js';

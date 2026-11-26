@@ -26,6 +26,8 @@ import {
   setBindingAttemptContext,
   setBindingCandidateAccountId,
   setBindingGateContext,
+  setBindingIdentityContext,
+  setBindingTargetContext,
   withBindingBootstrapTransaction,
 } from '../db/tx.js';
 import {
@@ -54,6 +56,7 @@ import {
   insert as insertOperationKey,
   lockScope,
   mapAttempt,
+  recordReused,
   setScope,
 } from './operation-key-repository.js';
 import { bindingError } from './errors.js';
@@ -211,6 +214,43 @@ export async function bootstrap(
               await clearOpenidForNoAttemptIdentity(tx, identityDigest);
             }
           }
+        } else if (existing?.reusedAccountId && existing?.reusedPersonId) {
+          // Finding #11: Case B REUSED exact replay.
+          // Switch RLS context to IDENTITY_BINDING_GATE with targetPersonId to revalidate authority
+          await setBindingTargetContext(tx, { targetPersonId: existing.reusedPersonId });
+          // 1. Account must exist, match original operation, and still be ACTIVE
+          const candidateAccount = await findAccountByOpenid(tx, openid, true);
+          if (
+            !candidateAccount ||
+            candidateAccount.id !== existing.reusedAccountId ||
+            !isAccountAuthorityEligible(candidateAccount)
+          ) {
+            await clearOpenidForNoAttemptIdentity(tx, identityDigest);
+            return { kind: 'GENERIC', pendingContextToken: token };
+          }
+          // 2. Bound Person must still exist and be bound to this exact Account
+          const boundPerson = await getPersonById(tx, existing.reusedPersonId);
+          if (!boundPerson || boundPerson.account_id !== candidateAccount.id) {
+            await clearOpenidForNoAttemptIdentity(tx, identityDigest);
+            return { kind: 'GENERIC', pendingContextToken: token };
+          }
+          // 3. Current authority still holds: re-issue fresh session token and stably restore REUSED
+          const expiresAtSeconds = Math.floor(Date.now() / 1000) + 86400;
+          const sessionToken = signToken(
+            {
+              accountId: candidateAccount.id,
+              epoch: candidateAccount.sessionEpoch,
+              exp: expiresAtSeconds,
+            },
+            deps.sessionSecret
+          );
+          await clearOpenidForFreshContext(tx, context.id);
+          return {
+            kind: 'REUSED',
+            sessionToken,
+            accountId: candidateAccount.id,
+            personId: boundPerson.id,
+          };
         } else {
           // Replay of a pre-attempt (no authoritative attempt) operation, e.g.
           // an invalid invitation: the fresh transport context must not retain
@@ -309,6 +349,18 @@ export async function bootstrap(
       if (targetPerson && targetPerson.account_id !== null) {
         if (candidateAccount && candidateAccount.id === targetPerson.account_id) {
           // Correct Account → reuse existing binding; never re-confirm.
+          if (operationKeyId) {
+            await setBindingIdentityContext(tx, {
+              identityDigest,
+              purpose: 'IDENTITY_BINDING_PENDING',
+            });
+            await setScope(tx, scope.scopeKey);
+            await recordReused(tx, {
+              operationKeyId,
+              accountId: candidateAccount.id,
+              personId: targetPerson.id,
+            });
+          }
           const expiresAtSeconds = Math.floor(Date.now() / 1000) + 86400;
           const sessionToken = signToken(
             {

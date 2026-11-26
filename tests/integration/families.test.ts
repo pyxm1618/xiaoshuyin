@@ -7,10 +7,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import crypto from 'node:crypto';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import { auth, commandHeaders, login, loginWithLabel } from '../setup/api.js';
+import { runIdempotentCommand } from '../../apps/server/api/src/idempotency.js';
 
 let verifyPool: pg.Pool;
 
@@ -169,5 +171,112 @@ describe('Families Integration (T045)', () => {
       },
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  it('Finding #25: Family creation fails closed when Account-Person identity context mismatches', async () => {
+    // 1. Login user A (creates Account A and Person A)
+    const userA = await loginWithLabel(app, 'fam_f25_a');
+    // 2. Login user B (creates Account B and Person B)
+    const userB = await loginWithLabel(app, 'fam_f25_b');
+
+    // 3. Directly invoke runIdempotentCommand with accountA + personB (mismatched person)
+    await expect(
+      runIdempotentCommand(
+        verifyPool,
+        {
+          accountId: userA.accountId,
+          personId: userB.personId, // mismatched person!
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'FAMILY_CREATE',
+          idempotencyKey: 'f25-mismatch-' + crypto.randomUUID(),
+          requestHash: '0000000000000000000000000000000000000000000000000000000000000000',
+        },
+        async () => {
+          return { status: 201, body: {} };
+        }
+      )
+    ).rejects.toThrow();
+
+    // Verify no family was created for person B
+    const fams = await verifyPool.query(
+      'SELECT count(*)::int AS cnt FROM families WHERE created_by_person_id = $1',
+      [userB.personId]
+    );
+    expect(fams.rows[0].cnt).toBe(0);
+  });
+
+  it('Finding #25: a completed Family creation cannot replay or mismatch under a forged Person context', async () => {
+    const a = await loginWithLabel(app, 'fam_f25_replay_a');
+    const b = await loginWithLabel(app, 'fam_f25_replay_b');
+    const headers = commandHeaders(a.token, 'f25-replay');
+    const payload = {
+      displayName: 'Identity replay regression',
+      creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+    };
+    const req = { method: 'POST' as const, url: '/api/v1/families', headers, payload };
+    const first = await app.inject(req);
+    expect(first.statusCode).toBe(201);
+    const replay = await app.inject(req);
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toEqual(first.json());
+
+    const key = headers['idempotency-key']!;
+    const stored = await verifyPool.query<{ request_hash: string }>(
+      "SELECT request_hash FROM idempotency_keys WHERE actor_account_id=$1 AND command_type='FAMILY_CREATE' AND idempotency_key=$2",
+      [a.accountId, key]
+    );
+    expect(stored.rows).toHaveLength(1);
+    const appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']! });
+    try {
+      const cfg = {
+        accountId: a.accountId, personId: b.personId,
+        purpose: 'FAMILY_MANAGEMENT', commandType: 'FAMILY_CREATE' as const,
+        idempotencyKey: key, requestHash: stored.rows[0]!.request_hash,
+      };
+      let writes = 0;
+      const mutate = async () => { writes++; return { status: 201, body: {} }; };
+      await expect(runIdempotentCommand(appPool, cfg, mutate)).rejects.toMatchObject({ code: '42501' });
+      await expect(runIdempotentCommand(appPool, { ...cfg, requestHash: 'f'.repeat(64) }, mutate))
+        .rejects.toMatchObject({ code: '42501' });
+      expect(writes).toBe(0);
+    } finally {
+      await appPool.end();
+    }
+    const families = await verifyPool.query(
+      'SELECT id FROM families WHERE created_by_person_id=$1 OR created_by_person_id=$2',
+      [a.personId, b.personId]
+    );
+    expect(families.rows).toEqual([{ id: first.json().id }]);
+  });
+
+
+  it('A4: direct DB family seam rejects a spoofed creator Person', async () => {
+    const accountOwner = await loginWithLabel(app, 'fam_a4_owner');
+    const spoofed = await loginWithLabel(app, 'fam_a4_spoof');
+    const familyId = crypto.randomUUID();
+    const client = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+    await client.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'SELECT app.set_identity_context($1, $2)',
+        [accountOwner.accountId, 'FAMILY_MANAGEMENT']
+      );
+      await expect(
+        client.query(
+          'SELECT app.create_family($1, $2, $3)',
+          [familyId, spoofed.personId, 'spoofed-family']
+        )
+      ).rejects.toMatchObject({ code: '42501' });
+      await client.query('ROLLBACK');
+    } finally {
+      await client.end();
+    }
+
+    const residue = await verifyPool.query(
+      'SELECT id FROM families WHERE id = $1 OR created_by_person_id = $2',
+      [familyId, spoofed.personId]
+    );
+    expect(residue.rows).toHaveLength(0);
   });
 });

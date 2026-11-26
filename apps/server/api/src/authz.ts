@@ -36,7 +36,13 @@ export interface FamilyActionRequest {
   /** Present only for CASE_READ; the Case increment (plan D-6). */
   caseId?: string;
   /** Verified participation row resolved in this same transaction. */
-  participation?: { personId: string; state: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN' } | null;
+  participation?: {
+    participationId?: string;
+    familyId?: string;
+    caseId?: string;
+    personId: string;
+    state: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
+  } | null;
   /** Verified guardian identity of the consent / request being acted on. */
   guardianPersonId?: string | null;
   /** Target person for MEMBER_UPDATE. */
@@ -218,8 +224,8 @@ export async function requirePhoneUseContractChildConfirmation(
     caseId: string;
     contract: Pick<
       PhoneUseContractVersionRow,
-      'id' | 'family_id' | 'case_id' | 'child_party_person_id' | 'child_participation_id'
-    >;
+      'id' | 'family_id' | 'case_id' | 'child_party_person_id'
+    > & { child_participation_id: string };
     participation: Pick<
       ParticipationRow,
       'id' | 'family_id' | 'case_id' | 'person_id' | 'state'

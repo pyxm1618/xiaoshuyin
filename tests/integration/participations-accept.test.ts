@@ -50,4 +50,27 @@ describe('Slice 4 participation accept', () => {
       code:'PARTICIPATION_NOT_FOUND',message:'Participation not found',
     });
   });
+
+
+  it('C2 keeps a PENDING participation inactive when the Case closes before accept', async () => {
+    const f=await createParticipationFixture(h,'accept-closed',{target:'manager'});
+    const target=await addBoundAdultTargetToFamily(h,f.familyId,'accept-closed');
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,'accept-closed-invite'
+    );
+    expect(created.statusCode).toBe(201);
+
+    await h.admin.query(`UPDATE cases SET status='CLOSED' WHERE id=$1`,[f.caseId]);
+    const accepted=await acceptInvite(
+      h.app,target.token,created.json().inviteToken,'accept-closed-command'
+    );
+    expect(accepted.statusCode).toBe(409);
+    expect(accepted.json().code).toBe('CASE_CLOSED');
+
+    const row=await h.admin.query<{state:string;accepted_at:Date|null}>(
+      `SELECT state,accepted_at FROM case_participants WHERE id=$1`,
+      [created.json().participationId]
+    );
+    expect(row.rows[0]).toEqual({state:'PENDING',accepted_at:null});
+  });
 });

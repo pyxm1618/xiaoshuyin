@@ -179,27 +179,26 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
   // that command only. Other endpoints keep the Fastify default (400).
   const routeUrl = req.routeOptions?.url ?? req.url;
   const strictJsonCommands = new Set([
-    '/api/v1/cases',
-    '/api/v1/cases/:id/messages',
-    '/api/v1/cases/:id/switch-primary',
-    '/api/v1/cases/:id/participation-invites',
-    '/api/v1/participation-invites/:token/accept',
-    '/api/v1/participations/:id/decline',
-    '/api/v1/participations/:id/withdraw',
-    '/api/v1/cases/:id/assessments',
-    '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
-    '/api/v1/cases/:id/digital-use/contract/drafts',
-    '/api/v1/cases/:id/digital-use/contract/drafts/:version',
-    '/api/v1/cases/:id/digital-use/contract/:version/confirm',
-    '/api/v1/cases/:id/digital-use/contract/:version/revise',
-    '/api/v1/cases/:id/digital-use/roleplays',
-    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/turns',
-    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/rate',
-    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/select',
+    'POST /api/v1/cases',
+    'POST /api/v1/cases/:id/messages',
+    'POST /api/v1/cases/:id/switch-primary',
+    'POST /api/v1/cases/:id/participation-invites',
+    'POST /api/v1/participation-invites/:token/accept',
+    'POST /api/v1/participations/:id/decline',
+    'POST /api/v1/participations/:id/withdraw',
+    'POST /api/v1/cases/:id/assessments',
+    'POST /api/v1/cases/:id/scene/nodes/:nodeCode/responses',
+    'POST /api/v1/cases/:id/digital-use/contract/drafts',
+    'PATCH /api/v1/cases/:id/digital-use/contract/drafts/:version',
+    'POST /api/v1/cases/:id/digital-use/contract/:version/confirm',
+    'POST /api/v1/cases/:id/digital-use/contract/:version/revise',
+    'POST /api/v1/cases/:id/digital-use/roleplays',
+    'POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/turns',
+    'POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/rate',
+    'POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/select',
   ]);
-  const isStrictCreateCommand =
-    req.method === 'POST' && strictJsonCommands.has(routeUrl);
-  if (isStrictCreateCommand && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+  const isStrictJsonCommand = strictJsonCommands.has(`${req.method} ${routeUrl}`);
+  if (isStrictJsonCommand && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
     return reply.status(422).send({
       code: 'VALIDATION_ERROR',
       message: 'Invalid request body',

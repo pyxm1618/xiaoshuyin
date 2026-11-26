@@ -27,6 +27,7 @@ import {
   lockFamilyForPrimaryDecision,
   lockSceneCase,
   validateSceneRefs,
+  type BoundPhoneUseContractVersionRow,
   type PhoneUseContractVersionRow,
   type SceneArtifactRow,
   type StoredSceneRef,
@@ -203,7 +204,7 @@ export async function resolveA5002SubjectSnapshot(
     contractRevision: number;
     lock?: boolean;
   }
-): Promise<{ row: PhoneUseContractVersionRow; snapshot: A5002SubjectSnapshot }> {
+): Promise<{ row: BoundPhoneUseContractVersionRow; snapshot: A5002SubjectSnapshot }> {
   const lock = input.lock ?? false;
   // Deterministic Contract lock order is owned by the repository query
   // (version ASC). Resolve the exact requested Contract from that locked lineage
@@ -223,12 +224,13 @@ export async function resolveA5002SubjectSnapshot(
   ) {
     throw reviewError('PHONE_USE_CONTRACT_STALE_REVISION');
   }
-  if (row.status !== 'ACTIVE') {
+  if (row.status !== 'ACTIVE' || !row.child_participation_id) {
     throw reviewError('PHONE_USE_CONTRACT_STALE_REVISION');
   }
+  const boundRow = row as BoundPhoneUseContractVersionRow;
 
   return {
-    row,
+    row: boundRow,
     snapshot: {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -241,7 +243,7 @@ export async function resolveA5002SubjectSnapshot(
       executionPeriod: row.execution_period,
       adultPartyPersonId: row.adult_party_person_id,
       childPartyPersonId: row.child_party_person_id,
-      childParticipationId: row.child_participation_id,
+      childParticipationId: boundRow.child_participation_id,
       contractTermsFingerprint: contractTermsFingerprint(row),
       supersedesId: row.supersedes_id,
       lineage: lineageFor(row, versions),

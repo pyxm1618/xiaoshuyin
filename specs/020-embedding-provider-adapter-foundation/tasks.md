@@ -49,18 +49,18 @@
 > 本清单是治理校验与完成证据登记的唯一机器可读契约来源。
 > `[REQ:...]` 追踪需求身份；`[VERIFY:...]` 追踪可机器验证的仓库路径。
 
-- [ ] T001 G0 remote reconciliation / frozen identity / competing-work recheck — [REQ:FR-047,FR-051; NS-017,NS-018,NS-027,NS-029,NS-030] [VERIFY: .specify/scripts/validate-change-governance.mjs scripts/guard-static.mjs]
-- [ ] T002 G1 governance prerequisite PR（MODE A：ownership registry only；guard-static unchanged）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-031,NS-032,NS-039,NS-040] [VERIFY: .specify/implementation-ownership.json .specify/scripts/validate-change-governance.mjs]
-- [ ] T003 G2 independent governance audit + merge（MODE A：ownership narrow / guard unchanged / no SDK / unknown path fail closed）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-039,NS-040] [VERIFY: .specify/scripts/tests/run-change-governance-tests.mjs scripts/guard-static.mjs]
-- [ ] T004 I0 rebind implementation branch to current main — [REQ:FR-048,FR-051; NS-003,NS-017] [VERIFY: .specify/scripts/validate-change-governance.mjs]
-- [ ] T005 I1 Port contract and types — [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-052] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
-- [ ] T006 I2 DashScope protocol adapter (config / transport / mapping) — [REQ:FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts]
-- [ ] T007 I3 validation / error normalization / timeout / retry / cancellation — [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts]
-- [ ] T008 I4 telemetry / cost record / secret boundaries / evidence derivation — [REQ:FR-010,FR-037,FR-038,FR-039,FR-040,FR-041,FR-042,FR-043,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
-- [ ] T009 I5 contract test suite completion — [REQ:FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055,FR-068,FR-069] [VERIFY: tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts]
-- [ ] T010 I6 architecture / negative-scope static guards（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary）— [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062;NS-041,NS-042] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
+- [x] T001 G0 remote reconciliation / frozen identity / competing-work recheck — [REQ:FR-047,FR-051; NS-017,NS-018,NS-027,NS-029,NS-030] [VERIFY: .specify/scripts/validate-change-governance.mjs scripts/guard-static.mjs]
+- [x] T002 G1 governance prerequisite PR（MODE A：ownership registry only；guard-static unchanged）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-031,NS-032,NS-039,NS-040] [VERIFY: .specify/implementation-ownership.json .specify/scripts/validate-change-governance.mjs]
+- [x] T003 G2 independent governance audit + merge（MODE A：ownership narrow / guard unchanged / no SDK / unknown path fail closed）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-039,NS-040] [VERIFY: .specify/scripts/tests/run-change-governance-tests.mjs scripts/guard-static.mjs]
+- [x] T004 I0 rebind implementation branch to current main — [REQ:FR-048,FR-051; NS-003,NS-017] [VERIFY: .specify/scripts/validate-change-governance.mjs]
+- [x] T005 I1 Port contract and types — [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-052] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
+- [x] T006 I2 DashScope protocol adapter (config / transport / mapping) — [REQ:FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts]
+- [x] T007 I3 validation / error normalization / timeout / retry / cancellation — [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts]
+- [x] T008 I4 telemetry / cost record / secret boundaries / evidence derivation — [REQ:FR-010,FR-037,FR-038,FR-039,FR-040,FR-041,FR-042,FR-043,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
+- [x] T009 I5 contract test suite completion — [REQ:FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055,FR-068,FR-069] [VERIFY: tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts]
+- [x] T010 I6 architecture / negative-scope static guards（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary）— [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062;NS-041,NS-042] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
 - [ ] T011 I7 optional real-provider verification (explicit opt-in) — [REQ:FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062,FR-069] [VERIFY: tests/ai/embedding-provider-verification.test.ts tests/evidence/embedding-provider-verification.json]
-- [ ] T012 I8 canonical regression + STOP at READY FOR AUDIT 2（含 V15 guard blob equality）— [REQ:FR-051,FR-053,FR-055,FR-059; NS-003,NS-018,NS-039] [VERIFY: scripts/verify-all.mjs scripts/guard-static.mjs]
+- [x] T012 I8 canonical regression + STOP at READY FOR AUDIT 2（含 V15 guard blob equality）— [REQ:FR-051,FR-053,FR-055,FR-059; NS-003,NS-018,NS-039] [VERIFY: scripts/verify-all.mjs scripts/guard-static.mjs]
 
 ---
 
@@ -762,11 +762,13 @@ node .specify/scripts/validate-change-governance.mjs --base origin/main
 node scripts/verify-all.mjs
 git rev-parse origin/main:scripts/guard-static.mjs   # V15
 git rev-parse HEAD:scripts/guard-static.mjs          # V15: 必须与上一行相同
-grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bun.lock   # V16: 命中 0
+git grep -nE "dashscope|@alicloud" -- apps/server/api/src/ai/embedding package.json bun.lock   # V16: 命中 0（与 plan.md §7.1 V16 同一 ERE）
 git hash-object specs/020-embedding-provider-adapter-foundation/spec.md
 git diff --name-only origin/main...HEAD
 git status --short
 ```
+
+**V15 / V16 证据说明**：V15 由历史 base/head guard blob 比较（`50c6864f…` 不变）、实现 diff 不含 `scripts/guard-static.mjs` 与 architecture/static 回归共同证明；V16 由依赖 / import 扫描证明（CI 内等价断言在 `tests/architecture/embedding-provider-boundary.test.ts`）。CI 中不存在独立的 V15 / V16 job 或 step（详见 `plan.md` §7.1）。
 
 **Done criteria**：
 

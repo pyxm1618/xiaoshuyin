@@ -25,6 +25,7 @@ import {
   insertAuditEvent,
   isFamilyMember,
   generateUuidv7,
+  getPersonById,
 } from '@xiaoshuyin/domain';
 import { requireFamilyAction } from '../authz.js';
 import {
@@ -43,6 +44,8 @@ import {
   insertComplianceProfile,
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Resolve + validate the provenance provider for one profile-value write.
@@ -173,11 +176,13 @@ async function buildMemberResponse(
       code: 'INTERNAL_ERROR',
     });
   }
+  const person = await getPersonById(tx, personId);
+  const accountBound = person !== null && person.account_id !== null;
   const values = await getProfileValuesFull(tx, personId);
   return {
     personId,
     familyId,
-    accountBound: false,
+    accountBound,
     profile: {
       ageBand: profile.age_band,
       minorMode: profile.minor_mode,
@@ -202,6 +207,10 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
     }
 
     const familyId = (req.params as any).id;
+    if (typeof familyId !== 'string' || !UUID_PATTERN.test(familyId)) {
+      const err = toHttpError('VALIDATION_ERROR', 'Invalid family id');
+      return reply.status(err.statusCode).send(err);
+    }
     const parsed = CreateMemberRequest.safeParse(req.body);
     if (!parsed.success) {
       const err = toHttpError('VALIDATION_ERROR', 'Invalid request body');
@@ -388,6 +397,15 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
 
     const familyId = (req.params as any).id;
     const targetPersonId = (req.params as any).personId;
+    if (
+      typeof familyId !== 'string' ||
+      !UUID_PATTERN.test(familyId) ||
+      typeof targetPersonId !== 'string' ||
+      !UUID_PATTERN.test(targetPersonId)
+    ) {
+      const err = toHttpError('VALIDATION_ERROR', 'Invalid path parameter');
+      return reply.status(err.statusCode).send(err);
+    }
     const parsed = UpdateMemberRequest.safeParse(req.body);
     if (!parsed.success) {
       const err = toHttpError('VALIDATION_ERROR', 'Invalid request body');

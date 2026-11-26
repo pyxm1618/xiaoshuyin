@@ -14,8 +14,9 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -712,13 +713,41 @@ async function main() {
   }
 }
 
-// Run main if invoked directly as CLI
-const isDirectCli = process.argv[1] && (
-  process.argv[1].endsWith('db-migrate.mjs') ||
-  process.argv[1].endsWith('db-migrate.js')
-);
+/**
+ * Is this module the process entry point?
+ *
+ * A filename suffix is not a valid entry test. The production image bundles
+ * this runner to `dist/migrate.js` (apps/server/api/Dockerfile), which matches
+ * neither `db-migrate.mjs` nor `db-migrate.js`; suffix matching therefore
+ * skipped `main()` entirely and exited 0 without applying any migration.
+ *
+ * Compare the executed script against this module's own location instead, so
+ * every bundle name works while importing the module (tests, tooling) still
+ * never starts a migration run.
+ */
+function isDirectCliEntry() {
+  const entry = process.argv[1];
+  if (!entry) return false;
 
-if (isDirectCli) {
+  let modulePath;
+  try {
+    modulePath = fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+
+  // Same file expressed with the same path spelling.
+  if (resolve(entry) === resolve(modulePath)) return true;
+
+  // Symlinked / normalized entry paths.
+  try {
+    return realpathSync(entry) === realpathSync(modulePath);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectCliEntry()) {
   main().catch((err) => {
     console.error('Migration failed:', err.message);
     process.exit(1);

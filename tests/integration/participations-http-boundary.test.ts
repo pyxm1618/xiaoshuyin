@@ -128,4 +128,84 @@ describe('Slice 4 participation HTTP boundary', () => {
     }
     expect(await counts()).toEqual(before);
   });
+
+
+  it('C5 rejects malformed participation response UUIDs at the HTTP boundary', async () => {
+    const body = { content: 'boundary-valid-content' };
+    for (const malformed of [
+      'not-a-uuid',
+      '%20',
+      '12345678-1234-1234-1234-1234567890',
+    ]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/participations/${malformed}/responses`,
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': `c5-${malformed.replace(/[^a-z0-9]/gi, 'x')}-key`,
+        },
+        payload: body,
+      });
+      expect(res.statusCode, res.body).toBe(422);
+      expect(res.json().code).toBe('VALIDATION_ERROR');
+    }
+
+    const validShape = await app.inject({
+      method: 'POST',
+      url: '/api/v1/participations/00000000-0000-7000-8000-000000000000/responses',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': 'c5-valid-shape-key',
+      },
+      payload: body,
+    });
+    expect(validShape.statusCode).toBe(404);
+    expect(validShape.json().code).toBe('PARTICIPATION_NOT_FOUND');
+  });
+
+  it('C6 authenticates participation responses before request-body validation', async () => {
+    const validId = '00000000-0000-7000-8000-000000000000';
+
+    const unauthenticatedValid = await app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${validId}/responses`,
+      headers: { 'idempotency-key': 'c6-unauth-valid-key' },
+      payload: { content: 'valid content' },
+    });
+    expect(unauthenticatedValid.statusCode).toBe(401);
+    expect(unauthenticatedValid.json().code).toBe('UNAUTHENTICATED');
+
+    const unauthenticatedMalformed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${validId}/responses`,
+      headers: { 'idempotency-key': 'c6-unauth-malformed-key' },
+      payload: { content: '' },
+    });
+    expect(unauthenticatedMalformed.statusCode).toBe(401);
+    expect(unauthenticatedMalformed.json().code).toBe('UNAUTHENTICATED');
+
+    const authenticatedMalformed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${validId}/responses`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': 'c6-auth-malformed-key',
+      },
+      payload: { content: '' },
+    });
+    expect(authenticatedMalformed.statusCode).toBe(422);
+    expect(authenticatedMalformed.json().code).toBe('VALIDATION_ERROR');
+
+    const authenticatedValid = await app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${validId}/responses`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': 'c6-auth-valid-key',
+      },
+      payload: { content: 'valid content' },
+    });
+    expect(authenticatedValid.statusCode).toBe(404);
+    expect(authenticatedValid.json().code).toBe('PARTICIPATION_NOT_FOUND');
+  });
 });

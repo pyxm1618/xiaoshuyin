@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import * as familyAuthorization from '../../apps/server/api/src/authz.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
@@ -1401,6 +1402,72 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(marker.json().code).toBe('SCENE_NODE_NOT_FOUND');
   });
 
+  it.each(['denial', 'database', 'transport', 'timeout'] as const)(
+    'C4 visible Case respond authorization preserves %s semantics', async (failure) => {
+      const f = await fixture(`c4-visible-${failure}`);
+      const caller = failure === 'denial'
+        ? await loginWithLabel(app, `c4-visible-member-${crypto.randomUUID()}`)
+        : f.manager;
+      if (failure === 'denial') {
+        await admin.query('INSERT INTO family_members(family_id,person_id) VALUES($1,$2)', [f.familyId,caller.personId]);
+      }
+      const originalRequire = familyAuthorization.requireFamilyAction;
+      let reached = false;
+      const requireAction = vi.spyOn(familyAuthorization, 'requireFamilyAction')
+        .mockImplementation(async (tx, request) => {
+          if (request.caseId !== f.caseId || request.action !== 'CASE_RESPOND_ASSESSMENT_SCENE') {
+            return originalRequire(tx, request);
+          }
+          const visible = await tx.query('SELECT id FROM cases WHERE id=$1', [f.caseId]);
+          expect(visible.rows).toHaveLength(1);
+          reached = true;
+          if (failure === 'denial') {
+            // The authenticated caller is a real Family member, with a visible
+            // Case under RLS, but lacks the manager-only action.
+            expect(request.personId).toBe(caller.personId);
+            return originalRequire(tx, request);
+          }
+          throw Object.assign(new Error(`targeted authorization ${failure}`), {
+            code: failure === 'timeout' ? '57014' : failure === 'transport' ? 'ECONNRESET' : '08006',
+          });
+        });
+      try {
+        const response = await respondA1001({...f,manager:caller}, `c4-visible-${crypto.randomUUID()}`);
+        expect(reached).toBe(true);
+        expect(response.statusCode, response.body).toBe(failure === 'denial' ? 404 : 500);
+        expect(response.json().code).toBe(failure === 'denial' ? 'CASE_NOT_FOUND' : 'INTERNAL_ERROR');
+        for (const secret of [f.caseId, f.familyId, f.targetPersonId, 'targeted authorization', 'NOT_FAMILY_MANAGER']) {
+          expect(response.body).not.toContain(secret);
+        }
+      } finally {
+        requireAction.mockRestore();
+      }
+    }
+  );
+
+  it('C4 anti-enumerates cross-Family Assessment start authorization as CASE_NOT_FOUND', async () => {
+    const owner = await fixture('assessment-start-owner');
+    const attacker = await fixture('assessment-start-attacker');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${owner.caseId}/assessments`,
+      headers: commandHeaders(
+        attacker.manager.token,
+        `c4-assessment-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: owner.caseVersion,
+        targetPersonId: owner.targetPersonId,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().code).toBe('CASE_NOT_FOUND');
+    expect(response.body).not.toContain(owner.familyId);
+    expect(response.body).not.toContain(owner.targetPersonId);
+  });
+
   it('does not grant Assessment visibility to an ACTIVE Case Participant', async () => {
     const owner = await fixture('participant-owner');
     const participant = await loginWithLabel(app, 'du-hard-participant');
@@ -1439,6 +1506,24 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(read.statusCode).toBe(404);
     expect(read.json().code).toBe('CASE_NOT_FOUND');
+  });
+
+  it('Finding #27: roleplay endpoints fold authorization denials to 404 CASE_NOT_FOUND (anti-enumeration)', async () => {
+    const owner = await fixture('roleplay-anti-enum-owner');
+    const attacker = await fixture('roleplay-anti-enum-attacker');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${owner.caseId}/digital-use/roleplays`,
+      headers: commandHeaders(attacker.manager.token, 'roleplay-anti-enum'),
+      payload: {
+        expectedCaseVersion: owner.caseVersion,
+        professionalContentVersion: 'requested-professional-roleplay-v1',
+      },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().code).toBe('CASE_NOT_FOUND');
+    expect(response.body).not.toContain(owner.familyId);
   });
 
   it('Safety Hold preempts an ordinary node response without leaving Evidence', async () => {
@@ -3372,6 +3457,71 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(contractRows.rows[0].n).toBe(0);
   });
 
+  it('Finding #12 lets a parent reach PENDING_CONFIRMATION for an unregistered child without fabricating participation', async () => {
+    const f = await fixture('f12-unregistered-child');
+    const account = await admin.query('SELECT account_id FROM persons WHERE id=$1',[f.targetPersonId]);
+    expect(account.rows[0].account_id).toBeNull();
+    const participationBefore = await admin.query(
+      'SELECT count(*)::int AS n FROM case_participants WHERE case_id=$1 AND person_id=$2',
+      [f.caseId,f.targetPersonId]
+    );
+    expect(participationBefore.rows[0].n).toBe(0);
+
+    await forceSceneNode(f, 'A4004');
+    await admin.query(
+      `UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const term = (value: string) => ({ state: 'VALUE', value });
+    const terms = {
+      purpose: term('共同减少无目的刷手机'),
+      phoneUseRules: term('晚饭后使用 30 分钟'),
+      executionPeriod: term('两周'),
+      parentSupportMeasures: term('家长同步减少无目的使用'),
+      supervisionMeasures: term('共同查看屏幕时间'),
+      incentives: term('周末共同活动'),
+      breachResponsibilities: term('复盘原因并调整'),
+    };
+    const draft = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,`f12-unregistered-draft-${crypto.randomUUID()}`),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        adultPartyPersonId:f.manager.personId,
+        childPartyPersonId:f.targetPersonId,
+        sourceTemplateVersion:'phone-use-contract-v1',
+        dependencyRefs:[],
+        terms,
+      },
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    expect(draft.json()).toMatchObject({
+      status:'DRAFT',childPartyPersonId:f.targetPersonId,
+      childParticipationId:null,childConfirmation:null,
+    });
+
+    const adult = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,`f12-unregistered-parent-${crypto.randomUUID()}`),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    expect(adult.json()).toMatchObject({
+      status:'PENDING_CONFIRMATION',childParticipationId:null,childConfirmation:null,
+    });
+    const persisted = await admin.query(
+      `SELECT status,child_participation_id,child_confirmation
+         FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(persisted.rows[0]).toEqual({
+      status:'PENDING_CONFIRMATION',child_participation_id:null,child_confirmation:null,
+    });
+  });
+
   it('Slice 14 formal Contract requires independent party confirmations and activates atomically', async () => {
     const child = await loginWithLabel(app, `s14-contract-child-${crypto.randomUUID()}`);
     const f = await fixture('s14-contract', app, child);
@@ -3379,14 +3529,6 @@ describe('T1218 Digital Use runtime hardening', () => {
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
     );
-    const participation = await admin.query<{ id: string }>(
-      `INSERT INTO case_participants
-         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
-       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
-       RETURNING id`,
-      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
-    );
-
     await forceSceneNode(f, 'A4004');
     await admin.query(
       `UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1
@@ -3412,14 +3554,15 @@ describe('T1218 Digital Use runtime hardening', () => {
         expectedCaseVersion:f.caseVersion,
         adultPartyPersonId:f.manager.personId,
         childPartyPersonId:child.personId,
-        childParticipationId:participation.rows[0]!.id,
         sourceTemplateVersion:'phone-use-contract-v1',
         dependencyRefs:[],
         terms,
       },
     });
     expect(draft.statusCode,draft.body).toBe(201);
-    expect(draft.json()).toMatchObject({version:1,draftRevision:1,status:'DRAFT'});
+    expect(draft.json()).toMatchObject({
+      version:1,draftRevision:1,status:'DRAFT',childParticipationId:null,
+    });
 
     const adultKey=`s14-adult-confirm-${crypto.randomUUID()}`;
     const adult = await app.inject({
@@ -3455,6 +3598,92 @@ describe('T1218 Digital Use runtime hardening', () => {
     );
     expect(beforeChild.rows[0].n).toBe(1);
 
+    const childBeforeParticipation = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,`f12-child-before-participation-${crypto.randomUUID()}`),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(childBeforeParticipation.statusCode,childBeforeParticipation.body).toBe(422);
+    expect(childBeforeParticipation.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const participation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    const wrongParticipation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$3,now())
+       RETURNING id`,
+      [f.familyId,f.caseId,f.manager.personId,crypto.randomUUID().replaceAll('-','').repeat(2)]
+    );
+    const directChildBinding = (
+      participationId:string,
+      childConfirmation:Record<string,unknown>
+    ) => withRlsTransaction(
+      appPool,
+      {
+        familyId:f.familyId,
+        accountId:child.accountId,
+        personId:child.personId,
+        purpose:'PHONE_USE_CONTRACT',
+      },
+      async (tx) => {
+        await tx.query(
+          `UPDATE digital_use_contract_versions
+              SET child_participation_id=$2,
+                  child_confirmation=$3::jsonb
+            WHERE case_id=$1 AND version=1`,
+          [f.caseId,participationId,JSON.stringify(childConfirmation)]
+        );
+      }
+    );
+    const validProvenance:Record<string,unknown> = {
+      kind:'CHILD',
+      personId:child.personId,
+      participationId:participation.rows[0]!.id,
+      authorizationAction:'PHONE_USE_CONTRACT_CONFIRM_SELF',
+      draftRevision:1,
+      confirmedAt:'2026-01-01T00:00:00.000Z',
+    };
+    for (const missing of ['kind','personId','participationId','authorizationAction'] as const) {
+      const malformed={...validProvenance};
+      delete malformed[missing];
+      await expect(
+        directChildBinding(participation.rows[0]!.id,malformed)
+      ).rejects.toMatchObject({code:'23514'});
+    }
+    await expect(
+      directChildBinding(wrongParticipation.rows[0]!.id,{
+        ...validProvenance,
+        participationId:wrongParticipation.rows[0]!.id,
+      })
+    ).rejects.toMatchObject({code:'23514'});
+    const afterRejectedBindings = await admin.query(
+      `SELECT child_participation_id,child_confirmation
+         FROM digital_use_contract_versions
+        WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(afterRejectedBindings.rows[0]).toEqual({
+      child_participation_id:null,
+      child_confirmation:null,
+    });
+
+    const childReadBeforeConfirm = await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/current`,
+      headers:auth(child.token),
+    });
+    expect(childReadBeforeConfirm.statusCode,childReadBeforeConfirm.body).toBe(200);
+    expect(childReadBeforeConfirm.json()).toMatchObject({
+      status:'PENDING_CONFIRMATION',childParticipationId:null,childConfirmation:null,
+    });
+
     const childConfirm = await app.inject({
       method:'POST',
       url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
@@ -3463,7 +3692,28 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(childConfirm.statusCode,childConfirm.body).toBe(200);
     expect(childConfirm.json().status).toBe('ACTIVE');
+    expect(childConfirm.json().childParticipationId).toBe(participation.rows[0]!.id);
     expect(childConfirm.json().childConfirmation).toMatchObject({
+      kind:'CHILD',
+      personId:child.personId,
+      participationId:participation.rows[0]!.id,
+      authorizationAction:'PHONE_USE_CONTRACT_CONFIRM_SELF',
+    });
+    await expect(
+      directChildBinding(wrongParticipation.rows[0]!.id,{
+        ...validProvenance,
+        participationId:wrongParticipation.rows[0]!.id,
+      })
+    ).rejects.toMatchObject({code:'23514'});
+    const afterRejectedRebind = await admin.query(
+      `SELECT child_participation_id,child_confirmation
+         FROM digital_use_contract_versions
+        WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(afterRejectedRebind.rows[0].child_participation_id)
+      .toBe(participation.rows[0]!.id);
+    expect(afterRejectedRebind.rows[0].child_confirmation).toMatchObject({
       kind:'CHILD',
       personId:child.personId,
       participationId:participation.rows[0]!.id,
@@ -4593,5 +4843,82 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(history.rows[0].superseded_at).toBeNull();
     expect(history.rows[0].dependency_refs).toEqual([{type:'SCENE_ARTIFACT',id:a1.id}]);
   });
+
+  it('A2 ACTIVE NEEDS_REVIEW blocks every execution branch and recovers unchanged same-version authority', async () => {
+    const child = await loginWithLabel(app, `s14-revision-child-${crypto.randomUUID()}`);
+    const f = await fixture('a2-review', app, child);
+    await admin.query(`INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[f.familyId,child.personId]);
+    const p=await admin.query<{id:string}>(
+      `INSERT INTO case_participants(family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    await forceSceneNode(f,'A4004');
+    await admin.query(`UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1 WHERE case_id=$1 AND node_code='A4004'`,[f.caseId]);
+    const v=(value:string)=>({state:'VALUE',value});
+    const terms={purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),parentSupportMeasures:v('s'),supervisionMeasures:v('m'),incentives:v('i'),breachResponsibilities:v('b')};
+    const draft=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,headers:commandHeaders(f.manager.token,'a2-review-draft'),payload:{expectedCaseVersion:f.caseVersion,adultPartyPersonId:f.manager.personId,childPartyPersonId:child.personId,childParticipationId:p.rows[0]!.id,sourceTemplateVersion:'phone-use-contract-v1',dependencyRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],terms}});
+    expect(draft.statusCode,draft.body).toBe(201);
+    const [adult,childResponse]=await Promise.all([
+      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,headers:commandHeaders(f.manager.token,'a2-review-adult'),payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1}}),
+      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,headers:commandHeaders(child.token,'a2-review-child'),payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1}}),
+    ]);
+    expect([adult.statusCode,childResponse.statusCode]).toEqual([200,200]);
+    const active1=await admin.query(`SELECT id,status FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,[f.caseId]);
+    expect(active1.rows[0].status).toBe('ACTIVE');
+
+
+    const before=(await admin.query(`SELECT * FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,[f.caseId])).rows[0];
+    await withRlsTransaction(appPool,{familyId:f.familyId,accountId:f.manager.accountId,personId:f.manager.personId,purpose:'FAMILY_MANAGEMENT'},async tx=>{
+      await tx.query(`SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,[f.familyId,f.caseId,JSON.stringify({type:'DIALOGUE_MESSAGE',id:f.messageId})]);
+    });
+    const current=await app.inject({method:'GET',url:`/api/v1/cases/${f.caseId}/digital-use/contract/current`,headers:auth(f.manager.token)});
+    expect(current.statusCode,current.body).toBe(200);
+    expect(current.json()).toMatchObject({version:1,status:'ACTIVE',reviewState:'NEEDS_REVIEW'});
+    const node=(await admin.query(`SELECT revision FROM scene_node_states WHERE case_id=$1 AND node_code='A4011'`,[f.caseId])).rows[0];
+    for(const action of ['FAQ_VIEWED','PERIOD_COMPLETE','NEW_PROBLEM']){
+      const blocked=await respondSceneNode(f,'A4011',node.revision,{
+        action,...(action==='FAQ_VIEWED'?{topic:'CONTRACT_DURATION'}:{}),contractVersionId:before.id,contractVersion:1,
+      },`a2-blocked-${action}-${crypto.randomUUID()}`);
+      expect(blocked.statusCode,blocked.body).toBe(409);
+      expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_STALE_REVISION');
+    }
+    const payload={expectedCaseVersion:f.caseVersion,expectedDraftRevision:1,
+      expectedUpdatedAt:current.json().updatedAt,outcome:'NO_MATERIAL_CHANGE'};
+    const url=`/api/v1/cases/${f.caseId}/digital-use/contract/1/review`;
+    const stale=await app.inject({method:'POST',url,headers:commandHeaders(f.manager.token,crypto.randomUUID()),payload:{...payload,expectedUpdatedAt:'2020-01-01T00:00:00.000Z'}});
+    expect(stale.statusCode,stale.body).toBe(409);
+    const headers=commandHeaders(f.manager.token,crypto.randomUUID());
+    const reviewed=await app.inject({method:'POST',url,headers,payload});
+    expect(reviewed.statusCode,reviewed.body).toBe(200);
+    expect(reviewed.json()).toMatchObject({id:before.id,version:1,draftRevision:1,status:'ACTIVE',reviewState:'CURRENT'});
+    const replay=await app.inject({method:'POST',url,headers,payload});
+    expect(replay.statusCode,replay.body).toBe(200);
+    expect(replay.json()).toEqual(reviewed.json());
+    const after=(await admin.query(`SELECT * FROM digital_use_contract_versions WHERE id=$1`,[before.id])).rows[0];
+    for(const key of Object.keys(before).filter(key=>!['updated_at','review_state'].includes(key))) expect(after[key],key).toEqual(before[key]);
+    const evidence=(await admin.query(`SELECT count(*)::int AS n FROM business_audit_events WHERE resource_id=$1 AND event_type='PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED' AND metadata->>'toReviewState'='CURRENT'`,[before.id])).rows[0];
+    expect(evidence.n).toBe(1);
+    expect((await admin.query(`SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1`,[f.caseId])).rows[0].n).toBe(1);
+    await withRlsTransaction(appPool,{familyId:f.familyId,accountId:f.manager.accountId,personId:f.manager.personId,purpose:'FAMILY_MANAGEMENT'},async tx=>{
+      await tx.query(`SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,[f.familyId,f.caseId,JSON.stringify({type:'DIALOGUE_MESSAGE',id:f.messageId})]);
+    });
+    const successor=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,headers:commandHeaders(f.manager.token,crypto.randomUUID()),payload:{expectedCaseVersion:f.caseVersion,expectedActiveDraftRevision:1,updateTrigger:'NEW_PROBLEM',updateReason:'Materially change the agreed phone-use rule after review'}});
+    expect(successor.statusCode,successor.body).toBe(201);
+    expect(successor.json()).toMatchObject({version:2,supersedesId:before.id,status:'DRAFT',reviewState:'NEEDS_REVIEW'});
+    const changedTerms={...terms,phoneUseRules:v('Revised agreed business rule')};
+    const corrected=await app.inject({method:'PATCH',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts/2`,headers:commandHeaders(f.manager.token,crypto.randomUUID()),payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1,dependencyRefs:[],terms:changedTerms}});
+    expect(corrected.statusCode,corrected.body).toBe(200);
+    expect(corrected.json()).toMatchObject({version:2,draftRevision:2,reviewState:'CURRENT'});
+    for(const actor of [f.manager,child]){
+      const confirmation=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,headers:commandHeaders(actor.token,crypto.randomUUID()),payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2}});
+      expect(confirmation.statusCode,confirmation.body).toBe(200);
+    }
+    const history=(await admin.query(`SELECT version,status,review_state,phone_use_rules,parent_confirmation,child_confirmation FROM digital_use_contract_versions WHERE case_id=$1 ORDER BY version`,[f.caseId])).rows;
+    expect(history).toHaveLength(2);
+    expect(history[0]).toMatchObject({version:1,status:'SUPERSEDED',review_state:'NEEDS_REVIEW',phone_use_rules:before.phone_use_rules,parent_confirmation:before.parent_confirmation,child_confirmation:before.child_confirmation});
+    expect(history[1]).toMatchObject({version:2,status:'ACTIVE',review_state:'CURRENT',phone_use_rules:changedTerms.phoneUseRules});
+  });
+
 
 });

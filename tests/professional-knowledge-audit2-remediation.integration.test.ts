@@ -1035,10 +1035,33 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       supersedesId: null,
       createdByPersonId: actor.personId,
     });
-    const ref = {
+    await expect(resolveCurrentInterventionDefinition(admin as any, {
       definitionId: created.id,
       definitionVersion: created.version,
       contentHash: created.contentHash,
+    })).resolves.toMatchObject({ status: 'INVALID' });
+
+    const current = prepareInterventionDefinition({
+      sceneId: prepared.sceneId,
+      interventionCode: prepared.interventionCode + '_CURRENT',
+      version: 1,
+      semantic: prepared.semantic,
+    });
+    const { rows: [currentRow] } = await admin.query<{ id: string }>(
+      `INSERT INTO intervention_definitions
+        SELECT (jsonb_populate_record(NULL::intervention_definitions,
+          to_jsonb(candidate) || jsonb_build_object(
+            'id', uuidv7(), 'definition_state', 'CURRENT',
+            'intervention_code', $2::text, 'content_hash', $3::text
+          )
+        )).* FROM intervention_definitions AS candidate WHERE id = $1
+        RETURNING id`,
+      [created.id, current.interventionCode, current.contentHash]
+    );
+    const ref = {
+      definitionId: currentRow!.id,
+      definitionVersion: current.version,
+      contentHash: current.contentHash,
     };
 
     const validIntervention = await resolveCurrentInterventionDefinition(admin as any, ref);
@@ -1064,14 +1087,14 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const unchanged = await admin.query<{ definition_state: string; revision: number }>(
       'SELECT definition_state, revision FROM intervention_definitions WHERE id=$1',
-      [created.id]
+      [ref.definitionId]
     );
-    expect(unchanged.rows[0]).toEqual({ definition_state: 'CANDIDATE', revision: 1 });
+    expect(unchanged.rows[0]).toEqual({ definition_state: 'CURRENT', revision: 1 });
 
     await transitionInterventionDefinitionStateCas(admin as any, {
-      id: created.id,
+      id: ref.definitionId,
       expectedRevision: 1,
-      expectedState: 'CANDIDATE',
+      expectedState: 'CURRENT',
       nextState: 'SUPERSEDED',
     });
     await expect(

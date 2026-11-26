@@ -168,16 +168,11 @@ export async function enterSafetyHold(
         purpose: 'FAMILY_MANAGEMENT',
       },
       async (tx, client) => {
-        // Step 3 — same-transaction authorization (never a route shortcut).
-        await requireFamilyAction(client, {
-          accountId: input.accountId,
-          personId: input.personId,
-          familyId,
-          action: 'CASE_ENTER_SAFETY_HOLD',
-          purpose: 'FAMILY_MANAGEMENT',
-          resource: { type: 'CASE', familyId, caseId },
-          caseId,
-        });
+        // Step 3 — Finding #14: The approved deterministic Safety decision itself is the
+        // system authority for EnterSafetyHold (decoupled from Family Manager authority).
+        if (input.decision.kind !== 'ENTER_HOLD') {
+          throw httpError('SAFETY_PRECHECK_INVALID', 'Decision must be ENTER_HOLD');
+        }
 
         // Step 4 — idempotency slot / replay / mismatch BEFORE any lock.
         const slot = await acquireIdempotencySlot(client, {

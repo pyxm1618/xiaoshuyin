@@ -40,7 +40,7 @@ describe('Slice 4 structural scope boundary', () => {
     }
   });
 
-  it('runtime exposes no generic participant response or out-of-scope management routes', async () => {
+  it('runtime exposes only the approved child response endpoint and no generic out-of-scope management routes', async () => {
     const routes:string[]=[];
     const app=await buildApp({
       onRoute(route){
@@ -53,10 +53,17 @@ describe('Slice 4 structural scope boundary', () => {
     });
     await app.ready();
     try{
+      // Finding #32: Child-authored response endpoint MUST exist
+      expect(routes).toContain('POST /api/v1/participations/:id/responses');
+
+      // Exactly one response endpoint is registered for participation
+      const responseRoutes = routes.filter((r) => r.includes('/responses'));
+      expect(responseRoutes).toEqual(['POST /api/v1/participations/:id/responses']);
+
       const joined=routes.join('\n');
       for(const forbidden of [
-        '/responses','/participants','/cancel','/restore','/pause','/resume',
-        '/close','/switch-primary','/interventions','/goals','/plans','/tasks'
+        '/participants','/cancel','/restore','/pause','/resume',
+        '/close','/switch-primary','/interventions','/goals','/plans','/tasks','/notes'
       ]){
         expect(joined).not.toContain(forbidden);
       }

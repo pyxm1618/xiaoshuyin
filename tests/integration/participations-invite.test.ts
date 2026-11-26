@@ -53,4 +53,23 @@ describe('Slice 4 create participation invite', () => {
     });
     expect(JSON.stringify(audit[0])).not.toContain(res.json().inviteToken);
   });
+
+
+  it('C2 blocks creation of new participation after the Case is CLOSED', async () => {
+    const f=await createParticipationFixture(h,'invite-closed',{target:'manager'});
+    const target=await addBoundAdultTargetToFamily(h,f.familyId,'invite-closed');
+    await h.admin.query(`UPDATE cases SET status='CLOSED' WHERE id=$1`,[f.caseId]);
+
+    const res=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,'invite-closed-key'
+    );
+    expect(res.statusCode).toBe(409);
+    expect(res.json().code).toBe('CASE_CLOSED');
+
+    const rows=await h.admin.query(
+      `SELECT id FROM case_participants WHERE case_id=$1 AND person_id=$2`,
+      [f.caseId,target.personId]
+    );
+    expect(rows.rows).toHaveLength(0);
+  });
 });

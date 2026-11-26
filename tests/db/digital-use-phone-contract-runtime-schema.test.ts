@@ -1,7 +1,41 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
+import { digitalUseContractVersions } from '@xiaoshuyin/domain';
+import * as drizzleSchema from '../../db/schema/index.js';
 
 const URL=process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
+
+const pgDialect=new PgDialect();
+
+function normalizeSqlExpr(value:string|null):string|null{
+  return value===null?null:value.replace(/\s+/g,' ').trim();
+}
+
+function drizzleDefaultExpr(column:any):string|null{
+  const value=column.default;
+  if(value===undefined) return null;
+  if(typeof value==='string'){
+    return `'${value.replaceAll("'", "''")}'::${column.getSQLType()}`;
+  }
+  if(typeof value==='number'||typeof value==='bigint') return String(value);
+  if(typeof value==='boolean') return value?'true':'false';
+  if(value&&typeof value==='object'&&'queryChunks' in value){
+    return normalizeSqlExpr(pgDialect.sqlToQuery(value).sql);
+  }
+  throw new Error(`Unsupported Drizzle default for ${column.name}`);
+}
+
+function drizzleGeneratedExpr(column:any):string|null{
+  const generated=column.generated;
+  if(!generated) return null;
+  const raw=typeof generated.as==='function'?generated.as():generated.as;
+  if(typeof raw==='string') return normalizeSqlExpr(raw);
+  if(raw&&typeof raw==='object'&&'queryChunks' in raw){
+    return normalizeSqlExpr(pgDialect.sqlToQuery(raw).sql);
+  }
+  throw new Error(`Unsupported Drizzle generated expression for ${column.name}`);
+}
 
 describe('Slice 14 phone-use Contract runtime schema', () => {
   let db:Client;
@@ -24,6 +58,117 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
          AND tablename IN ('phone_contract_scene_states','phone_contract_scene_artifacts','generic_contract_engine','generic_workflow_tables')`
     );
     expect(forbidden.rows).toHaveLength(0);
+  });
+
+  it('keeps actual Contract columns aligned with the Drizzle projection and drizzle-kit entrypoint', async () => {
+    expect(drizzleSchema.digitalUseContractVersions).toBe(digitalUseContractVersions);
+
+    const {rows}=await db.query<{
+      name:string;sql_type:string;not_null:boolean;
+      default_expr:string|null;generated_expr:string|null;
+    }>(
+      `SELECT a.attname AS name,
+              format_type(a.atttypid, a.atttypmod) AS sql_type,
+              a.attnotnull AS not_null,
+              CASE WHEN a.attgenerated='' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS default_expr,
+              CASE WHEN a.attgenerated<>'' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS generated_expr
+         FROM pg_attribute a
+         LEFT JOIN pg_attrdef ad
+           ON ad.adrelid=a.attrelid AND ad.adnum=a.attnum
+        WHERE a.attrelid='public.digital_use_contract_versions'::regclass
+          AND a.attnum > 0
+          AND NOT a.attisdropped
+        ORDER BY a.attnum`
+    );
+    const projected=getTableConfig(digitalUseContractVersions).columns.map((column)=>({
+      name:column.name,
+      sql_type:column.getSQLType(),
+      not_null:column.notNull,
+      default_expr:normalizeSqlExpr(drizzleDefaultExpr(column)),
+      generated_expr:normalizeSqlExpr(drizzleGeneratedExpr(column)),
+    }));
+    const actual=rows.map((column)=>({
+      ...column,
+      default_expr:normalizeSqlExpr(column.default_expr),
+      generated_expr:normalizeSqlExpr(column.generated_expr),
+    }));
+    expect(actual).toEqual(projected);
+    expect(projected.find((column)=>column.name==='child_participation_id')).toEqual({
+      name:'child_participation_id',
+      sql_type:'uuid',
+      not_null:false,
+      default_expr:null,
+      generated_expr:null,
+    });
+    expect(projected.find((column)=>column.name==='status')).toMatchObject({
+      default_expr:"'DRAFT'::text",
+      generated_expr:null,
+    });
+    expect(projected.at(-1)).toEqual({
+      name:'review_state',
+      sql_type:'text',
+      not_null:true,
+      default_expr:"'CURRENT'::text",
+      generated_expr:null,
+    });
+  });
+
+  it('A6 reconciles the confirmed Drizzle projection drifts with physical PostgreSQL', async () => {
+    const { rows } = await db.query<{
+      table_name: string;
+      column_name: string;
+      not_null: boolean;
+      default_expr: string | null;
+      generated_expr: string | null;
+    }>(`
+      SELECT c.relname AS table_name,
+             a.attname AS column_name,
+             a.attnotnull AS not_null,
+             CASE WHEN a.attgenerated='' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS default_expr,
+             CASE WHEN a.attgenerated<>'' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS generated_expr
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid=a.attrelid
+        LEFT JOIN pg_attrdef ad ON ad.adrelid=a.attrelid AND ad.adnum=a.attnum
+       WHERE (c.relname, a.attname) IN (
+         ('business_audit_events','family_id'),
+         ('staff_assignments','capability_grant_scope_type'),
+         ('roleplay_sessions','simulation_role'),
+         ('roleplay_sessions','status')
+       )
+       ORDER BY c.relname, a.attname
+    `);
+    const actual = Object.fromEntries(rows.map((row) => [
+      `${row.table_name}.${row.column_name}`,
+      {
+        ...row,
+        default_expr: normalizeSqlExpr(row.default_expr),
+        generated_expr: normalizeSqlExpr(row.generated_expr),
+      },
+    ]));
+
+    const businessFamily = getTableConfig(drizzleSchema.businessAuditEvents).columns
+      .find((column) => column.name === 'family_id')!;
+    expect(actual['business_audit_events.family_id']?.not_null).toBe(false);
+    expect(businessFamily.notNull).toBe(false);
+
+    const staffGenerated = getTableConfig(drizzleSchema.staffAssignments).columns
+      .find((column) => column.name === 'capability_grant_scope_type')!;
+    const projectedGenerated = drizzleGeneratedExpr(staffGenerated);
+    expect(actual['staff_assignments.capability_grant_scope_type']?.generated_expr)
+      .toContain('scope_type');
+    expect(actual['staff_assignments.capability_grant_scope_type']?.generated_expr)
+      .toContain('GLOBAL');
+    expect(projectedGenerated).toContain('scope_type');
+    expect(projectedGenerated).toContain('GLOBAL');
+
+    const roleplayColumns = getTableConfig(drizzleSchema.roleplaySessions).columns;
+    const simulationRole = roleplayColumns.find((column) => column.name === 'simulation_role')!;
+    const status = roleplayColumns.find((column) => column.name === 'status')!;
+    expect(actual['roleplay_sessions.simulation_role']?.default_expr)
+      .toBe("'ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT'::text");
+    expect(actual['roleplay_sessions.status']?.default_expr).toBe("'OPEN'::text");
+    expect(drizzleDefaultExpr(simulationRole)).toBe("'ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT'::text");
+    expect(drizzleDefaultExpr(status)).toBe("'OPEN'::text");
   });
 
   it('FORCEs RLS on every new business table', async () => {
@@ -75,6 +220,23 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
     expect(triggers.rows.map((r:any)=>r.tgname)).toEqual([
       'digital_use_contract_versions_guard',
     ]);
+    const provenance=await db.query(
+      `SELECT pg_get_constraintdef(oid,true) AS def
+         FROM pg_constraint
+        WHERE conrelid='digital_use_contract_versions'::regclass
+          AND conname='digital_use_contract_versions_confirmation_provenance_check'`
+    );
+    expect(provenance.rows[0].def).toContain('child_participation_id IS NOT NULL');
+    const guard=await db.query(
+      `SELECT pg_get_functiondef(p.oid) AS def
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public'
+          AND p.proname='digital_use_contract_versions_guard'`
+    );
+    expect(guard.rows[0].def).toContain('OLD.child_participation_id IS NULL');
+    expect(guard.rows[0].def).toContain("cp.state = 'ACTIVE'");
+    expect(guard.rows[0].def).toContain("app_current_purpose() = 'PHONE_USE_CONTRACT'");
   });
 
   it('uses least-privilege table grants and has no DELETE grant', async () => {
@@ -98,6 +260,7 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
           AND table_name IN ('digital_use_contract_versions','roleplay_sessions','roleplay_turns')`
     );
     expect(columns.rows.some((r:any)=>r.table_name==='digital_use_contract_versions'&&r.column_name==='child_confirmation'&&r.privilege_type==='UPDATE')).toBe(true);
+    expect(columns.rows.some((r:any)=>r.table_name==='digital_use_contract_versions'&&r.column_name==='child_participation_id'&&r.privilege_type==='UPDATE')).toBe(true);
     expect(columns.rows.some((r:any)=>r.table_name==='roleplay_turns'&&r.column_name==='user_rating'&&r.privilege_type==='UPDATE')).toBe(true);
 
     const sceneGrants=await db.query(
