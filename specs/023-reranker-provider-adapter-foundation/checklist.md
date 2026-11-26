@@ -2,14 +2,15 @@
 
 Repository: pyxm1618/xiaoshuyin  
 Feature: 023-reranker-provider-adapter-foundation  
-Frozen Spec blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b
+Frozen Spec head: 092c18d514d46a1e4e40f3544d428302cde00fa8 (superseded historical head: 8fae7497df58446ad034d2986168f6a912444eb3)  
+Frozen Spec blob: 4354ecac585d3d6c675c629d5304faf9422cf5b1 (superseded historical blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b)
 
 Every item is binary/mechanical. “Looks correct”, “reasonable”, “seems aligned” are not acceptance criteria.
 
 ## A. Development-start / Authority / Governance
 
-- [ ] C23-G01 — Frozen Spec blob. Command: git rev-parse HEAD:specs/023-reranker-provider-adapter-foundation/spec.md. Expected: 311511af1cfcda979d2b6896103c0a0c1d227b0b at the development branch after current-main reconciliation. Evidence owner: T001 gate record.
-- [ ] C23-G02 — Frozen Spec exact source commit is preserved in ancestry. Command: git merge-base --is-ancestor 8fae7497df58446ad034d2986168f6a912444eb3 HEAD. Expected exit 0. Evidence owner: T001.
+- [ ] C23-G01 — Frozen Spec blob. Command: git rev-parse HEAD:specs/023-reranker-provider-adapter-foundation/spec.md. Expected: 4354ecac585d3d6c675c629d5304faf9422cf5b1 at the development branch after current-main reconciliation. Evidence owner: T001 gate record.
+- [ ] C23-G02 — Frozen Spec exact source commit is preserved in ancestry. Command: git merge-base --is-ancestor 092c18d514d46a1e4e40f3544d428302cde00fa8 HEAD. Expected exit 0. Evidence owner: T001.
 - [ ] C23-G03 — Current main captured. Command: git rev-parse origin/main. Expected: exact SHA recorded in T001 evidence; no historical SHA assumed. Evidence owner: T001.
 - [ ] C23-G04 — Planning Freeze exact head/blobs recorded and read back from remote before development. Expected: values equal Plan AI 2 final report. Evidence owner: T001.
 - [ ] C23-G05 — No competing 023 implementation. Commands: remote branch/PR search + git grep -nE "qwen3-rerank|reranker" -- apps packages. Expected: no competing production owner outside authorized seam. Evidence owner: T001.

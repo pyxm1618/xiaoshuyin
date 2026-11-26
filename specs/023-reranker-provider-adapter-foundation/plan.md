@@ -2,37 +2,48 @@
 
 Repository: pyxm1618/xiaoshuyin  
 Feature: 023-reranker-provider-adapter-foundation  
-Role: Plan AI 2 — Plan / Checklist / Tasks / Audit 1 only  
-Frozen Spec head: 8fae7497df58446ad034d2986168f6a912444eb3  
-Frozen Spec blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b
+Role: Plan AI 2 — Plan / Checklist / Tasks / Audit 1 only (Targeted Planning Reconciliation)  
+Frozen Spec branch: origin/spec-correction/023-targeted  
+Frozen Spec head: 092c18d514d46a1e4e40f3544d428302cde00fa8  
+Frozen Spec blob: 4354ecac585d3d6c675c629d5304faf9422cf5b1  
+Superseded Frozen Spec head (historical only): 8fae7497df58446ad034d2986168f6a912444eb3  
+Superseded Frozen Spec blob (historical only): 311511af1cfcda979d2b6896103c0a0c1d227b0b  
+Previous Planning Freeze head (historical only): 2c03ca64a53f92acf837816c65630c9546ff7cda
 
-> This plan authorizes no production implementation by itself. Developer execution remains gated by the separate governance prerequisite and T001.
+> This plan authorizes no production implementation by itself. Implementation Gate: BLOCKED until Admission + ownership governance prerequisite + Developer T001 current-main reconciliation PASS.
 
 ## 1. Remote Truth
 
-Planning started from the exact Frozen Spec lineage.
+Planning reconciliation preserves the existing `origin/plan/023-reranker-provider-adapter-foundation` (`2c03ca64a53f92acf837816c65630c9546ff7cda`) lineage and merges the corrected Frozen Spec lineage (`origin/spec-correction/023-targeted` at `092c18d514d46a1e4e40f3544d428302cde00fa8`, which already includes `origin/main` at `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`) without rewriting frozen history.
 
-- Frozen Spec branch: spec/023-reranker-provider-adapter-foundation
-- Frozen Spec exact head: 8fae7497df58446ad034d2986168f6a912444eb3
-- Frozen Spec blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b
-- Frozen Spec creation base: c8a71bd1d4e699a48b757f0e4731bda640935e1a
-- Current main observed during planning: e8b1d490fc8dab5af6cffaf30a5651fc7f6304f7
-- main drift from the Spec base: one governance-only commit, PR #136, modifying only .specify/implementation-ownership.json to register db/migrations/037_goal_target_compliance_revalidation.sql.
-- That drift adds no reranker/provider/embedding ownership, no provider runtime, no Authority Doc change, no Slice 18–22 semantic change, and no implementation seam collision.
-- Existing 023 branch before planning creation: only the Frozen Spec branch.
-- Existing 023 PR: none.
-- Competing Slice 23 implementation: none observed.
-- Planning branch: plan/023-reranker-provider-adapter-foundation, created from exact Frozen Spec head. The unrelated PR #136 governance drift was re-evaluated; no merge into the planning lineage is required because it changes no Slice 23 authority, seam, command, or ownership decision.
+- New Frozen Spec branch: `origin/spec-correction/023-targeted`
+- New Frozen Spec exact head: `092c18d514d46a1e4e40f3544d428302cde00fa8`
+- New Frozen Spec blob: `4354ecac585d3d6c675c629d5304faf9422cf5b1`
+- Superseded Frozen Spec head (historical / superseded): `8fae7497df58446ad034d2986168f6a912444eb3`
+- Superseded Frozen Spec blob (historical / superseded): `311511af1cfcda979d2b6896103c0a0c1d227b0b`
+- Previous Planning Freeze branch / head (historical / superseded): `origin/plan/023-reranker-provider-adapter-foundation` / `2c03ca64a53f92acf837816c65630c9546ff7cda` (Plan `09cd4cf7a5c0334ccb699aed6c0a06b518045269`, Checklist `d86fb6cd0f07784d960b0cdb1a514818de2a4e04`, Tasks `b4fa24600edc1e920a8bad6cbe14ed06a4017df7`)
+- Current main reconciled at planning correction: `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (`chore(s20): close post-merge planning and task evidence (#147)`)
+- Previous planning main observation (superseded): `e8b1d490fc8dab5af6cffaf30a5651fc7f6304f7`
+- Correction branch: `plan-correction/023-targeted` (branched from `2c03ca64a53f92acf837816c65630c9546ff7cda`, merged `origin/spec-correction/023-targeted`)
+- Existing 023 PRs / competing 023 implementation: none observed.
 
-Current Authority Doc blobs on current main remain exactly the identities recorded by the Frozen Spec:
+Current Authority Doc blobs on current main (`e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512`) remain exactly the identities recorded by the Frozen Spec:
 
 - Docs/总产品需求.md — 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29
 - Docs/V1产品需求.md — 379cb8cfb377924cd21ccfe55baa5aecdf207f5e
 - Docs/总体技术架构.md — 6b4630803f371faf6d93f27361070223d0f661a0
 - Docs/V1技术设计.md — afef9fcc4af41b6137e5020717135972a3d515fc
 
+Current-main drift classification (`e8b1d490` -> `e7885234`):
+
+- **Authority Drift**: NONE (all four Authority Doc blobs unchanged).
+- **Implementation-Surface Drift**: Slice 20 (`020-embedding-provider-adapter-foundation`) ownership (`#118`), implementation (`#142`), and post-merge closeout (`#147`) landed on `origin/main` (`apps/server/api/src/ai/embedding/`). Per Frozen Spec §9.2 reuse evaluation, all 10 modules under `apps/server/api/src/ai/embedding/` are embedding-specific and `FEATURE`-owned by `020-embedding-provider-adapter-foundation`; no capability-neutral shared primitive exists, so Slice 23 preserves its narrow independent seam (`apps/server/api/src/ai/reranker/`) without importing `ai/embedding/` or building a generic gateway. No `reranker` or `023` production owner exists on current main. However, PR #142 also added `tests/architecture/embedding-provider-boundary.test.ts`, whose line 94–102 scan currently forbids `/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/` in any `.ts` file under `apps/server/api/src` outside `ai/embedding/`; this test-boundary drift does not alter Slice 23 semantics and is captured as an explicit T001 verification/gate check before T002+.
+- **Provider-Contract-Relevant Drift**: NONE (`PARTIAL`, `NATIVE_HTTP`, `qwen3-rerank` unchanged).
+- **Governance Drift**: Current `.specify/scripts/validate-governance.mjs` requires `## Upstream Traceability`, `## Constitution Check`, and `## Verification Plan` in `plan.md`, plus `## Frozen Spec Authority Map` and `## Acceptance Evidence Contract` in structured `tasks.md`. `.specify/scripts/validate-change-governance.mjs` added `POST_MERGE_CLOSEOUT` task-provenance checks (`#145`, `#147`), which do not affect unchecked planning tasks. `.specify/implementation-ownership.json` still has no `023` / `apps/server/api/src/ai/reranker/` rule.
+- **Command Drift**: Governance/static/typecheck/`verify-all` command entrypoints remain unchanged; `bun run verify-all` now runs Slice 20's `tests/architecture/embedding-provider-boundary.test.ts`.
+
 Authority drift: NONE.  
-Frozen Spec drift: NONE.
+Frozen Spec drift: NONE (rebound cleanly to `092c18d514d46a1e4e40f3544d428302cde00fa8` / `4354ecac585d3d6c675c629d5304faf9422cf5b1`).
 
 ## 2. Authority
 
@@ -50,6 +61,45 @@ The four Authority Docs and Frozen Slice boundaries establish all of the followi
 10. Slice 23 cannot create Professional Authority, route approval, production relevance thresholds or a production RAG winner.
 
 Authority conflict: NONE.
+
+## Upstream Traceability
+
+Mechanical mapping from the canonical upstream IDs and requirements in Frozen Spec (`spec.md` blob `4354ecac585d3d6c675c629d5304faf9422cf5b1`, `## Upstream Traceability`) to Plan sections and downstream tasks/checks (zero new requirement IDs invented):
+
+| Canonical Upstream ID / Anchor | Frozen Spec Requirement / Boundary | Plan Section(s) | Downstream Task(s) / Check(s) |
+|---|---|---|---|
+| `V1-C03` | `FR-005`–`FR-010`, `FR-014`, `FR-015`, `FR-019`, `FR-020`; `AS-03`–`AS-09` (no fabricated deterministic values for `UNKNOWN` / unavailable / partial / unverified states) | §5, §10–§13, §15, §17–§20, §23 | `T003`, `T005`, `T006`, `T007`, `T008`, `T010`, `T012`; `C23-FR-005`..`C23-FR-010`, `C23-E01`..`C23-E07` |
+| `V1-C24` | `§8.1`, `§8.3`, `§10 #4/#5/#8`, `FR-016`; `AS-11` (scores/outputs are technical signals only, never Domain Commands or Professional Authority) | §2, §3, §9, §10, §12, §21 | `T002`, `T006`, `T009`, `T011`, `T012`; `C23-O08`, `C23-FR-016`, `C23-AS-11` |
+| `V1-C27` | `FR-009`–`FR-011`, `FR-014`, `FR-015`, `FR-020`; `AS-05`–`AS-09`, `AS-15` (truthful failure surfacing; no silent fallback; offline never proves live) | §13, §14, §16–§18, §23 | `T003`, `T004`, `T005`, `T007`, `T008`, `T010`, `T011`, `T012`; `C23-R01`..`C23-R11`, `C23-AS-05`..`C23-AS-09` |
+| `V1-C28` | `FR-011`, `FR-012` (bounded stateless retry; zero duplicate business effects; no silent provider/model switch) | §14, §21 | `T004`, `T006`, `T008`, `T009`; `C23-FR-011`, `C23-FR-012`, `C23-R02`, `C23-R03` |
+| `V1-C34` | `FR-013`, `FR-016`; `AS-10`, `AS-11` (`APPROVED PROFESSIONAL REVIEWER — UNASSIGNED` preserved; synthetic/non-personal fixtures only) | §2, §16, §17, §21 | `T008`, `T009`, `T010`, `T011`, `T012`; `C23-FR-013`, `C23-AS-10`, `C23-AS-11`, `C23-H09` |
+| `V1-C37` | `§8.2`, `§10 #6/#7`, `FR-016`, `FR-017` (no bypass of Authorization/Consent/Compliance/Safety/hard filters; no Intervention/RAG eligibility truth) | §2, §3, §8, §21 | `T009`, `T011`; `C23-FR-017`, `C23-AS-12`, `C23-X07` |
+| `V1-X11` | `FR-007`, `FR-019` (record only returned usage/cost facts; unavailable cost stays `UNKNOWN`, never zero-filled or multiplied) | §10, §17, §20 | `T005`, `T007`, `T008`, `T009`, `T010`; `C23-FR-019`, `C23-S07` |
+| `V1-X14` | `FR-014`, `FR-015`, `FR-020`; `AS-01`, `AS-02`, `AS-09`, `AS-10`, `AS-15` (offline proves contract only; live requires exact-head real call; blocked/absent remains explicit) | §16–§19, §22, §24 | `T007`, `T008`, `T010`, `T011`, `T012`; `C23-FR-014`, `C23-FR-015`, `C23-AS-01`, `C23-AS-02`, `C23-AS-09`, `C23-AS-15` |
+| Provider / Model Replaceability (`Docs/总产品需求.md` §28; `Docs/V1技术设计.md` §19–§20) | `FR-001`, `FR-018`; `AS-14` (capability-specific replaceable reranker port; no generic Model Gateway) | §3, §4, §6, §8–§10, §21 | `T001`, `T002`, `T006`, `T009`, `T011`; `C23-FR-001`, `C23-FR-018`, `C23-AS-14` |
+| `qwen3-rerank` Candidate & Pinned Provenance (`Docs/总体技术架构.md` §11.5; `Docs/V1技术设计.md` §19–§20) | `FR-002`, `FR-005`, `FR-017`; `AS-02`, `AS-07` (`qwen3-rerank` candidate only; explicit provenance; reject floating aliases; immutable revision `UNKNOWN_NOT_DOCUMENTED`) | §5, §6, §9, §15, §18, §23 | `T001`, `T003`, `T005`, `T007`, `T010`, `T012`; `C23-FR-002`, `C23-FR-005`, `C23-G07`, `C23-G08`, `C23-E04` |
+| A/B/C Reranker Stage & Upstream Hard Filters (`Docs/总体技术架构.md` §11.1; `Docs/V1技术设计.md` §13.2, §13.4, §40) | `FR-003`, `FR-004`; `AS-03`, `AS-04`, `AS-12` (route-neutral; caller-owned identity preservation; zero retrieval/RRF/hard-filter runtime) | §3, §9–§11, §21 | `T002`, `T005`, `T006`, `T008`, `T009`, `T011`; `C23-FR-003`, `C23-FR-004`, `C23-I01`..`C23-I09`, `C23-AS-12` |
+| No Professional Authority & Gold Eval Boundary (`Docs/总产品需求.md` §31A; `Docs/V1产品需求.md` Preamble; `Docs/总体技术架构.md` §11.1, §19A; `Docs/V1技术设计.md` §32.13, §40) | `FR-013`, `FR-016`; `AS-10`, `AS-11` (synthetic/non-personal fixtures; no `Recall`/`nDCG`/`MRR`/route-winner/approval claim) | §2, §3, §12, §16, §17, §21 | `T008`, `T009`, `T010`, `T011`, `T012`; `C23-FR-013`, `C23-FR-016`, `C23-AS-10`, `C23-AS-11` |
+| Admitted Upstream Slice Boundaries (Slices 17–20) | `FR-012`, `FR-016`, `FR-018`; `AS-10`, `AS-12`–`AS-14` (zero knowledge store, zero Gold runtime, zero DB migration, zero duplicate embedding path or generic gateway) | §1, §3, §4, §7, §8, §21 | `T001`, `T009`, `T011`; `C23-G05`, `C23-FR-012`, `C23-FR-018`, `C23-X08` |
+
+## Constitution Check
+
+Mechanical verification against `AGENTS.md` and Frozen Spec (`092c18d514d46a1e4e40f3544d428302cde00fa8` / `4354ecac585d3d6c675c629d5304faf9422cf5b1`):
+
+| Check | Status | Mechanical Basis |
+|---|---|---|
+| Authority Docs unchanged | PASS | `Docs/**` diff = 0; all four Authority blobs match `Docs/` on `origin/main` (`e7885234...`) |
+| Frozen Spec Authority | PASS | Bound strictly to `092c18d514d46a1e4e40f3544d428302cde00fa8` / blob `4354ecac585d3d6c675c629d5304faf9422cf5b1`; zero edits to `spec.md` |
+| No scope widening | PASS | Exact `20 / 20` FR, `15 / 15` AS, `12` Tasks; only `apps/server/api/src/ai/reranker/` + 4 test files planned |
+| No Professional Authority creation | PASS | `APPROVED PROFESSIONAL REVIEWER — UNASSIGNED` preserved; zero reviewer/approval tables or labels (`FR-016`, `AS-11`) |
+| No Gold Eval | PASS | Zero Gold Dataset authoring/scoring/metrics (`Recall`, `nDCG`, `MRR`, uplift); Slice 18 boundary preserved (`AS-10`) |
+| No generic Model Gateway | PASS | `NATIVE_HTTP` transport; capability-specific `ai/reranker/` port only; zero provider registry/multi-provider fallback (`FR-018`, `AS-14`) |
+| No DB / persistence | PASS | `db/` unchanged; zero migrations, tables, or caches (`FR-012`, `AS-13`, `C23-X08`) |
+| No route activation | PASS | `apps/server/api/src/app.ts` and `routes/` untouched; zero `rag_route_version` / `rerank_route_version` activation (`FR-017`, `C23-X07`) |
+| Provider replaceability | PASS | `contracts.ts` / `index.ts` expose provider-neutral `RerankRequest` / `RerankResult` without DashScope envelope/index leakage (`FR-001`, `C23-O03`) |
+| Failure remains truthful | PASS | `PASS \| FAIL \| BLOCKED \| UNKNOWN \| NOT_EVALUATED` state machine; no `READY` boolean; `PARTIAL` provider contract (`FR-014`, `FR-015`, `FR-020`) |
+| Exact-head evidence | PASS | `§19`, `AS-15`, `T010`–`T012` bind evidence to clean exact `HEAD` and config/model/version tuple |
+| Separate governance prerequisite | PASS | `apps/server/api/src/ai/reranker/` ownership PR remains separate from planning admission and from product implementation (`§7`, `T001`) |
 
 ## 3. Frozen Scope
 
@@ -91,7 +141,8 @@ Current repository facts re-read from current main:
 - No DashScope/@alicloud reranker SDK is present in apps/server/api/package.json.
 - Existing runtime environment convention is apps/server/api/src/runtime-env.ts: explicit required values, no hard-coded production fallback, fail-closed production default.
 - Existing HTTP/business error handler is apps/server/api/src/plugins/error-handler.ts. Slice 23 MUST NOT extend it for provider technical errors; reranker errors remain local technical errors.
-- Slice 20 planning established a sibling capability pattern at apps/server/api/src/ai/embedding/, but that implementation is not present on current main and MUST NOT be imported as if it existed.
+- Slice 20 (`020-embedding-provider-adapter-foundation`) has now landed on current `origin/main` via PR #118 (ownership), PR #142 (implementation at `apps/server/api/src/ai/embedding/`), and PR #147 (post-merge closeout). Per Frozen Spec §9.2 reuse evaluation, inspection of all 10 files in `apps/server/api/src/ai/embedding/` confirms they are embedding-specific (`EmbeddingRuntimeConfig`, `EmbeddingProviderPort`, `EmbeddingTelemetryRecord`, `EVC-01`..`EVC-10` evidence model) and exclusively `FEATURE`-owned by `020-embedding-provider-adapter-foundation`. No capability-neutral shared provider primitive exists on main; therefore Slice 23 MUST NOT import from `apps/server/api/src/ai/embedding/`, duplicate an embedding path, or introduce a generic gateway.
+- Cross-slice test-boundary fact observed on current `origin/main`: PR #142 added `tests/architecture/embedding-provider-boundary.test.ts`, whose lines 94–102 assert that no `.ts` file under `apps/server/api/src` outside `apps/server/api/src/ai/embedding/` matches `/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/`. Because `bun run verify-all` runs all `tests/**/*.test.ts` and Slice 23 forbids modifying Slice 18–22 artifacts inside the Slice 23 implementation PR, Developer T001 MUST check whether that exclusive assertion still blocks `apps/server/api/src/ai/reranker/` on current main and treat an unresolved collision as a `BLOCKED` / STOP condition rather than editing Slice 20 tests.
 - scripts/guard-static.mjs:
   - Rule 8 contains provider import tokens including dashscope and @alicloud; native HTTP with global fetch introduces no such provider SDK import.
   - Rule 19 is scoped so future independent adapter paths can exist; its self-tests explicitly distinguish Slice 19 surface from future adapter paths. Slice 23 must still run the guard and self-test.
@@ -192,7 +243,7 @@ Decision: NATIVE_HTTP.
 Reasons:
 
 1. The official native HTTP qwen3-rerank contract is explicit enough for strict parsing.
-2. The repository already runs in a fetch-capable JS/TS runtime and Slice 20 planning independently chose native HTTP for a different provider capability; no shared generic transport is required.
+2. The repository already runs in a fetch-capable JS/TS runtime and Slice 20 also chose native HTTP for its separate embedding capability (landing without any generic shared transport primitive); no shared generic transport is required.
 3. No DashScope/@alicloud SDK dependency exists today.
 4. Native HTTP exposes the raw documented JSON, which improves strict response validation and malformed/ambiguous-shape testing.
 5. It minimizes supply-chain and bundle/runtime complexity.
@@ -215,7 +266,12 @@ Therefore:
 
 GOVERNANCE PREREQUISITE = REQUIRED.
 
-It must be a separate governance-only PR, independently audited and merged before Developer T002+ may begin. The implementation PR MUST NOT modify .specify/implementation-ownership.json.
+Implementation Gate: BLOCKED until:
+1. corrected Spec/Plan/Checklist/Tasks are admitted to `main`;
+2. reranker ownership governance prerequisite (`apps/server/api/src/ai/reranker/` -> `023-reranker-provider-adapter-foundation`) is independently audited and merged to `main`;
+3. Developer T001 current-main reconciliation PASS (including verification that no unresolved cross-slice test collision blocks `verify-all`).
+
+The governance prerequisite must be a separate governance-only PR, independently audited and merged before Developer T002+ may begin. The implementation PR MUST NOT modify .specify/implementation-ownership.json.
 
 Exact ownership need:
 
@@ -772,11 +828,23 @@ Expected results:
 - changed files are a subset of §8 plus frozen planning artifacts already present on the branch;
 - implementation PR contains no governance registry modification.
 
+## Verification Plan
+
+Consolidated mechanical verification contract summarizing §16–§19 and §22 (no change to test semantics):
+
+| Verification Track | Required Entrypoint(s) / Command(s) | Scope & Evidence Semantics |
+|---|---|---|
+| Focused offline contract & protocol suite | `bunx vitest run tests/ai/reranker-provider-contract.test.ts`; `bunx vitest run tests/ai/reranker-dashscope.test.ts` | Proves `CONTRACT_MECHANICS` only on synthetic/non-personal fixtures (input validation, identity mapping, strict response parsing, finite scores, tie break, error taxonomy, bounded retry, redaction, state-machine precedence). Never sets `LIVE_PROVIDER_CAPABILITY = PASS`. |
+| Architecture & negative-scope boundary suite | `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts` | Proves seam isolation (`apps/server/api/src/ai/reranker/`), zero provider SDK dependency, egress only in `transport.ts`, `index.ts`-only public exports, zero DB/persistence/route/retrieval/Gold/gateway/fallback/secret leakage/READY override. |
+| Optional controlled live provider verification | `RERANKER_LIVE_VERIFY=1 RERANKER_LIVE_EVIDENCE_PATH=/tmp/xiaoshuyin-s23-reranker-live.json bunx vitest run tests/ai/reranker-provider-live.test.ts` | Opt-in only on clean exact `HEAD` with approved `DASHSCOPE_API_KEY`, approved workspace base URL, `qwen3-rerank`, `top_n=N`, `return_documents=false`, and safe synthetic fixtures. Absent opt-in -> `NOT_EVALUATED`; missing secret/egress -> `BLOCKED`; incompatible contract -> `FAIL`/`UNKNOWN`. Evidence written outside repo with SHA-256. |
+| Repository static, governance & full regression gates | `node scripts/guard-static.mjs`; `node scripts/guard-static.mjs --self-test`; `node .specify/scripts/validate-governance.mjs`; `node .specify/scripts/tests/run-governance-tests.mjs`; `node .specify/scripts/validate-change-governance.mjs --base "$DEVELOPMENT_BASE" --head HEAD`; `node .specify/scripts/tests/run-change-governance-tests.mjs`; `bun run typecheck`; `bun run verify-all` | Exact-head verification of static guard (unchanged), Spec/Change governance, TypeScript compilation, and canonical repository regression. |
+| Diff & exact-head provenance closeout | `git diff --name-only "$DEVELOPMENT_BASE"...HEAD`; exit-0 diffs on `package.json`, `bun.lock`, `apps/server/api/package.json`, `apps/server/api/src/app.ts`, `apps/server/api/src/routes`, `db`, `.specify` | Confirms allowlist compliance and exact-head binding for independent Audit 2 handoff (`T011`–`T012`). |
+
 ## 23. STOP Conditions
 
 Developer MUST STOP before further mutation if any of the following is true:
 
-1. Frozen Spec blob != 311511af1cfcda979d2b6896103c0a0c1d227b0b.
+1. Frozen Spec blob != 4354ecac585d3d6c675c629d5304faf9422cf5b1.
 2. Authority Docs conflict with the Frozen Spec.
 3. current main introduces a competing 023/reranker owner or implementation.
 4. governance prerequisite for apps/server/api/src/ai/reranker/ is absent/not independently audited/not merged.
@@ -798,7 +866,7 @@ Developer MUST STOP before further mutation if any of the following is true:
 
 ## 24. Developer Handoff
 
-Developer receives only after the separate governance prerequisite is merged:
+Developer receives only after corrected Spec/Plan/Checklist/Tasks are admitted to main and the separate governance prerequisite is independently audited and merged:
 
 - exact current development base;
 - Frozen Spec head/blob;
@@ -873,7 +941,7 @@ Non-goal traceability:
 - FR coverage planned: 20/20.
 - AS coverage planned: 15/15.
 - Governance prerequisite: REQUIRED.
-- Current implementation gate: BLOCKED until that separate prerequisite is independently audited and merged.
+- Current implementation gate: BLOCKED until corrected Spec/Plan/Checklist/Tasks are admitted to main, the separate reranker ownership governance prerequisite is independently audited and merged, and Developer T001 current-main reconciliation passes.
 - Provider contract: PARTIAL due immutable qwen3-rerank revision/latest-alias/server-timeout/partial-failure semantics being undocumented; no guess is permitted.
 - Transport: NATIVE_HTTP.
 - Professional Authority gap: PRESERVED.

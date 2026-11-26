@@ -1,9 +1,42 @@
 # Slice 23 — Developer Tasks
 
 Feature: 023-reranker-provider-adapter-foundation  
-Frozen Spec blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b
+Frozen Spec head: 092c18d514d46a1e4e40f3544d428302cde00fa8 (superseded historical head: 8fae7497df58446ad034d2986168f6a912444eb3)  
+Frozen Spec blob: 4354ecac585d3d6c675c629d5304faf9422cf5b1 (superseded historical blob: 311511af1cfcda979d2b6896103c0a0c1d227b0b)
 
 These tasks implement only the reranker provider adapter technical capability foundation. They do not authorize the governance prerequisite, Audit 2, merge, production route activation, Gold evaluation, or production model approval.
+
+## Frozen Spec Authority Map
+
+Mechanical traceability from every Slice 23 task (`T001`–`T012`) to Frozen Spec (`spec.md` head `092c18d514d46a1e4e40f3544d428302cde00fa8`, blob `4354ecac585d3d6c675c629d5304faf9422cf5b1`) requirements, acceptance scenarios, invariants, and exit criteria:
+
+| Task | Frozen Spec Authority (FR / AS / Invariants / Upstream IDs) | Plan Section(s) | Exit Criteria |
+|---|---|---|---|
+| T001 | `FR-002`, `FR-005`, `FR-018`, `FR-020`; `AS-07`, `AS-08`, `AS-15`; `§9.2`, `§10 #1/#2/#13/#15`, `§16.1`–`§16.3`; `V1-C03`, `V1-C27`, `V1-X14` | §1, §4, §5, §7, §23 | Signed Developer preflight recording exact `DEVELOPMENT_BASE`, Frozen Spec blob `4354ecac...`, admitted planning freeze blobs, merged narrow ownership rule, provider contract validity, cross-slice test-boundary check, and `IMPLEMENTATION_GATE = OPEN` (or `BLOCKED` stop). |
+| T002 | `FR-001`, `FR-003`, `FR-004`, `FR-007`, `FR-008`; `AS-01`, `AS-06`; `§10 #3/#9`; `V1-C24`, `V1-C37` | §8, §9, §10, §11 | Provider-neutral `RerankRequest` / `RerankResult` & input validation (`contracts.ts`, `index.ts`) rejecting blank/duplicate/out-of-range inputs with zero transport calls and zero provider-native/business-object leakage. |
+| T003 | `FR-002`, `FR-005`, `FR-010`, `FR-019`; `AS-07`, `AS-08`; `§10 #1/#2/#11`; `V1-C03`, `V1-C27`, `V1-X11` | §5, §9, §13, §15 | Capability-local error taxonomy and lazy secret / strict base-URL config (`config.ts`, `errors.ts`) recording `qwen3-rerank` + `UNKNOWN_NOT_DOCUMENTED` revision without touching central error handler or `.env*`. |
+| T004 | `FR-010`, `FR-011`, `FR-018`; `AS-08`, `AS-14`; `§10 #10/#11/#15`; `V1-C27`, `V1-C28` | §6, §14, §15 | Injectable `NATIVE_HTTP` transport (`transport.ts`) enforcing `10000ms` per-attempt deadline, max `2` attempts, `1000ms` backoff, retryable-only taxonomy, and zero fallback/SDK imports. |
+| T005 | `FR-004`, `FR-005`, `FR-006`, `FR-007`, `FR-009`, `FR-010`; `AS-03`–`AS-06`; `§10 #1/#3`; `V1-C03`, `V1-C27` | §5, §10, §11, §12, §13 | Strict DashScope request builder & parser (`dashscope.ts`) enforcing `top_n=N`, `return_documents=false`, index-to-`candidateId` mapping, descending score order, `[0,1]` finite scores, and fail-closed `PARTIAL_RESPONSE` / `IDENTITY_MAPPING_FAILURE` / `MALFORMED_RESPONSE`. |
+| T006 | `FR-001`, `FR-003`, `FR-004`, `FR-007`, `FR-008`, `FR-009`, `FR-012`; `AS-01`, `AS-03`, `AS-04`; `§10 #3/#4/#5/#14`; `V1-C24`, `V1-C28` | §9, §10, §11, §12 | Stateless rerank orchestration (`rerank.ts`, `index.ts`) delivering deterministic score-desc + input-index tie-break normalization (`rank=1..N`) with zero cache/persistence/route wiring. |
+| T007 | `FR-005`, `FR-014`, `FR-015`, `FR-019`, `FR-020`; `AS-07`, `AS-09`, `AS-15`; `§10 #1/#11/#13`, `§16.3`; `V1-C03`, `V1-X11`, `V1-X14` | §17, §18, §19, §20 | Whitelist-only telemetry (`telemetry.ts`) and pure 5-state evidence machine (`evidence.ts`: `FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS`) with `UNKNOWN_NOT_DOCUMENTED` revision guard and zero `READY` override. |
+| T008 | `FR-001`, `FR-003`–`FR-011`, `FR-013`, `FR-014`, `FR-019`, `FR-020`; `AS-01`, `AS-03`–`AS-09`; `§10 #1/#3/#10/#12`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-C28`, `V1-X14` | §16, §18 | Complete offline contract & DashScope fixture test suites (`tests/ai/reranker-provider-contract.test.ts`, `tests/ai/reranker-dashscope.test.ts`) passing with zero network/secrets and proving `CONTRACT_MECHANICS` only. |
+| T009 | `FR-012`, `FR-016`, `FR-017`, `FR-018`, `FR-019`; `AS-10`–`AS-14`; `§10 #4`–`#9/#14/#15`, `## Acceptance Evidence`; `V1-C24`, `V1-C34`, `V1-C37` | §3, §8, §16, §21 | Boundary & negative-scope architecture test (`tests/architecture/reranker-provider-boundary.test.ts`) + passing `guard-static.mjs` and `--self-test` proving zero DB/SDK/route/retrieval/Gold/gateway/secret violations. |
+| T010 | `FR-005`, `FR-013`, `FR-014`, `FR-015`, `FR-019`, `FR-020`; `AS-02`, `AS-07`, `AS-08`, `AS-15`; `§10 #1/#11/#12/#13`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-X11`, `V1-X14` | §17, §18, §19 | Controlled opt-in live verification (`tests/ai/reranker-provider-live.test.ts`) recording external sanitized JSON + SHA-256 bound to clean exact `HEAD`, or preserving truthful `NOT_EVALUATED` / `BLOCKED` / `FAIL` / `UNKNOWN`. |
+| T011 | `FR-012`, `FR-014`–`FR-020`; `AS-09`–`AS-15`; `§9.2`, `§10 #1/#13`, `§16.3`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-X14` | §21, §22 | All mandatory offline, architecture, static guard, governance, typecheck, `verify-all`, and diff-allowlist checks passing on stable final exact `HEAD` with exact-head live-evidence validity verified. |
+| T012 | `FR-015`, `FR-016`, `FR-020`; `AS-10`, `AS-15`; `§16.3`, `## Acceptance Evidence`; `V1-C24`, `V1-C34`, `V1-X14` | §24, §25 | Complete independent Audit 2 handoff package binding exact `DEVELOPMENT_BASE`, final `HEAD`, Frozen Spec/Planning blobs, governance PR, provider sources/unknowns, test/guard outputs, preserved Gold/Reviewer gap, and Developer `STOP`. |
+
+## Acceptance Evidence Contract
+
+Aligned with Frozen Spec (`092c18d514d46a1e4e40f3544d428302cde00fa8` / `4354ecac585d3d6c675c629d5304faf9422cf5b1`) `## Acceptance Evidence`, completion of any Slice 23 task requires concrete repository/runtime artifacts owned by designated tasks (narrative claims never substitute for evidence):
+
+| Evidence Category | Designated Evidence Owner(s) | Required Verifiable Evidence Contract |
+|---|---|---|
+| Governance & preflight gate evidence | `T001` (gate open/blocked), `T011` (final governance checks) | Remote read-back of admitted Spec/Plan/Checklist/Tasks blobs, merged narrow `.specify/implementation-ownership.json` PR/merge SHA/audit verdict, cross-slice test-boundary check, and exit-0 outputs from `validate-governance.mjs`, `run-governance-tests.mjs`, `validate-change-governance.mjs`, and `run-change-governance-tests.mjs`. |
+| Offline contract & protocol evidence | `T002`–`T007` (module surfaces), `T008` (test matrix) | Concrete test execution outputs of `bunx vitest run tests/ai/reranker-provider-contract.test.ts` and `bunx vitest run tests/ai/reranker-dashscope.test.ts` on synthetic/non-personal fixtures proving `CONTRACT_MECHANICS` only (never `LIVE_PROVIDER_CAPABILITY = PASS`). |
+| Live-provider truthfulness evidence | `T010` (execution & external JSON), `T012` (handoff provenance) | When opted in via `RERANKER_LIVE_VERIFY=1`, external sanitized JSON at `RERANKER_LIVE_EVIDENCE_PATH` + SHA-256 bound to exact `HEAD`, clean tracked tree, provider/endpoint fingerprint, `qwen3-rerank` / `UNKNOWN_NOT_DOCUMENTED` revision state, request ID(s), usage, attempts, and lower/aggregate states; when unconfigured/not opted in, truthful `BLOCKED` / `NOT_EVALUATED` / `UNVERIFIED`. |
+| Exact-head & regression evidence | `T010`, `T011`, `T012` | Final exact `HEAD` matching any live evidence head (`AS-15`), plus exit-0 outputs from `bun run typecheck` and `bun run verify-all` on that exact `HEAD`. |
+| Scope-negative & secret/non-persistence evidence | `T009`, `T011` | Exit-0 outputs from `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts`, `node scripts/guard-static.mjs`, `node scripts/guard-static.mjs --self-test`, `git diff --name-only "$DEVELOPMENT_BASE"...HEAD` allowlist check, and zero-diff checks on `package.json`, `bun.lock`, `apps/server/api/package.json`, `app.ts`, `routes`, `db`, and `.specify`. |
+| Audit 2 handoff evidence | `T012` | Complete provenance bundle containing base/head SHAs, Spec/Planning blobs, changed files, governance prerequisite evidence, official provider source list + `UNKNOWN` items, offline/live/regression outputs, preserved `APPROVED PROFESSIONAL REVIEWER — UNASSIGNED` & Gold Eval `BLOCKED` state, and explicit Developer `STOP`. |
 
 ## T001 — Development-start Remote Truth / Governance / Dependency Gate
 
@@ -11,9 +44,9 @@ These tasks implement only the reranker provider adapter technical capability fo
 Re-establish exact remote truth and mechanically decide whether Developer mutation is authorized.
 
 **Prerequisites**
-- Frozen Plan/Checklist/Tasks exact head/blobs are available.
+- Corrected Spec/Plan/Checklist/Tasks are admitted to `main`.
 - Plan AI 2 Audit 1 = FINAL PASS.
-- Separate governance prerequisite is expected to have been independently audited and merged.
+- Separate reranker ownership governance prerequisite (`apps/server/api/src/ai/reranker/` -> `023-reranker-provider-adapter-foundation`) is independently audited and merged to `main`.
 
 **Allowed Paths**
 - No repository mutation.
@@ -25,11 +58,11 @@ Re-establish exact remote truth and mechanically decide whether Developer mutati
 
 **Actions**
 1. Fetch origin and record current origin/main.
-2. Verify Frozen Spec exact blob = 311511af1cfcda979d2b6896103c0a0c1d227b0b.
-3. Verify Frozen Spec commit 8fae7497df58446ad034d2986168f6a912444eb3 remains in planning lineage.
+2. Verify Frozen Spec exact blob = 4354ecac585d3d6c675c629d5304faf9422cf5b1.
+3. Verify Frozen Spec commit 092c18d514d46a1e4e40f3544d428302cde00fa8 remains in planning lineage (preserving historical ancestor 8fae7497df58446ad034d2986168f6a912444eb3).
 4. Record Planning Freeze exact head and plan/checklist/tasks blobs; verify they equal the Plan AI 2 handoff.
 5. Re-read four Authority Doc blobs and classify any drift.
-6. Re-read Slice 18–22 current states; verify no owner now absorbs Slice 23.
+6. Re-read Slice 18–22 current states; verify no owner now absorbs Slice 23, and verify whether `tests/architecture/embedding-provider-boundary.test.ts` on current main still enforces an exclusive `/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/` scan outside `ai/embedding/` that would block `bun run verify-all` without modifying Slice 20 artifacts.
 7. Search branches/PRs/current tree for competing 023/reranker implementation.
 8. Re-read official Alibaba qwen3-rerank API, model, error and rate-limit pages.
 9. Verify qwen3-rerank still supports native HTTP request/response semantics frozen in Plan §5.
@@ -42,11 +75,11 @@ Re-establish exact remote truth and mechanically decide whether Developer mutati
 
 **Verification**
 - git rev-parse origin/main -> exact DEVELOPMENT_BASE recorded.
-- git rev-parse HEAD:specs/023-reranker-provider-adapter-foundation/spec.md -> 311511af1cfcda979d2b6896103c0a0c1d227b0b after reconciliation.
-- git merge-base --is-ancestor 8fae7497df58446ad034d2986168f6a912444eb3 HEAD -> exit 0.
+- git rev-parse HEAD:specs/023-reranker-provider-adapter-foundation/spec.md -> 4354ecac585d3d6c675c629d5304faf9422cf5b1 after reconciliation.
+- git merge-base --is-ancestor 092c18d514d46a1e4e40f3544d428302cde00fa8 HEAD -> exit 0.
 - ownership resolution is narrow and unique for apps/server/api/src/ai/reranker/.
 - provider contract facts still match the Plan or every changed fact is returned to planning.
-- no competing implementation.
+- no competing implementation and no unresolved cross-slice test collision blocking `verify-all`.
 - behind=0 before T002 mutation; ordinary merge reconciliation only, no rebase/force rewrite of Frozen lineage.
 
 **Done Criteria**
@@ -737,7 +770,7 @@ Package the exact final evidence for a new independent highest-capability Audit 
 **Actions**
 1. Record exact development base.
 2. Record exact final implementation head.
-3. Record Frozen Spec head 8fae7497df58446ad034d2986168f6a912444eb3 and blob 311511af1cfcda979d2b6896103c0a0c1d227b0b.
+3. Record Frozen Spec head 092c18d514d46a1e4e40f3544d428302cde00fa8 and blob 4354ecac585d3d6c675c629d5304faf9422cf5b1 (noting superseded historical identity 8fae7497df58446ad034d2986168f6a912444eb3 / 311511af1cfcda979d2b6896103c0a0c1d227b0b).
 4. Record Planning Freeze exact head and Plan/Checklist/Tasks blobs.
 5. Record exact changed files.
 6. Record governance prerequisite:
