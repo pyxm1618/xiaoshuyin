@@ -34,6 +34,7 @@ COMMIT;
 SELECT format('GRANT CONNECT ON DATABASE %I TO xiaoshuyin_migrator;', :'target_db') \gexec
 SELECT format('GRANT CONNECT ON DATABASE %I TO xiaoshuyin_app;', :'target_db') \gexec
 SELECT 'GRANT CREATE, USAGE ON SCHEMA public TO xiaoshuyin_migrator;' \gexec
+SELECT 'REVOKE CREATE ON SCHEMA public FROM xiaoshuyin_app;' \gexec
 SELECT 'GRANT USAGE ON SCHEMA public TO xiaoshuyin_app;' \gexec
 SELECT format('GRANT CREATE ON DATABASE %I TO xiaoshuyin_migrator;', :'target_db') \gexec
 EOSQL

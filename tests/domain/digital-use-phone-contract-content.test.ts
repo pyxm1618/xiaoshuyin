@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ConfirmPhoneUseContractRequest,
+  PhoneUseContractDto,
   PhoneUseContractTerms,
   SavePhoneUseContractDraftRequest,
 } from '@xiaoshuyin/contracts';
@@ -155,6 +156,34 @@ describe('Slice 14 Contract request contracts', () => {
       terms,
     };
     expect(SavePhoneUseContractDraftRequest.safeParse(base).success).toBe(true);
+    const { childParticipationId: _omitted, ...withoutParticipation } = base;
+    expect(SavePhoneUseContractDraftRequest.safeParse(withoutParticipation).success).toBe(true);
+    expect(PhoneUseContractDto.safeParse({
+      id: '00000000-0000-7000-8000-000000000010',
+      familyId: '00000000-0000-7000-8000-000000000011',
+      caseId: '00000000-0000-7000-8000-000000000012',
+      version: 1,
+      draftRevision: 1,
+      status: 'DRAFT',
+      reviewState: 'CURRENT',
+      adultPartyPersonId: base.adultPartyPersonId,
+      childPartyPersonId: base.childPartyPersonId,
+      childParticipationId: null,
+      terms,
+      sourceTemplateVersion: base.sourceTemplateVersion,
+      dependencyRefs: [],
+      parentConfirmation: null,
+      childConfirmation: null,
+      supersedesId: null,
+      updateReason: null,
+      updateTrigger: null,
+      createdByPersonId: base.adultPartyPersonId,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      activatedAt: null,
+      supersededAt: null,
+      pausedAt: null,
+    }).success).toBe(true);
     expect(SavePhoneUseContractDraftRequest.safeParse({
       ...base,
       status: 'ACTIVE',

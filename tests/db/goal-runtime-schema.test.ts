@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
 
 const ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL']!;
 const APP_URL = process.env['DATABASE_URL']!;
@@ -27,11 +28,14 @@ describe('Common Core Goal DB guards', () => {
       [accountId]
     )).rows[0].id;
     familyId = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
+    await admin.query('BEGIN');
+    await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountId]);
     await admin.query('SELECT app.create_family($1,$2,$3)', [
       familyId,
       personId,
       'GOAL-DB',
     ]);
+    await admin.query('COMMIT');
     await admin.query(
       'INSERT INTO family_members (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [familyId, personId]
@@ -561,6 +565,79 @@ describe('Common Core Goal DB guards', () => {
       });
     } finally {
       await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+      await cleanupPrivilegedTransitionPrerequisites();
+    }
+  });
+
+  it('blocks a bound UNDER_14 Digital Use target even with valid guardian consent and no ACTIVE participation', async () => {
+    await seedPrivilegedTransitionPrerequisites('ADULT');
+    const targetPersonId=(await admin.query(
+      'INSERT INTO persons (account_id,created_by_account_id) VALUES (NULL,$1) RETURNING id',
+      [accountId]
+    )).rows[0].id as string;
+    await admin.query('INSERT INTO family_members (family_id,person_id) VALUES ($1,$2)',[familyId,targetPersonId]);
+    const requestId=(await admin.query(
+      `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',now()+interval '1 hour',now()) RETURNING id`,
+      [familyId,personId,targetPersonId,getCurrentNoticeHash()]
+    )).rows[0].id as string;
+    const consent=(await admin.query(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),'v1',$6,'v1',$7::jsonb)
+       RETURNING id,version`,
+      [familyId,personId,accountId,requestId,targetPersonId,getCurrentNoticeHash(),JSON.stringify({
+        channel:'TEST',accepted_text_hash:'b'.repeat(64),declared_age_band:'UNDER_14',
+        client_ip_hash:'c'.repeat(64),user_agent_hash:'d'.repeat(64),
+      })]
+    )).rows[0] as {id:string;version:number};
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,guardian_person_id,guardian_consent_record_id,guardian_consent_version,verified_source)
+       VALUES ($1,'UNDER_14',true,$2,$3,$4,'GUARDIAN_RELAY')`,
+      [targetPersonId,personId,consent.id,consent.version]
+    );
+    await admin.query(
+      'INSERT INTO digital_use_assessment_context (case_id,family_id,target_person_id,created_by_person_id) VALUES ($1,$2,$3,$4)',
+      [caseId,familyId,targetPersonId,personId]
+    );
+    const inserted=await admin.query(savedInsertSql(),[familyId,caseId,formulationId,personId]);
+    const goalRowId=inserted.rows[0].id as string;
+    const goalRow=await admin.query('SELECT goal_id,version FROM goals WHERE id=$1',[goalRowId]);
+    try {
+      const participants=await admin.query(
+        "SELECT count(*)::int AS n FROM case_participants WHERE case_id=$1 AND person_id=$2 AND state='ACTIVE'",
+        [caseId,targetPersonId]
+      );
+      expect(participants.rows[0].n).toBe(0);
+      await app.query('BEGIN');
+      try {
+        await app.query('SELECT app.set_identity_context($1,$2)',[accountId,'FAMILY_MANAGEMENT']);
+        await app.query('SELECT app.set_family_context($1,$2,$3)',[familyId,personId,'FAMILY_MANAGEMENT']);
+        await expect(app.query(
+          'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5)',
+          [caseId,7,goalRow.rows[0].goal_id,goalRow.rows[0].version,personId]
+        )).rejects.toMatchObject({
+          code:'23514',
+          message:expect.stringMatching(/GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID/),
+        });
+      } finally {
+        await app.query('ROLLBACK');
+      }
+      const state=await admin.query(
+        'SELECT c.phase,g.confirmation_state FROM cases c JOIN goals g ON g.case_id=c.id WHERE c.id=$1 AND g.id=$2',
+        [caseId,goalRowId]
+      );
+      expect(state.rows[0]).toEqual({phase:'GOALS',confirmation_state:'UNCONFIRMED'});
+    } finally {
+      await admin.query('DELETE FROM goals WHERE id=$1',[goalRowId]).catch(()=>undefined);
+      await admin.query('DELETE FROM digital_use_assessment_context WHERE case_id=$1',[caseId]).catch(()=>undefined);
+      await admin.query('DELETE FROM person_compliance_profiles WHERE person_id=$1',[targetPersonId]).catch(()=>undefined);
+      await admin.query('DELETE FROM consent_records WHERE id=$1',[consent.id]).catch(()=>undefined);
+      await admin.query('DELETE FROM guardian_consent_requests WHERE id=$1',[requestId]).catch(()=>undefined);
+      await admin.query('DELETE FROM family_members WHERE family_id=$1 AND person_id=$2',[familyId,targetPersonId]).catch(()=>undefined);
+      await admin.query('DELETE FROM persons WHERE id=$1',[targetPersonId]).catch(()=>undefined);
       await cleanupPrivilegedTransitionPrerequisites();
     }
   });

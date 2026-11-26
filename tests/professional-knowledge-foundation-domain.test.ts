@@ -191,9 +191,11 @@ describe('professional knowledge foundation domain contract', () => {
       reviewState: 'CURRENT',
       validityState: 'VALID',
       releasedAt: '2026-11-01T00:00:00.000Z',
+      effectiveFrom: '2026-11-01T00:00:00.000Z',
     });
     const result = evaluateProfessionalKnowledgeEligibility({
       version: v,
+      now: new Date('2026-11-02T00:00:00Z'),
       approval: approvalFor(v),
       sceneBinding: {
         status: 'RESOLVED',

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { SceneRef } from '@xiaoshuyin/contracts';
 import {
   getCurrentActivePhoneUseContract,
+  isPhoneUseContractAuthoritativeExecutionBasis,
   getLatestSceneArtifact,
   insertSceneArtifact,
   isParticipationProcessingAllowed,
@@ -294,7 +295,7 @@ async function handleA4011(context:PhoneUseSceneSemanticContext):Promise<PhoneUs
  if(
    active.id!==parsed.data.contractVersionId
    || active.version!==parsed.data.contractVersion
-   || active.status!=='ACTIVE'
+   || !isPhoneUseContractAuthoritativeExecutionBasis(active)
  ) semanticError('PHONE_USE_CONTRACT_STALE_REVISION');
  resolvePhoneUseContractContent(active.source_template_version);
 

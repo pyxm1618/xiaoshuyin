@@ -55,6 +55,38 @@ describe('Members Integration (T047 + T049)', () => {
   // T047: POST member creation
   // ──────────────────────────────────────────────
 
+  it('Finding #34 projects accountBound from the real Persons row through production Members responses', async () => {
+    const { token, personId, familyId } = await setupManagerAndFamily('f34-account-bound');
+
+    const managerDb = await queryDb('SELECT account_id FROM persons WHERE id = $1', [personId]);
+    expect(managerDb.rows[0].account_id).not.toBeNull();
+
+    const managerPatch = await updateMember(
+      app,
+      token,
+      familyId,
+      personId,
+      'f34-account-bound-manager',
+      [valueInput('Manager', 'SELF_STATEMENT')]
+    );
+    expect(managerPatch.statusCode, managerPatch.body).toBe(200);
+    expect(managerPatch.json().personId).toBe(personId);
+    expect(managerPatch.json().accountBound).toBe(true);
+
+    const childCreate = await createMember(app, token, familyId, 'f34-account-bound-child', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+    });
+    expect(childCreate.statusCode, childCreate.body).toBe(201);
+    expect(childCreate.json().accountBound).toBe(false);
+
+    const childDb = await queryDb(
+      'SELECT account_id FROM persons WHERE id = $1',
+      [childCreate.json().personId]
+    );
+    expect(childDb.rows[0].account_id).toBeNull();
+  });
+
   it('T047: POST member MINOR_14_17 succeeds, account_id IS NULL, UUIDv7', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047a');
 

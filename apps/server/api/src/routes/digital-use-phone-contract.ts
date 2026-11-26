@@ -20,6 +20,7 @@ import {
   PhoneUseRoleplayTurnDto,
   RatePhoneUseRoleplayRequest,
   RevisePhoneUseContractRequest,
+  ReviewPhoneUseContractRequest,
   SavePhoneUseContractDraftRequest,
   SelectPhoneUseRoleplayRequest,
   UpdatePhoneUseContractDraftRequest,
@@ -36,6 +37,7 @@ import {
   getPhoneUseContractFaq,
   getPhoneUseContractTemplate,
   revisePhoneUseContract,
+  reviewPhoneUseContract,
   updatePhoneUseContractDraft,
   type PhoneUseStaticProfessionalContentAuthority,
 } from '../services/digital-use-phone-contract.js';
@@ -138,6 +140,14 @@ export function registerDigitalUsePhoneContractRoutes(
   const actor=actorOf(req),params=req.params as {id:string;version:number|string},caseId=caseIdOf(params.id),body=ConfirmPhoneUseContractRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
   const result=await confirmPhoneUseContract(pool,{actor,familyId,caseId,version:Number(params.version),idempotencyKey:readIdempotencyKey(req),...body});
   return reply.status(200).send(result);
+ });
+
+ app.post('/api/v1/cases/:id/digital-use/contract/:version/review',{
+  onRequest:app.authenticate,
+  schema:{operationId:'reviewPhoneUseContractVersion',summary:'Revalidate an unchanged ACTIVE Contract without replacing its version or confirmations',tags:TAGS,security:BEARER_SECURITY,params:VersionParams,body:ReviewPhoneUseContractRequest,response:{200:PhoneUseContractDto,...Errors}},
+ },async(req,reply)=>{
+  const actor=actorOf(req),params=req.params as {id:string;version:number|string},caseId=caseIdOf(params.id),body=ReviewPhoneUseContractRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
+  return reply.status(200).send(await reviewPhoneUseContract(pool,{actor,familyId,caseId,version:Number(params.version),idempotencyKey:readIdempotencyKey(req),...body}));
  });
 
  app.post('/api/v1/cases/:id/digital-use/contract/:version/revise',{

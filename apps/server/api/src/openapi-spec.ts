@@ -86,6 +86,7 @@ import {
   UpdatePhoneUseContractDraftRequest,
   ConfirmPhoneUseContractRequest,
   RevisePhoneUseContractRequest,
+  ReviewPhoneUseContractRequest,
   PhoneUseContractTemplateResponse,
   PhoneUseContractExamplesResponse,
   PhoneUseContractFaqResponse,
@@ -242,6 +243,7 @@ export function buildOpenApiDocument() {
     UpdatePhoneUseContractDraftRequest: toJsonSchema(UpdatePhoneUseContractDraftRequest),
     ConfirmPhoneUseContractRequest: toJsonSchema(ConfirmPhoneUseContractRequest),
     RevisePhoneUseContractRequest: toJsonSchema(RevisePhoneUseContractRequest),
+    ReviewPhoneUseContractRequest: toJsonSchema(ReviewPhoneUseContractRequest),
     PhoneUseContractTemplateResponse: toJsonSchema(PhoneUseContractTemplateResponse),
     PhoneUseContractExamplesResponse: toJsonSchema(PhoneUseContractExamplesResponse),
     PhoneUseContractFaqResponse: toJsonSchema(PhoneUseContractFaqResponse),
@@ -1083,6 +1085,26 @@ export function buildOpenApiDocument() {
         responses: {
           '201': refResponse(
             'New superseding A4012 Contract draft',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/{version}/review': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'reviewPhoneUseContractVersion',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneContractVersionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('ReviewPhoneUseContractRequest'),
+        responses: {
+          '200': refResponse(
+            'Unchanged ACTIVE Contract review completed',
             'PhoneUseContractDto'
           ),
           ...phoneContractErrors,
