@@ -25,6 +25,11 @@ const INFRA_EXEMPTION_CLASSES = new Set(["BUILD_TOOLING", "REPOSITORY_METADATA"]
 const OWNERSHIP_REGISTRY = ".specify/implementation-ownership.json";
 const AUTHORITY_UNIT_REGISTRY = ".specify/authority-unit-registry.json";
 const TASK_PROVENANCE_REGISTRY = ".specify/task-provenance-registry.json";
+// F-09: the only Authority change class allowed on a FUTURE_UNIMPLEMENTED unit is a
+// literal correction pre-registered in the trusted-base registry and bound to exact
+// before/after unit content. It is single-use by construction and grants no topology.
+const EXACT_WORDING_CORRECTION = "EXACT_WORDING_CORRECTION";
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function parseArgs(argv) {
   const opts = {
@@ -601,7 +606,110 @@ function loadAuthorityRegistry(errors) {
     }
   }
   assertExactSet([...seenDocs], AUTHORITY_DOCS, "Authority Unit registry document set", errors);
+  validateExactWordingCorrections(registry, errors);
   return registry;
+}
+
+function sha256Text(text) {
+  return crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+}
+
+function countLiteral(text, literal) {
+  let count = 0;
+  for (let i = text.indexOf(literal); i !== -1; i = text.indexOf(literal, i + literal.length)) count += 1;
+  return count;
+}
+
+function validateExactWordingCorrections(registry, errors) {
+  const entries = registry.exactWordingCorrections;
+  if (entries === undefined) return;
+  if (!Array.isArray(entries)) {
+    errors.push("Authority Unit registry exactWordingCorrections must be an array when present.");
+    return;
+  }
+  const units = unitMap(registry);
+  const seenIds = new Set();
+  const seenUnits = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const label = "Authority Unit registry exactWordingCorrections[" + index + "]";
+    if (typeof entry?.id !== "string" || !/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(entry.id)) errors.push(label + ": id is missing or invalid.");
+    else if (seenIds.has(entry.id)) errors.push(label + ": duplicate correction id " + entry.id + ".");
+    else seenIds.add(entry.id);
+    const registered = units.get(entry?.authorityUnitId);
+    if (!registered) {
+      errors.push(label + ": unknown authorityUnitId " + String(entry?.authorityUnitId) + ".");
+      continue;
+    }
+    if (seenUnits.has(entry.authorityUnitId)) errors.push(label + ": an Authority Unit may have at most one exact wording correction.");
+    seenUnits.add(entry.authorityUnitId);
+    if (registered.doc.path !== entry.path) errors.push(label + ": path must be the registered document of " + entry.authorityUnitId + ".");
+    if (registered.unit.normative !== true || registered.unit.lifecycle !== "FUTURE_UNIMPLEMENTED") {
+      errors.push(label + ": exact wording correction is limited to normative FUTURE_UNIMPLEMENTED Authority Units.");
+    }
+    for (const key of ["from", "to"]) {
+      if (typeof entry[key] !== "string" || !entry[key] || /[\r\n]/.test(entry[key])) {
+        errors.push(label + ": " + key + " must be a non-empty single-line literal.");
+      }
+    }
+    if (entry.from === entry.to) errors.push(label + ": from and to must differ.");
+    if (!Number.isInteger(entry.expectedOccurrences) || entry.expectedOccurrences < 1) {
+      errors.push(label + ": expectedOccurrences must be a positive integer.");
+    }
+    for (const key of ["beforeUnitSha256", "afterUnitSha256"]) {
+      if (typeof entry[key] !== "string" || !SHA256_HEX.test(entry[key])) errors.push(label + ": " + key + " must be lowercase SHA-256 hex.");
+    }
+    if (entry.beforeUnitSha256 === entry.afterUnitSha256) errors.push(label + ": before and after unit identities must differ.");
+    if (typeof entry.rationale !== "string" || !entry.rationale.trim()) errors.push(label + ": rationale is required.");
+  }
+}
+
+function trustedWordingCorrections(base, errors) {
+  try {
+    if (!gitOk(["cat-file", "-e", base + ":" + AUTHORITY_UNIT_REGISTRY])) return [];
+    const trusted = JSON.parse(textAt(base, AUTHORITY_UNIT_REGISTRY));
+    return Array.isArray(trusted?.exactWordingCorrections) ? trusted.exactWordingCorrections : [];
+  } catch (error) {
+    errors.push("Cannot read trusted-base exact wording corrections: " + (error instanceof Error ? error.message : String(error)));
+    return [];
+  }
+}
+
+function validateExactWordingCorrection(impact, registered, texts, trusted, downstream, specOrProductChanges, errors) {
+  const unit = registered.unit;
+  const label = "Exact wording correction for Authority Unit " + unit.id;
+  const matches = trusted.filter((entry) => entry?.id === impact?.correctionId);
+  if (matches.length !== 1) {
+    errors.push(label + ": correctionId is not pre-authorized by the trusted-base Authority Unit registry: " + String(impact?.correctionId));
+    return;
+  }
+  const entry = matches[0];
+  if (entry.authorityUnitId !== unit.id || entry.path !== registered.doc.path) {
+    errors.push(label + ": pre-authorized correction is bound to a different Authority Unit or document.");
+    return;
+  }
+  if (downstream.length !== 0) errors.push(label + ": must not declare downstream.");
+  if (specOrProductChanges.length > 0) errors.push(label + ": cannot coexist with spec/product deltas: " + specOrProductChanges.join(", "));
+  if (!texts || typeof texts.before !== "string" || typeof texts.after !== "string") {
+    errors.push(label + ": unit content could not be resolved at base and head.");
+    return;
+  }
+  if (typeof entry.from !== "string" || !entry.from || typeof entry.to !== "string") {
+    errors.push(label + ": trusted correction entry is malformed.");
+    return;
+  }
+  if (sha256Text(texts.before) !== entry.beforeUnitSha256) {
+    errors.push(label + ": base unit content does not match beforeUnitSha256 (correction already consumed or base drifted).");
+  }
+  const occurrences = countLiteral(texts.before, entry.from);
+  if (occurrences !== entry.expectedOccurrences) {
+    errors.push(label + ": expected " + entry.expectedOccurrences + " occurrence(s) of the authorized literal at base, found " + occurrences + ".");
+  }
+  if (texts.before.split(entry.from).join(entry.to) !== texts.after) {
+    errors.push(label + ": head unit content differs from the exact authorized literal replacement.");
+  }
+  if (sha256Text(texts.after) !== entry.afterUnitSha256) {
+    errors.push(label + ": head unit content does not match afterUnitSha256.");
+  }
 }
 
 function unitMap(registry) {
@@ -659,6 +767,7 @@ function validateAuthorityImpact(changed, opts, errors) {
   assertExactSet(manifest.authorityChanges.map((x) => x?.path), authorityChanged, "Authority impact changed document set", errors);
 
   const changedUnitIds = [];
+  const unitTexts = new Map();
   const units = unitMap(registry);
   for (const item of manifest.authorityChanges) {
     if (!item || !AUTHORITY_DOCS.includes(item.path)) continue;
@@ -717,6 +826,7 @@ function validateAuthorityImpact(changed, opts, errors) {
           );
         }
         changedUnitIds.push(unit.id);
+        unitTexts.set(unit.id, { before, after });
       }
     }
   }
@@ -728,6 +838,7 @@ function validateAuthorityImpact(changed, opts, errors) {
   assertExactSet(manifest.unitImpacts.map((x) => x?.authorityUnitId), changedUnitIds, "Changed Authority Unit impact set", errors);
 
   const specOrProductChanges = changed.filter((file) => file.startsWith("specs/") || isProductPath(file));
+  const trustedCorrections = trustedWordingCorrections(opts.base, errors);
   for (const impact of manifest.unitImpacts) {
     const registered = units.get(impact?.authorityUnitId);
     if (!registered) {
@@ -752,6 +863,10 @@ function validateAuthorityImpact(changed, opts, errors) {
     }
 
     if (unit.lifecycle === "FUTURE_UNIMPLEMENTED") {
+      if (impact?.classification === EXACT_WORDING_CORRECTION) {
+        validateExactWordingCorrection(impact, registered, unitTexts.get(unit.id), trustedCorrections, downstream, specOrProductChanges, errors);
+        continue;
+      }
       errors.push("FUTURE_UNIMPLEMENTED Authority Unit " + unit.id + " has no implemented downstream binding; topology must land in a separate governance change before this Authority Unit can change.");
       continue;
     }
