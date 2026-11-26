@@ -195,7 +195,14 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
 
           const buildRes = await cmd(
             'docker',
-            ['build', '-f', 'tests/fixtures/pg-jieba-readiness/Dockerfile', '-t', imageTag, '.'],
+            [
+              'build',
+              '-f',
+              'tests/fixtures/pg-jieba-readiness/Dockerfile',
+              '-t',
+              imageTag,
+              'tests/fixtures/pg-jieba-readiness',
+            ],
             600_000,
           );
           if (!buildRes.ok) {

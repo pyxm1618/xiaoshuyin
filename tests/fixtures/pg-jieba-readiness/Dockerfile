@@ -26,7 +26,7 @@ RUN git clone "${PG_JIEBA_REPO}" . \
   && make -j"$(nproc)" \
   && make install
 
-COPY tests/fixtures/pg-jieba-readiness/xiaoshuyin_022_test.dict /tmp/xiaoshuyin_022_test.dict
+COPY xiaoshuyin_022_test.dict /tmp/xiaoshuyin_022_test.dict
 RUN TSEARCH_DIR="$(pg_config --sharedir)/tsearch_data" \
   && install -m 0644 /tmp/xiaoshuyin_022_test.dict "${TSEARCH_DIR}/xiaoshuyin_022_test.dict" \
   && rm -f /tmp/xiaoshuyin_022_test.dict
