@@ -248,4 +248,35 @@ describe('Families Integration (T045)', () => {
     );
     expect(families.rows).toEqual([{ id: first.json().id }]);
   });
+
+
+  it('A4: direct DB family seam rejects a spoofed creator Person', async () => {
+    const accountOwner = await loginWithLabel(app, 'fam_a4_owner');
+    const spoofed = await loginWithLabel(app, 'fam_a4_spoof');
+    const familyId = crypto.randomUUID();
+    const client = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+    await client.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'SELECT app.set_identity_context($1, $2)',
+        [accountOwner.accountId, 'FAMILY_MANAGEMENT']
+      );
+      await expect(
+        client.query(
+          'SELECT app.create_family($1, $2, $3)',
+          [familyId, spoofed.personId, 'spoofed-family']
+        )
+      ).rejects.toMatchObject({ code: '42501' });
+      await client.query('ROLLBACK');
+    } finally {
+      await client.end();
+    }
+
+    const residue = await verifyPool.query(
+      'SELECT id FROM families WHERE id = $1 OR created_by_person_id = $2',
+      [familyId, spoofed.personId]
+    );
+    expect(residue.rows).toHaveLength(0);
+  });
 });

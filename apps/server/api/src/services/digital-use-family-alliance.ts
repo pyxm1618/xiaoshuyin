@@ -22,6 +22,7 @@ import {
   casCompleteSceneNodeState,
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
+  getCaseById,
   getCurrentDigitalUseTargetItem,
   getCurrentTargetSelectionRevision,
   getSceneNodeState,
@@ -47,6 +48,8 @@ import {
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
+import { evaluateAuthorizedCompliance } from '../compliance/evaluate-compliance.js';
+import { withRlsTransaction } from '../db/tx.js';
 import {
   currentSceneEnvelope,
   assertBoundAssessmentCompliance,
@@ -93,6 +96,69 @@ function rethrowFamilyBusinessError(error: unknown): never {
     }
   }
   throw error;
+}
+
+export async function assertFamilyAllianceComplianceSnapshot(
+  pool: pg.Pool,
+  input: {
+    actor: DigitalUseActor;
+    familyId: string;
+    caseId: string;
+    targetPersonId: string;
+  }
+): Promise<void> {
+  // Anti-enumeration boundary: prove the requested Case is visible in the
+  // authenticated Family context before reading target compliance truth.
+  // The policy/profile/consent decision remains one REPEATABLE READ snapshot.
+  await withRlsTransaction(
+    pool,
+    {
+      familyId: input.familyId,
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      const visibleCase = await getCaseById(tx, input.caseId);
+      if (!visibleCase || visibleCase.family_id !== input.familyId) {
+        throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
+      }
+    }
+  );
+
+  const decision = await evaluateAuthorizedCompliance(pool, {
+    actor: input.actor,
+    familyId: input.familyId,
+    authorization: {
+      action: 'CASE_RESPOND_ASSESSMENT_SCENE',
+      purpose: 'FAMILY_MANAGEMENT',
+      resource: {
+        type: 'CASE',
+        familyId: input.familyId,
+        caseId: input.caseId,
+      },
+      caseId: input.caseId,
+    },
+    descriptor: FAMILY_ALLIANCE_FEATURE,
+    targetPersonId: input.targetPersonId,
+    supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
+  });
+  if (decision.decision === 'AUTHORIZATION_DENIED') {
+    throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
+  }
+  const result = decision.compliance;
+  if (result.gate !== 'ALLOW') {
+    if (
+      result.reasonCode === 'COMPLIANCE_GUARDIAN_CONSENT_REQUIRED' ||
+      result.reasonCode === 'COMPLIANCE_GUARDIAN_CONSENT_INVALID'
+    ) {
+      throw familyHttpError('CONSENT_BLOCKED', result.reasonCode);
+    }
+    throw familyHttpError(
+      'COMPLIANCE_BLOCKED',
+      result.reasonCode ?? 'COMPLIANCE_BLOCKED'
+    );
+  }
 }
 
 async function evaluateFamilyAllianceCompliance(
@@ -388,7 +454,8 @@ async function materializeParallelNodes(
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNode.nodeCode,
-    sourceNodeCode,
+    predecessorNodeCode: sourceNodeCode,
+    targetSourceNodeCode: routedNode.sourceNodeCode,
     reasonCode,
     inputRefs,
   });

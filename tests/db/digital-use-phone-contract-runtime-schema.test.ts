@@ -113,6 +113,64 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
     });
   });
 
+  it('A6 reconciles the confirmed Drizzle projection drifts with physical PostgreSQL', async () => {
+    const { rows } = await db.query<{
+      table_name: string;
+      column_name: string;
+      not_null: boolean;
+      default_expr: string | null;
+      generated_expr: string | null;
+    }>(`
+      SELECT c.relname AS table_name,
+             a.attname AS column_name,
+             a.attnotnull AS not_null,
+             CASE WHEN a.attgenerated='' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS default_expr,
+             CASE WHEN a.attgenerated<>'' THEN pg_get_expr(ad.adbin,ad.adrelid) ELSE NULL END AS generated_expr
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid=a.attrelid
+        LEFT JOIN pg_attrdef ad ON ad.adrelid=a.attrelid AND ad.adnum=a.attnum
+       WHERE (c.relname, a.attname) IN (
+         ('business_audit_events','family_id'),
+         ('staff_assignments','capability_grant_scope_type'),
+         ('roleplay_sessions','simulation_role'),
+         ('roleplay_sessions','status')
+       )
+       ORDER BY c.relname, a.attname
+    `);
+    const actual = Object.fromEntries(rows.map((row) => [
+      `${row.table_name}.${row.column_name}`,
+      {
+        ...row,
+        default_expr: normalizeSqlExpr(row.default_expr),
+        generated_expr: normalizeSqlExpr(row.generated_expr),
+      },
+    ]));
+
+    const businessFamily = getTableConfig(drizzleSchema.businessAuditEvents).columns
+      .find((column) => column.name === 'family_id')!;
+    expect(actual['business_audit_events.family_id']?.not_null).toBe(false);
+    expect(businessFamily.notNull).toBe(false);
+
+    const staffGenerated = getTableConfig(drizzleSchema.staffAssignments).columns
+      .find((column) => column.name === 'capability_grant_scope_type')!;
+    const projectedGenerated = drizzleGeneratedExpr(staffGenerated);
+    expect(actual['staff_assignments.capability_grant_scope_type']?.generated_expr)
+      .toContain('scope_type');
+    expect(actual['staff_assignments.capability_grant_scope_type']?.generated_expr)
+      .toContain('GLOBAL');
+    expect(projectedGenerated).toContain('scope_type');
+    expect(projectedGenerated).toContain('GLOBAL');
+
+    const roleplayColumns = getTableConfig(drizzleSchema.roleplaySessions).columns;
+    const simulationRole = roleplayColumns.find((column) => column.name === 'simulation_role')!;
+    const status = roleplayColumns.find((column) => column.name === 'status')!;
+    expect(actual['roleplay_sessions.simulation_role']?.default_expr)
+      .toBe("'ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT'::text");
+    expect(actual['roleplay_sessions.status']?.default_expr).toBe("'OPEN'::text");
+    expect(drizzleDefaultExpr(simulationRole)).toBe("'ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT'::text");
+    expect(drizzleDefaultExpr(status)).toBe("'OPEN'::text");
+  });
+
   it('FORCEs RLS on every new business table', async () => {
     const {rows}=await db.query(
       `SELECT relname,relrowsecurity,relforcerowsecurity

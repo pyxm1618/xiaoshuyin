@@ -66,6 +66,7 @@ const PHONE_CONTRACT_ADDED_OPERATION_IDS = [
   'updatePhoneUseContractDraft',
   'confirmPhoneUseContractVersion',
   'revisePhoneUseContractVersion',
+  'reviewPhoneUseContractVersion',
   'getPhoneUseContractFaq',
   'createPhoneUseRoleplay',
   'addPhoneUseRoleplayTurn',
@@ -99,6 +100,7 @@ const KNOWN_CASE_PATHS = [
   '/api/v1/cases/{id}/digital-use/contract/drafts/{version}',
   '/api/v1/cases/{id}/digital-use/contract/{version}/confirm',
   '/api/v1/cases/{id}/digital-use/contract/{version}/revise',
+  '/api/v1/cases/{id}/digital-use/contract/{version}/review',
   '/api/v1/cases/{id}/digital-use/contract/faq',
   '/api/v1/cases/{id}/digital-use/roleplays',
   '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
@@ -143,7 +145,7 @@ describe('case primary switch scope (T730)', () => {
     await admin.end();
   });
 
-  it('keeps Base=4, Slice7=1, Slice8=4, Slice12=4 and Phone Contract=12 as an exact 26-operation set', () => {
+  it('keeps Base=4, Slice7=1, Slice8=4, Slice12=4 and Phone Contract=13 as an exact 27-operation set', () => {
     // Path layer: every real Case path is present, and nothing unexpected was added.
     const paths = casePathKeys();
     expect(paths.sort()).toEqual([...KNOWN_CASE_PATHS].sort());
@@ -177,6 +179,7 @@ describe('case primary switch scope (T730)', () => {
         'PATCH /api/v1/cases/{id}/digital-use/contract/drafts/{version}',
         'POST /api/v1/cases/{id}/digital-use/contract/{version}/confirm',
         'POST /api/v1/cases/{id}/digital-use/contract/{version}/revise',
+        'POST /api/v1/cases/{id}/digital-use/contract/{version}/review',
         'GET /api/v1/cases/{id}/digital-use/contract/faq',
         'POST /api/v1/cases/{id}/digital-use/roleplays',
         'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
@@ -205,7 +208,7 @@ describe('case primary switch scope (T730)', () => {
     }
     expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
 
-    // Final = 26, exact equality (contains/>= would hide an extra operation).
+    // Final = 27, exact equality (contains/>= would hide an extra operation).
     expect(businessOperationIds).toEqual(
       [
         ...BASE_CASE_OPERATION_IDS,
@@ -216,7 +219,7 @@ describe('case primary switch scope (T730)', () => {
         ...GOAL_RUNTIME_ADDED_OPERATION_IDS,
       ].sort()
     );
-    expect(businessOperationIds).toHaveLength(26);
+    expect(businessOperationIds).toHaveLength(27);
 
     // Slice 7 delta = exactly 1.
     const slice7Delta = businessOperationIds.filter(
@@ -258,7 +261,7 @@ describe('case primary switch scope (T730)', () => {
     expect(phoneContractDelta.sort()).toEqual(
       [...PHONE_CONTRACT_ADDED_OPERATION_IDS].sort()
     );
-    expect(phoneContractDelta).toHaveLength(12);
+    expect(phoneContractDelta).toHaveLength(13);
 
     const goalDelta = businessOperationIds.filter((id) =>
       (GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)

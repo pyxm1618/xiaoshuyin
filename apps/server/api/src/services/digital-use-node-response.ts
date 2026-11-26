@@ -65,7 +65,9 @@ import {
 } from './digital-use-node-semantics.js';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
-import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
+import {
+  executeFamilyAllianceNodeInTransaction,
+} from './digital-use-family-alliance.js';
 import {
   assertCurrentDigitalUseProblemFormulation,
   assertDigitalUseCaseLifecycle,
@@ -689,7 +691,8 @@ async function executeProblemFormulationHandoffPath(
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNext.nodeCode,
-    sourceNodeCode: node.nodeCode,
+    predecessorNodeCode: node.nodeCode,
+    targetSourceNodeCode: routedNext.sourceNodeCode,
     reasonCode: route.reasonCode,
     inputRefs: nextInputRefs(semantic),
   });
@@ -1489,7 +1492,8 @@ export async function completeDigitalUseNodeResponse(
               caseId: input.caseId,
               scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
               nodeCode: next.nodeCode,
-              sourceNodeCode: node.nodeCode,
+              predecessorNodeCode: node.nodeCode,
+              targetSourceNodeCode: next.sourceNodeCode,
               reasonCode: route.reasonCode,
               inputRefs: nextInputRefs(semantic),
             });

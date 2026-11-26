@@ -23,6 +23,11 @@ export interface PhoneUseContractVersionRow {
   supersedes_id:string|null; update_reason:string|null; update_trigger:PhoneUseContractUpdateTrigger|null;
   created_by_person_id:string; created_at:Date; updated_at:Date; activated_at:Date|null; superseded_at:Date|null; paused_at:Date|null;
 }
+export function isPhoneUseContractAuthoritativeExecutionBasis(
+ row: Pick<PhoneUseContractVersionRow, 'status' | 'review_state'>
+): boolean {
+ return row.status === 'ACTIVE' && row.review_state === 'CURRENT';
+}
 export type BoundPhoneUseContractVersionRow = PhoneUseContractVersionRow & {
   child_participation_id:string;
 };
@@ -87,19 +92,19 @@ export async function insertPhoneUseContractDraft(tx:Tx,input:{
  contractPurpose:ContractTermPayload;phoneUseRules:ContractTermPayload;executionPeriod:ContractTermPayload;
  parentSupportMeasures:ContractTermPayload;supervisionMeasures:ContractTermPayload;incentives:ContractTermPayload;breachResponsibilities:ContractTermPayload;
  sourceTemplateVersion:string;dependencyRefs:readonly unknown[];supersedesId?:string|null;updateReason?:string|null;
- updateTrigger?:PhoneUseContractUpdateTrigger|null;createdByPersonId:string;
+ updateTrigger?:PhoneUseContractUpdateTrigger|null;createdByPersonId:string;reviewState?:'CURRENT'|'NEEDS_REVIEW';
 }):Promise<PhoneUseContractVersionRow>{
  const {rows}=await tx.query<PhoneUseContractVersionRow>(
  `INSERT INTO digital_use_contract_versions(
  family_id,case_id,version,draft_revision,status,adult_party_person_id,child_party_person_id,child_participation_id,
  contract_purpose,phone_use_rules,execution_period,parent_support_measures,supervision_measures,incentives,breach_responsibilities,
- source_template_version,dependency_refs,supersedes_id,update_reason,update_trigger,created_by_person_id)
- VALUES($1,$2,$3,1,'DRAFT',$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14,$15::jsonb,$16,$17,$18,$19)
+ source_template_version,dependency_refs,supersedes_id,update_reason,update_trigger,created_by_person_id,review_state)
+ VALUES($1,$2,$3,1,'DRAFT',$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14,$15::jsonb,$16,$17,$18,$19,$20)
  RETURNING ${CONTRACT_COLUMNS}`,
  [input.familyId,input.caseId,input.version,input.adultPartyPersonId,input.childPartyPersonId,input.childParticipationId??null,
  JSON.stringify(input.contractPurpose),JSON.stringify(input.phoneUseRules),JSON.stringify(input.executionPeriod),
  JSON.stringify(input.parentSupportMeasures),JSON.stringify(input.supervisionMeasures),JSON.stringify(input.incentives),JSON.stringify(input.breachResponsibilities),
- input.sourceTemplateVersion,JSON.stringify(input.dependencyRefs),input.supersedesId??null,input.updateReason??null,input.updateTrigger??null,input.createdByPersonId]);
+ input.sourceTemplateVersion,JSON.stringify(input.dependencyRefs),input.supersedesId??null,input.updateReason??null,input.updateTrigger??null,input.createdByPersonId,input.reviewState??'CURRENT']);
  const row=rows[0]; if(!row) throw new Error('PHONE_USE_CONTRACT_INSERT_RETURNED_NO_ROW'); return row;
 }
 export async function updatePhoneUseContractDraftCas(tx:Tx,input:{

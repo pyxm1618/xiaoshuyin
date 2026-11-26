@@ -2111,7 +2111,7 @@ describe('Digital Use vertical convergence', () => {
         path.includes('/digital-use/contract/') ||
         path.includes('/digital-use/roleplays')
     );
-    expect(phoneOperations).toHaveLength(12);
+    expect(phoneOperations).toHaveLength(13);
 
     for (const [path, methods] of phoneOperations) {
       const runtimeUrl = path
