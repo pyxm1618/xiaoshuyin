@@ -146,6 +146,27 @@ describe('Slice 20 embedding provider contract', () => {
     expect(t.calls).toHaveLength(1);
   });
 
+  it.each([
+    ['ambiguous envelope', { ...(wrapped({ total: 100 }) as Record<string, unknown>), embeddings: [] }, 'AMBIGUOUS_PROVIDER_RESPONSE'],
+    ['model echo mismatch', { ...(wrapped({ total: 100 }) as Record<string, unknown>), model: 'other-model' }, 'MODEL_ECHO_MISMATCH'],
+  ] as const)('accounts valid aggregate usage before rejecting a %s', async (_name, body, code) => {
+    const guard = new EmbeddingCostGuard(), t = new Fake([res(body), res(wrapped())]);
+    const p = createEmbeddingProvider({ env: env({ EMBEDDING_MAX_TOKENS_PER_CALL: '1' }) }, { transport: t, costGuard: guard });
+    const failure = fail(await p.embed(req()), code);
+    expect(JSON.stringify(failure)).not.toContain('total_tokens');
+    fail(await p.embed(req({ requestId: 'r2' })), 'COST_LIMIT_REACHED');
+    expect(t.calls).toHaveLength(1);
+  });
+
+  it('does not record aggregate usage the provider did not return as valid', async () => {
+    const invalid = { request_id: 'p', output: { embeddings: [] }, embeddings: [], usage: { total_tokens: -5, prompt_tokens: 7 } };
+    const guard = new EmbeddingCostGuard(), t = new Fake([res(invalid), res(wrapped())]);
+    const p = createEmbeddingProvider({ env: env({ EMBEDDING_MAX_TOKENS_PER_CALL: '1' }) }, { transport: t, costGuard: guard });
+    fail(await p.embed(req()), 'AMBIGUOUS_PROVIDER_RESPONSE');
+    expect((await p.embed(req({ requestId: 'r2' }))).kind).toBe('OK');
+    expect(t.calls).toHaveLength(2);
+  });
+
   it('derives evidence purely: offline/partial/fake never become provider verified', () => {
     const offline=deriveCapabilityEvidence({contractChecksAllPassed:true,configComplete:true,providerVerification:null}); expect(offline).toMatchObject({capabilityEvidenceState:'CONTRACT_VERIFIED',externalAvailabilityStatus:'PROVIDER_NOT_VERIFIED',providerEvidence:false}); expect(Object.isFrozen(offline)).toBe(true);
     const full:ProviderVerificationRecord={source:'REAL_ALIBABA_DASHSCOPE_CALL',executedAt:'2026-11-24T00:00:00.000Z',environmentId:'protected',configuredModelId:'model-a',configuredModelVersionOrRevision:'rev-1',providerRequestId:'p',providerModelEcho:'PROVIDER_MODEL_ECHO_NOT_AVAILABLE',observedResponseEnvelope:'HTTP_OUTPUT_WRAPPED',evcCoverage:['EVC-01','EVC-02','EVC-03','EVC-04','EVC-05','EVC-06','EVC-07','EVC-08','EVC-09','EVC-10'],command:'protected command',inputDigest:'a'.repeat(64),resultSummary:'sanitized'};

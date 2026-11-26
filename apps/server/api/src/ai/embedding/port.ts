@@ -33,6 +33,7 @@ import type { EmbeddingTelemetryRecord, EmbeddingTelemetrySink } from './telemet
 
 export type EmbeddingOutputType = 'dense' | 'dense+sparse';
 export type ProviderModelEchoStatus = 'PROVIDER_MODEL_ECHO_VERIFIED' | 'PROVIDER_MODEL_ECHO_NOT_AVAILABLE';
+export type ObservedResponseEnvelope = 'HTTP_OUTPUT_WRAPPED';
 
 export interface EmbeddingRequest {
   readonly requestId: string;
@@ -67,6 +68,7 @@ export interface EmbeddingResult {
     readonly versionOrRevision: string;
   };
   readonly providerModelEcho: ProviderModelEchoStatus;
+  readonly observedResponseEnvelope: ObservedResponseEnvelope;
   readonly usage: EmbeddingUsage;
   readonly cost: CostRecord;
   readonly telemetry: EmbeddingTelemetryRecord;
@@ -329,6 +331,12 @@ export function createEmbeddingProviderPort(
             const parsed = protocol.parseProviderSuccess(response.body, config.modelId);
             if ('errorClass' in parsed) {
               if (parsed.providerRequestId) lastProviderRequestId = parsed.providerRequestId;
+              // A 2xx response is billable even when the normalized envelope/model is rejected.
+              // Account only aggregate usage the provider actually returned; never synthesize it.
+              const rejectedUsage = parsed.usage ? normalizeUsage(parsed.usage) : null;
+              if (rejectedUsage) {
+                costGuard.record(rejectedUsage.totalTokens, config.maxTokensPerCall, config.maxTokensPerProcess);
+              }
               return finishFailure(parsed, 'NOT_RETRYABLE');
             }
             lastProviderRequestId = parsed.providerRequestId;
@@ -382,6 +390,7 @@ export function createEmbeddingProviderPort(
                 versionOrRevision: request.configuredModelVersionOrRevision,
               }),
               providerModelEcho: parsed.providerModelEcho,
+              observedResponseEnvelope: parsed.observedResponseEnvelope,
               usage,
               cost,
               telemetry,

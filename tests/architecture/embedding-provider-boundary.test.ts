@@ -1,9 +1,14 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const seam = 'apps/server/api/src/ai/embedding';
 const rerankerSeam = 'apps/server/api/src/ai/reranker';
+const privateImportTargets = new Set([
+  resolve(seam, 'transport'),
+  resolve(seam, 'dashscope-protocol'),
+]);
+const importSpecifier = /\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const expectedSeamFiles = [
   'config.ts', 'contracts.ts', 'cost.ts', 'dashscope-protocol.ts', 'errors.ts',
   'evidence.ts', 'index.ts', 'port.ts', 'telemetry.ts', 'transport.ts',
@@ -25,6 +30,18 @@ function walkTs(root: string): string[] {
   return out;
 }
 
+// Resolves relative specifiers against the importing file so equivalent paths such as
+// `./embedding/transport.js` from src/ai are mechanically recognized as the private module.
+function resolvedPrivateImport(file: string, text: string): string | null {
+  for (const match of text.matchAll(importSpecifier)) {
+    const specifier = match[1] ?? match[2] ?? match[3];
+    if (!specifier || !specifier.startsWith('.')) continue;
+    const target = resolve(dirname(file), specifier).replace(/\.(?:[cm]?[jt]s)$/, '');
+    if (privateImportTargets.has(target)) return target;
+  }
+  return null;
+}
+
 // Slice 23 has a separately governed provider seam, not access to Slice 20 internals.
 function assertProviderBoundary(file: string, text: string): void {
   if (file.startsWith(`${seam}/`)) return;
@@ -32,6 +49,7 @@ function assertProviderBoundary(file: string, text: string): void {
     expect(text, relative('.', file)).not.toMatch(/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/);
   }
   expect(text, relative('.', file)).not.toMatch(/(?:ai\/|\.\.\/)(?:\.\/)*embedding\/(?:\.\/)*(?:transport|dashscope-protocol)/);
+  expect(resolvedPrivateImport(file, text), relative('.', file)).toBeNull();
 }
 
 describe('Slice 20 architecture and negative-scope boundary', () => {
@@ -130,6 +148,24 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
         expect(() => assertProviderBoundary(file, `import '${prefix}${internal}'`)).toThrow();
       }
     }
+  });
+
+  it.each([
+    ['apps/server/api/src/ai/consumer.ts', './embedding/transport.js'],
+    ['apps/server/api/src/ai/consumer.ts', './embedding/dashscope-protocol.js'],
+    ['apps/server/api/src/providers/native.ts', '../ai/embedding/transport.js'],
+    ['apps/server/api/src/ai/other/nested/consumer.ts', '../../embedding/transport.js'],
+    ['apps/server/api/src/ai/other/consumer.ts', '../embedding/./transport.js'],
+  ])('rejects relative imports that resolve to the private seam: %s -> %s', (file, specifier) => {
+    expect(() => assertProviderBoundary(file, `import x from '${specifier}';`)).toThrow();
+  });
+
+  it.each([
+    ['apps/server/api/src/ai/consumer.ts', './embedding/index.js'],
+    ['apps/server/api/src/ai/consumer.ts', './embedding/port.js'],
+    ['apps/server/api/src/ai/other/consumer.ts', '../embedding/index.js'],
+  ])('allows public Port imports from consumers: %s -> %s', (file, specifier) => {
+    expect(() => assertProviderBoundary(file, `import type { P } from '${specifier}';`)).not.toThrow();
   });
 
   it('enforces the approved endpoint policy with no endpoint-override channel', () => {

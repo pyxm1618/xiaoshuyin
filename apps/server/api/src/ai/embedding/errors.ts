@@ -50,11 +50,17 @@ export interface EmbeddingFailure {
   readonly capabilityEvidence: CapabilityEvidenceRecord;
 }
 
+export interface ProviderAggregateUsage {
+  readonly totalTokens: unknown;
+  readonly promptTokens: unknown;
+}
+
 export interface InternalProblem {
   readonly errorClass: EmbeddingErrorClass;
   readonly errorCode: EmbeddingErrorCode;
   readonly providerRequestId?: string;
   readonly retryAfterMs?: number;
+  readonly usage?: ProviderAggregateUsage;
 }
 
 export function makeFailure(input: {
