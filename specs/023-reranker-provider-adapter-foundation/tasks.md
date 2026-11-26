@@ -19,7 +19,7 @@ Mechanical traceability from every Slice 23 task (`T001`–`T012`) to Frozen Spe
 | T005 | `FR-004`, `FR-005`, `FR-006`, `FR-007`, `FR-009`, `FR-010`; `AS-03`–`AS-06`; `§10 #1/#3`; `V1-C03`, `V1-C27` | §5, §10, §11, §12, §13 | Strict DashScope request builder & parser (`dashscope.ts`) enforcing `top_n=N`, `return_documents=false`, index-to-`candidateId` mapping, descending score order, `[0,1]` finite scores, and fail-closed `PARTIAL_RESPONSE` / `IDENTITY_MAPPING_FAILURE` / `MALFORMED_RESPONSE`. |
 | T006 | `FR-001`, `FR-003`, `FR-004`, `FR-007`, `FR-008`, `FR-009`, `FR-012`; `AS-01`, `AS-03`, `AS-04`; `§10 #3/#4/#5/#14`; `V1-C24`, `V1-C28` | §9, §10, §11, §12 | Stateless rerank orchestration (`rerank.ts`, `index.ts`) delivering deterministic score-desc + input-index tie-break normalization (`rank=1..N`) with zero cache/persistence/route wiring. |
 | T007 | `FR-005`, `FR-014`, `FR-015`, `FR-019`, `FR-020`; `AS-07`, `AS-09`, `AS-15`; `§10 #1/#11/#13`, `§16.3`; `V1-C03`, `V1-X11`, `V1-X14` | §17, §18, §19, §20 | Whitelist-only telemetry (`telemetry.ts`) and pure 5-state evidence machine (`evidence.ts`: `FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS`) with `UNKNOWN_NOT_DOCUMENTED` revision guard and zero `READY` override. |
-| T008 | `FR-001`, `FR-003`–`FR-011`, `FR-013`, `FR-014`, `FR-019`, `FR-020`; `AS-01`, `AS-03`–`AS-09`; `§10 #1/#3/#10/#12`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-C28`, `V1-X14` | §16, §18 | Complete offline contract & DashScope fixture test suites (`tests/ai/reranker-provider-contract.test.ts`, `tests/ai/reranker-dashscope.test.ts`) passing with zero network/secrets and proving `CONTRACT_MECHANICS` only. |
+| T008 | `FR-001`, `FR-003`–`FR-011`, `FR-013`, `FR-014`, `FR-019`, `FR-020`; `AS-01`, `AS-03`–`AS-09`; `§10 #1/#3/#10/#12`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-C28`, `V1-X14` | §16, §18 | Complete remaining cross-module/adversarial offline coverage after T002–T007 focused RED/GREEN gates in the contract & DashScope fixture test suites (`tests/ai/reranker-provider-contract.test.ts`, `tests/ai/reranker-dashscope.test.ts`) passing with zero network/secrets and proving `CONTRACT_MECHANICS` only. |
 | T009 | `FR-012`, `FR-016`, `FR-017`, `FR-018`, `FR-019`; `AS-10`, `AS-11`, `AS-12`, `AS-13`, `AS-14`; `§10 #4`–`#9/#14/#15`, `## Acceptance Evidence`; `V1-C24`, `V1-C34`, `V1-C37` | §3, §8, §16, §21 | Boundary & negative-scope architecture test (`tests/architecture/reranker-provider-boundary.test.ts`) + passing `guard-static.mjs` and `--self-test` proving zero DB/SDK/route/retrieval/Gold/gateway/secret violations. |
 | T010 | `FR-005`, `FR-013`, `FR-014`, `FR-015`, `FR-019`, `FR-020`; `AS-02`, `AS-07`, `AS-08`, `AS-15`; `§10 #1/#11/#12/#13`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-X11`, `V1-X14` | §17, §18, §19 | Controlled opt-in live verification (`tests/ai/reranker-provider-live.test.ts`) recording external sanitized JSON + SHA-256 bound to clean exact `HEAD`, or preserving truthful `NOT_EVALUATED` / `BLOCKED` / `FAIL` / `UNKNOWN`. |
 | T011 | `FR-012`, `FR-014`–`FR-020`; `AS-09`–`AS-15`; `§9.2`, `§10 #1/#13`, `§16.3`, `## Acceptance Evidence`; `V1-C03`, `V1-C27`, `V1-X14` | §21, §22 | All mandatory offline, architecture, static guard, governance, typecheck, `verify-all`, and diff-allowlist checks passing on stable final exact `HEAD` with exact-head live-evidence validity verified. |
@@ -32,7 +32,7 @@ Aligned with Frozen Spec (`092c18d514d46a1e4e40f3544d428302cde00fa8` / `4354ecac
 | Evidence Category | Designated Evidence Owner(s) | Required Verifiable Evidence Contract |
 |---|---|---|
 | Governance & preflight gate evidence | `T001` (gate open/blocked), `T011` (final governance checks) | Remote read-back of admitted Spec/Plan/Checklist/Tasks blobs, merged narrow `.specify/implementation-ownership.json` PR/merge SHA/audit verdict, cross-slice test-boundary check, and exit-0 outputs from `validate-governance.mjs`, `run-governance-tests.mjs`, `validate-change-governance.mjs`, and `run-change-governance-tests.mjs`. |
-| Offline contract & protocol evidence | `T002`–`T007` (module surfaces), `T008` (test matrix) | Concrete test execution outputs of `bunx vitest run tests/ai/reranker-provider-contract.test.ts` and `bunx vitest run tests/ai/reranker-dashscope.test.ts` on synthetic/non-personal fixtures proving `CONTRACT_MECHANICS` only (never `LIVE_PROVIDER_CAPABILITY = PASS`). |
+| Offline contract & protocol evidence | `T002`–`T007` (module surfaces and task-owned focused RED/GREEN evidence), `T008` (adversarial matrix completion) | Per-task named focused tests with observed RED before production edits and GREEN before advancing, plus complete offline matrix test execution outputs of `bunx vitest run tests/ai/reranker-provider-contract.test.ts` and `bunx vitest run tests/ai/reranker-dashscope.test.ts` on synthetic/non-personal fixtures proving `CONTRACT_MECHANICS` only (never `LIVE_PROVIDER_CAPABILITY = PASS`). |
 | Live-provider truthfulness evidence | `T010` (execution & external JSON), `T012` (handoff provenance) | When opted in via `RERANKER_LIVE_VERIFY=1`, external sanitized JSON at `RERANKER_LIVE_EVIDENCE_PATH` + SHA-256 bound to exact `HEAD`, clean tracked tree, provider/endpoint fingerprint, `qwen3-rerank` / `UNKNOWN_NOT_DOCUMENTED` revision state, request ID(s), usage, attempts, and lower/aggregate states; when unconfigured/not opted in, truthful `BLOCKED` / `NOT_EVALUATED` / `UNVERIFIED`. |
 | Exact-head & regression evidence | `T010`, `T011`, `T012` | Final exact `HEAD` matching any live evidence head (`AS-15`), plus exit-0 outputs from `bun run typecheck` and `bun run verify-all` on that exact `HEAD`. |
 | Scope-negative & secret/non-persistence evidence | `T009`, `T011` | Exit-0 outputs from `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts`, `node scripts/guard-static.mjs`, `node scripts/guard-static.mjs --self-test`, `git diff --name-only "$DEVELOPMENT_BASE"...HEAD` allowlist check, and zero-diff checks on `package.json`, `bun.lock`, `apps/server/api/package.json`, `app.ts`, `routes`, `db`, and `.specify`. |
@@ -117,6 +117,8 @@ Create the provider-neutral capability input/output boundary without provider-na
 - apps/server/api/src/ai/reranker/index.ts
 - apps/server/api/src/ai/reranker/contracts.ts
 
+- tests/ai/reranker-provider-contract.test.ts (focused tests for T002; add before production edits).
+
 **Forbidden Paths**
 - all other files in this task;
 - provider HTTP call;
@@ -127,6 +129,17 @@ Create the provider-neutral capability input/output boundary without provider-na
 - provider-native response types in public exports.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: public contract and input validation: exact identities/text/instruct, duplicate text allowed, blank/duplicate IDs and invalid candidate counts/query/text/instruct rejected before any transport; test the available validation seam without depending on later modules.
+2. Run `bunx vitest run tests/ai/reranker-provider-contract.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Define RerankRequest exactly as Plan §9: query, candidates[{candidateId,candidateText}], options.instruct.
 2. Define normalized RerankResult exactly as Plan §10, with candidateId/score/rank and provider/config provenance, never provider index.
 3. Validate query non-empty without rewriting exact text.
@@ -139,11 +152,13 @@ Create the provider-neutral capability input/output boundary without provider-na
 10. Do not include any relevance threshold, approval, Gold, professional, business state or route field.
 
 **Verification**
-- bunx vitest run tests/ai/reranker-provider-contract.test.ts after T008 adds tests.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T002 owns and runs the focused contract tests for its input boundary in RED and GREEN; later architecture verification remains T009.
 - Architecture test after T009 proves public output has no provider-native index/envelope and no business-object leakage.
 - Invalid query, zero candidates, >500 candidates, blank/duplicate IDs, blank text/instruct must fail INVALID_INPUT with transport call count 0.
 
 **Done Criteria**
+- T002 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - Public contract can represent valid one/multiple candidate reranking and fail all frozen input invalidities without any provider invocation.
 
 **STOP Conditions**
@@ -153,7 +168,7 @@ Create the provider-neutral capability input/output boundary without provider-na
 - downstream must see provider-native result/index shape.
 
 **Evidence Ownership**
-- contracts.ts/index.ts blobs + T008 focused contract-test output + T009 public-boundary scan.
+- contracts.ts/index.ts blobs + T002 named focused contract tests and RED/GREEN command outputs + T009 public-boundary scan.
 
 **Coverage**
 - FR-001, FR-003, FR-004, FR-007, FR-008; AS-01, AS-06.
@@ -174,6 +189,8 @@ Freeze exact provider/config provenance and technical failure taxonomy without t
 - apps/server/api/src/ai/reranker/errors.ts
 - minimal type imports from contracts.ts.
 
+- tests/ai/reranker-provider-contract.test.ts (focused tests for T003; add before production edits).
+
 **Forbidden Paths**
 - apps/server/api/src/plugins/error-handler.ts
 - apps/server/api/src/runtime-env.ts
@@ -183,6 +200,17 @@ Freeze exact provider/config provenance and technical failure taxonomy without t
 - model/provider fallback registry.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: capability-local config and error behavior: exact provider/model and unknown revision, lazy secret access, strict base URL, safe error metadata and missing config distinct from authentication; exercise only the config/error seam, not future HTTP/parser behavior.
+2. Run `bunx vitest run tests/ai/reranker-provider-contract.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Define exactly the technical error codes:
    CONFIGURATION, AUTHENTICATION, AUTHORIZATION, RATE_LIMIT, TIMEOUT, PROVIDER_UNAVAILABLE, MALFORMED_RESPONSE, UNSUPPORTED_CAPABILITY, INVALID_INPUT, IDENTITY_MAPPING_FAILURE, PARTIAL_RESPONSE, UNKNOWN_PROVIDER_FAILURE.
 2. Errors expose safe code/retryable/providerRequestId-if-safe metadata only; never raw response, query/text/instruct or credential.
@@ -204,11 +232,13 @@ Freeze exact provider/config provenance and technical failure taxonomy without t
 8. Distinguish missing config from provider authentication failure.
 
 **Verification**
-- T008 tests for config/error mapping.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T003 owns focused config/error tests and runs them in RED and GREEN; full provider error matrix remains T008.
 - T009 architecture test proves central error handler/runtime-env/package manifests unchanged and no credential literals.
 - T010 evidence records exact model revision state rather than invented version.
 
 **Done Criteria**
+- T003 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - All technical failures are capability-local and exact provider/model/config provenance is representable without claiming production pinning.
 
 **STOP Conditions**
@@ -218,7 +248,7 @@ Freeze exact provider/config provenance and technical failure taxonomy without t
 - secret would need to be committed or logged.
 
 **Evidence Ownership**
-- config.ts/errors.ts blobs + T008 error/config tests + T009 secret/error boundary scan.
+- config.ts/errors.ts blobs + T003 named focused error/config tests and RED/GREEN command outputs + T009 secret/error boundary scan.
 
 **Coverage**
 - FR-002, FR-005, FR-010, FR-019; AS-07, AS-08.
@@ -237,6 +267,8 @@ Create one injectable native HTTP transport with bounded client-time behavior an
 - apps/server/api/src/ai/reranker/transport.ts
 - minimal imports from config.ts/errors.ts/contracts.ts.
 
+- tests/ai/reranker-provider-contract.test.ts (focused tests for T004; add before production edits).
+
 **Forbidden Paths**
 - provider SDK imports;
 - package.json/bun.lock;
@@ -246,6 +278,17 @@ Create one injectable native HTTP transport with bounded client-time behavior an
 - logs/raw response persistence.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: native transport using fake HTTP/clock: per-attempt deadline, max two attempts, 1000ms backoff, retryable versus terminal categories and zero provider/model fallback.
+2. Run `bunx vitest run tests/ai/reranker-provider-contract.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Define a narrow injectable transport interface used by tests and the DashScope protocol module.
 2. Default implementation uses global fetch/native runtime HTTP.
 3. Construct Authorization: Bearer secret only at send time.
@@ -269,10 +312,12 @@ Create one injectable native HTTP transport with bounded client-time behavior an
 11. Do not claim a provider server timeout semantic; only client timeout is owned here.
 
 **Verification**
-- T008 fake-transport tests assert attempt counts, deadlines, 1000ms backoff, retry categories, terminal categories and zero fallback.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T004 focused fake-transport tests assert attempt counts, deadlines, 1000ms backoff, retry categories, terminal categories and zero fallback in RED/GREEN; T008 completes the retry/error matrix.
 - T009 architecture test proves no SDK dependency/import and only transport.ts performs egress.
 
 **Done Criteria**
+- T004 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - every call has a hard bounded attempt count/deadline and retry behavior is mechanically testable.
 
 **STOP Conditions**
@@ -282,7 +327,7 @@ Create one injectable native HTTP transport with bounded client-time behavior an
 - generic transport framework would be introduced.
 
 **Evidence Ownership**
-- transport.ts blob + deterministic retry/timeout test output.
+- transport.ts blob + T004 named focused retry/timeout tests and RED/GREEN command outputs.
 
 **Coverage**
 - FR-010, FR-011, FR-018; AS-08, AS-14.
@@ -302,6 +347,8 @@ Encode only the verified native qwen3-rerank provider contract and fail closed o
 - apps/server/api/src/ai/reranker/dashscope.ts
 - minimal imports from contracts/config/errors/transport.
 
+- tests/ai/reranker-dashscope.test.ts (focused tests for T005; add before production edits).
+
 **Forbidden Paths**
 - OpenAI-compatible rerank surface;
 - SDK response types;
@@ -310,6 +357,17 @@ Encode only the verified native qwen3-rerank provider contract and fail closed o
 - business/retrieval code.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: native request projection and strict parser: top_n=N, return_documents=false, exact instruct, valid identity/score/usage mapping, partial result, invalid index/score/schema and error normalization fail closed as frozen.
+2. Run `bunx vitest run tests/ai/reranker-dashscope.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Build endpoint by appending /services/rerank/text-rerank/text-rerank to the validated /api/v1 base URL.
 2. Build request body exactly:
    - model=qwen3-rerank;
@@ -337,10 +395,12 @@ Encode only the verified native qwen3-rerank provider contract and fail closed o
 16. Do not require a provider model/version echo because it is not documented.
 
 **Verification**
-- bunx vitest run tests/ai/reranker-dashscope.test.ts after T008.
-- Tests include valid one/many, reorder, ties, request shape, unknown/duplicate/missing/out-of-range index, malformed JSON/schema, string/null/NaN/Infinity/out-of-range score, partial/empty results, unexpected envelope, descending-order violation and error mapping.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T005 runs its focused DashScope request/parser tests in RED and GREEN, covering valid request/response and representative fail-closed identity, partial, malformed, numeric and error cases.
+- T008 completes the full matrix: valid one/many, reorder, ties, request shape, unknown/duplicate/missing/out-of-range index, malformed JSON/schema, string/null/NaN/Infinity/out-of-range score, partial/empty results, unexpected envelope, descending-order violation and error mapping.
 
 **Done Criteria**
+- T005 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - a provider response produces a normalized intermediate result only if every candidate maps exactly once under the verified contract.
 
 **STOP Conditions**
@@ -349,7 +409,7 @@ Encode only the verified native qwen3-rerank provider contract and fail closed o
 - provider requires a different model or undocumented field.
 
 **Evidence Ownership**
-- dashscope.ts blob + provider fixture/adversarial test output + official provider source identities.
+- dashscope.ts blob + T005 named focused provider fixture tests and RED/GREEN command outputs + official provider source identities; T008 owns remaining adversarial matrix evidence.
 
 **Coverage**
 - FR-004, FR-005, FR-006, FR-007, FR-009, FR-010; AS-03, AS-04, AS-05, AS-06.
@@ -368,6 +428,8 @@ Compose validation, config, transport and provider parsing into one stateless ca
 - apps/server/api/src/ai/reranker/rerank.ts
 - apps/server/api/src/ai/reranker/index.ts only for final public factory/export wiring.
 
+- tests/ai/reranker-provider-contract.test.ts (focused tests for T006; add before production edits).
+
 **Forbidden Paths**
 - app.ts/routes;
 - DB/cache;
@@ -376,6 +438,17 @@ Compose validation, config, transport and provider parsing into one stateless ca
 - fallback model/provider.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: stateless capability orchestration using fake transport: validation before egress, one/many candidates, provider reorder, exact-score tie by original input index, rank 1..N, all-candidate exact identity and no partial success.
+2. Run `bunx vitest run tests/ai/reranker-provider-contract.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Validate input before transport.
 2. Resolve exact capability config.
 3. Invoke DashScope transport through the narrow internal seam.
@@ -392,10 +465,12 @@ Compose validation, config, transport and provider parsing into one stateless ca
 9. Export only the public capability function/factory through index.ts.
 
 **Verification**
-- T008 contract tests prove one/many candidate success, provider reorder, exact-score ties, duplicate candidate text and all-candidate coverage.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T006 focused contract tests prove one/many candidate success, provider reorder, exact-score ties, duplicate candidate text and all-candidate coverage in RED and GREEN.
 - T009 proves no persistence/retrieval/route wiring.
 
 **Done Criteria**
+- T006 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - one capability call returns exactly one normalized result for every input candidate or one technical failure; no partial success object.
 
 **STOP Conditions**
@@ -405,7 +480,7 @@ Compose validation, config, transport and provider parsing into one stateless ca
 - deterministic tie behavior cannot be implemented from exact input identity.
 
 **Evidence Ownership**
-- rerank.ts/index.ts blobs + T008 normalized-output tests.
+- rerank.ts/index.ts blobs + T006 named focused normalized-output tests and RED/GREEN command outputs.
 
 **Coverage**
 - FR-001, FR-003, FR-004, FR-007, FR-008, FR-009, FR-012; AS-01, AS-03, AS-04.
@@ -424,6 +499,8 @@ Make technical truth derivation and observability explicit without content/secre
 - apps/server/api/src/ai/reranker/telemetry.ts
 - apps/server/api/src/ai/reranker/evidence.ts
 
+- tests/ai/reranker-provider-contract.test.ts (focused tests for T007; add before production edits).
+
 **Forbidden Paths**
 - telemetry platform integration;
 - DB/file persistence in production code;
@@ -431,6 +508,17 @@ Make technical truth derivation and observability explicit without content/secre
 - manual aggregate PASS/READY override.
 
 **Actions**
+
+**RED — before any production code change for this task**
+1. First add named focused tests for this task's frozen deterministic behavior: pure evidence state precedence, offline/live separation, unknown revision guard and whitelist-only telemetry excluding raw content/secrets and invented cost.
+2. Run `bunx vitest run tests/ai/reranker-provider-contract.test.ts` (or the same command with a named-test filter) and record the expected failure caused by the missing behavior, not an unrelated setup or environment failure. Use synthetic fixtures/fakes only; do not require later-task production modules.
+
+**GREEN**
+3. Implement only the minimum allowed production behavior required by the focused tests, following the implementation details below.
+4. Rerun exactly the same focused test command/filter and record PASS; rerun the full touched test file to preserve all earlier focused tests.
+5. PASS before proceeding to the next task. Do not weaken assertions or defer this gate to T008.
+
+Implementation details for GREEN step 3:
 1. Define whitelist telemetry record containing only:
    provider, configured model/revision state, candidate count, attempt count, elapsed ms, terminal technical state/error code, provider request ID if available, totalTokens if available, safe fingerprints.
 2. Exclude API key, Authorization, raw query/candidates/instruct and raw response.
@@ -445,10 +533,12 @@ Make technical truth derivation and observability explicit without content/secre
 9. Ensure mock/offline inputs cannot set LIVE_PROVIDER_CAPABILITY=PASS.
 
 **Verification**
-- T008 table-driven tests cover every state/preference branch, mock-laundering case, unknown revision case, and telemetry redaction.
+- RED then GREEN: same named focused test(s) and same command/filter; expected missing-behavior failure before production edits, exit 0 afterward; full touched test file exits 0 before advancing.
+- T007 focused state/telemetry tests cover precedence, mock-laundering, unknown revision and telemetry redaction in RED/GREEN; T008 completes the state table and adversarial cases.
 - T009 static scan rejects READY override and content/secret telemetry.
 
 **Done Criteria**
+- T007 focused tests were added and observed RED before its production edits, then GREEN on the same tests with earlier tests passing; both outputs and test names are retained before advancing.
 - aggregate result is a pure deterministic function of lower evidence and no prose/manual flag can promote it.
 
 **STOP Conditions**
@@ -458,20 +548,20 @@ Make technical truth derivation and observability explicit without content/secre
 - raw content/secret would need to be retained.
 
 **Evidence Ownership**
-- evidence.ts/telemetry.ts blobs + state-machine/telemetry tests.
+- evidence.ts/telemetry.ts blobs + T007 named focused state-machine/telemetry tests and RED/GREEN command outputs.
 
 **Coverage**
 - FR-005, FR-014, FR-015, FR-019, FR-020; AS-07, AS-09, AS-15.
 
 ---
 
-## T008 — Build Complete Offline Contract / Provider Fixture Test Matrix
+## T008 — Complete Cross-module / Adversarial Offline Contract and Provider Fixture Test Matrix
 
 **Purpose**  
-Prove contract mechanics adversarially without network, real credentials, Gold data or Professional truth.
+Complete the cross-module / adversarial offline matrix after T002–T007 have already established focused test-first coverage. Prove contract mechanics adversarially without network, real credentials, Gold data or Professional truth. This is not first test creation.
 
 **Prerequisites**
-- T002–T007 implementation surfaces exist.
+- T002–T007 implementation surfaces and task-owned focused tests exist; all six RED/GREEN gates have passed and evidence is recorded.
 
 **Allowed Paths**
 - tests/ai/reranker-provider-contract.test.ts
@@ -486,7 +576,7 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
 - live-provider PASS evidence.
 
 **Actions**
-1. Implement valid tests:
+1. Extend the existing focused suites with missing valid cases; retain earlier focused tests:
    - one candidate;
    - multiple candidates;
    - deterministic provider reorder;
@@ -494,7 +584,7 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
    - exact-score tie;
    - valid index mapping;
    - duplicate text with distinct IDs.
-2. Implement invalid input tests:
+2. Complete missing invalid input cases:
    - empty query;
    - empty candidate set;
    - >500 candidates;
@@ -502,7 +592,7 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
    - duplicate ID;
    - blank candidate text;
    - blank instruct.
-3. Implement invalid provider tests:
+3. Complete missing adversarial provider cases:
    - unknown result index;
    - duplicate result index;
    - missing candidate;
@@ -512,15 +602,16 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
    - NaN/Infinity/string/null/out-of-range score;
    - partial/empty result;
    - descending-order contract violation.
-4. Implement provider error taxonomy tests for 400/401/403/404/429/5xx and unknown failure.
-5. Implement retry/timeout tests with deterministic fake transport/clock where appropriate:
+4. Complete provider error taxonomy tests for 400/401/403/404/429/5xx and unknown failure.
+5. Complete retry/timeout tests with deterministic fake transport/clock where appropriate:
    - max 2 attempts;
    - 1000ms backoff;
    - transient vs terminal categories;
    - zero provider/model fallback.
-6. Implement telemetry redaction tests.
-7. Implement evidence-state table tests, including offline PASS + live NOT_EVALUATED cannot aggregate PASS.
+6. Complete telemetry redaction cases.
+7. Complete evidence-state table tests, including offline PASS + live NOT_EVALUATED cannot aggregate PASS.
 8. Assert fake transport never reads a real API key and never creates live evidence.
+9. Complete cross-module adversarial cases across the existing seams. Do not edit production code in T008; if a new case exposes missing frozen deterministic behavior, retain the failing test and return to the owning T002–T007 task for its bounded RED/GREEN correction, then rerun affected gates before completing T008.
 
 **Verification**
 - bunx vitest run tests/ai/reranker-provider-contract.test.ts
@@ -528,7 +619,7 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
 - both exit 0 with no network access.
 
 **Done Criteria**
-- every Checklist B/D/E/F/H offline item has at least one named test and all focused tests pass.
+- every Checklist B/D/E/F/H offline item has at least one named test and all focused and adversarial tests pass; prior task-owned RED/GREEN evidence remains intact.
 - only CONTRACT_MECHANICS can become PASS from this task.
 
 **STOP Conditions**
@@ -538,7 +629,7 @@ Prove contract mechanics adversarially without network, real credentials, Gold d
 - a test relaxes the contract to make malformed response succeed.
 
 **Evidence Ownership**
-- two test blobs + complete focused Vitest output + test-name-to-checklist mapping.
+- two test blobs + complete adversarial/cross-module Vitest output + test-name-to-checklist mapping, retaining the T002–T007 task-owned focused RED/GREEN evidence.
 
 **Coverage**
 - FR-001, FR-003..FR-011, FR-013, FR-014, FR-019, FR-020; AS-01, AS-03..AS-09.
