@@ -31,7 +31,7 @@ function assertProviderBoundary(file: string, text: string): void {
   if (!file.startsWith(`${rerankerSeam}/`)) {
     expect(text, relative('.', file)).not.toMatch(/DASHSCOPE_|maas\.aliyuncs\.com|ALIBABA_DASHSCOPE/);
   }
-  expect(text, relative('.', file)).not.toMatch(/(?:ai\/embedding\/|\.\.\/embedding\/)(?:transport|dashscope-protocol)/);
+  expect(text, relative('.', file)).not.toMatch(/(?:ai\/|\.\.\/)(?:\.\/)*embedding\/(?:\.\/)*(?:transport|dashscope-protocol)/);
 }
 
 describe('Slice 20 architecture and negative-scope boundary', () => {
@@ -126,7 +126,7 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
     'apps/server/api/src/ai/other/consumer.ts',
   ])('rejects embedding-private imports from %s even when provider tokens are absent', (file) => {
     for (const internal of ['transport', 'dashscope-protocol']) {
-      for (const prefix of ['../../ai/embedding/', '../embedding/']) {
+      for (const prefix of ['../../ai/embedding/', 'ai/embedding/', '../embedding/', '../embedding/./', '.././embedding/']) {
         expect(() => assertProviderBoundary(file, `import '${prefix}${internal}'`)).toThrow();
       }
     }
