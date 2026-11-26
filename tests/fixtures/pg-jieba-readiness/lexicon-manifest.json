@@ -1,0 +1,39 @@
+{
+  "feature": "022-pg-jieba-lexical-readiness-spike",
+  "dictionary_filename": "xiaoshuyin_022_test.dict",
+  "dictionary_encoding": "UTF-8",
+  "dictionary_sha256": "8e46659d808a38fec075eafcaf0b16d049e0b8fe474208f44b6be2222f9f0343",
+  "baseline_user_dict": "jieba_user",
+  "loaded_user_dict": "jieba_user,xiaoshuyin_022_test",
+  "primary_differential_term": "手机使用合约",
+  "primary_differential_probe_doc_id": "D02",
+  "terms": [
+    {
+      "term": "家庭联盟",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 971",
+      "authority_class": "existing product/domain terminology",
+      "test_use_permission": "FROZEN_SPEC_OPTION_A_FORMAL_TERM",
+      "no_new_professional_judgment": true
+    },
+    {
+      "term": "手机使用合约",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 995",
+      "authority_class": "existing product/domain terminology",
+      "test_use_permission": "FROZEN_SPEC_OPTION_A_FORMAL_TERM",
+      "no_new_professional_judgment": true
+    },
+    {
+      "term": "小树荫",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 1",
+      "authority_class": "product name",
+      "test_use_permission": "FROZEN_SPEC_OPTION_A_FORMAL_TERM",
+      "no_new_professional_judgment": true
+    }
+  ]
+}
