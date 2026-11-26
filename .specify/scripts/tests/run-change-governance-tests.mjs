@@ -915,6 +915,133 @@ for (const rel of ["db/init/unknown.sh", "db/migrations/999_slice19_forbidden.sq
   }
 }
 
+// F-09: exact wording correction on a FUTURE_UNIMPLEMENTED unit is only possible through a
+// trusted-base, single-use, content-bound pre-registration. It grants no topology.
+{
+  const sha256 = (text) => crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+  const registryPath = ".specify/authority-unit-registry.json";
+  const FROM = "小树英助手";
+  const TO = "小树荫助手";
+  const rootBefore = "# V1\n主端为“" + FROM + "”。";
+  const rootAfter = "# V1\n主端为“" + TO + "”。";
+  const twoBefore = "# V1\n“" + FROM + "”与“" + FROM + "”。";
+  const twoAfter = "# V1\n“" + TO + "”与“" + TO + "”。";
+  const tail = "\n## Normative A\nold normative\n## Metadata\nold reference\n";
+  const correction = (overrides = {}) => ({
+    id: "fixture-name-correction",
+    authorityUnitId: "AUTH-V1-ROOT",
+    path: "Docs/V1产品需求.md",
+    from: FROM,
+    to: TO,
+    expectedOccurrences: 1,
+    beforeUnitSha256: sha256(rootBefore),
+    afterUnitSha256: sha256(rootAfter),
+    rationale: "fixture literal correction",
+    ...overrides,
+  });
+  const readRegistry = (root) => JSON.parse(fs.readFileSync(path.join(root, registryPath), "utf8"));
+  const writeRegistry = (root, registry) => write(root, registryPath, JSON.stringify(registry, null, 2) + "\n");
+  function setupWording({ entries = [correction()], baseDoc = rootBefore + tail } = {}) {
+    const root = setupG2();
+    const registry = readRegistry(root);
+    if (entries !== null) registry.exactWordingCorrections = entries;
+    writeRegistry(root, registry);
+    write(root, "Docs/V1产品需求.md", baseDoc);
+    refreshSnapshot(root);
+    return { root, base: commit(root, "pre-authorized wording correction base") };
+  }
+  function consume(root, base, headDoc, impact = {}, extra = null) {
+    write(root, "Docs/V1产品需求.md", headDoc);
+    refreshSnapshot(root);
+    impactManifest(root, base, [{
+      authorityUnitId: "AUTH-V1-ROOT",
+      classification: "EXACT_WORDING_CORRECTION",
+      correctionId: "fixture-name-correction",
+      downstream: [],
+      ...impact,
+    }]);
+    extra?.(root);
+    commit(root, "consume wording correction");
+    return run(root, base);
+  }
+  const consumeCases = [
+    ["F09-W1 pre-registered exact literal correction passes", {}, rootAfter + tail, {}, null, 0, "Change governance PASS"],
+    ["F09-W2 extra normative edit inside the corrected unit fails", {}, "# V1\n主端为“" + TO + "”，并新增规则。" + tail, {}, null, 1, "differs from the exact authorized literal replacement"],
+    ["F09-W3 unregistered correctionId fails", {}, rootAfter + tail, { correctionId: "invented-correction" }, null, 1, "not pre-authorized by the trusted-base"],
+    ["F09-W4 correction without trusted-base registration fails", { entries: null }, rootAfter + tail, {}, null, 1, "not pre-authorized by the trusted-base"],
+    ["F09-W5 correction declaring downstream fails", {}, rootAfter + tail, { downstream: [{ feature: "001-feature-a", specPath: "specs/001-feature-a", requirementId: "FR-001", requiredArtifacts: ["tests/a.test.ts"] }] }, null, 1, "must not declare downstream"],
+    ["F09-W6 correction with spec delta fails", {}, rootAfter + tail, {}, (root) => write(root, "specs/002-feature-b/spec.md", "# Feature B\n## FR-900 Contract\nchanged\n"), 1, "cannot coexist with spec/product deltas"],
+    ["F09-W7 another changed Authority Unit cannot ride along", {}, rootAfter + "\n## Normative A\nnew normative\n## Metadata\nold reference\n", {}, null, 1, "Changed Authority Unit impact set"],
+    ["F09-W8 consumed correction cannot be replayed or reversed", { baseDoc: rootAfter + tail }, rootBefore + tail, {}, null, 1, "does not match beforeUnitSha256"],
+    ["F09-W9 occurrence count must match the registration", { entries: [correction({ beforeUnitSha256: sha256(twoBefore), afterUnitSha256: sha256(twoAfter) })], baseDoc: twoBefore + tail }, twoAfter + tail, {}, null, 1, "expected 1 occurrence(s)"],
+    ["F09-W10 partial replacement fails", { entries: [correction({ expectedOccurrences: 2, beforeUnitSha256: sha256(twoBefore), afterUnitSha256: sha256(twoAfter) })], baseDoc: twoBefore + tail }, "# V1\n“" + TO + "”与“" + FROM + "”。" + tail, {}, null, 1, "differs from the exact authorized literal replacement"],
+    ["F09-W11 wrong pre-registered after identity fails", { entries: [correction({ afterUnitSha256: "0".repeat(64) })] }, rootAfter + tail, {}, null, 1, "does not match afterUnitSha256"],
+    ["F09-W12 correction bound to another unit cannot be borrowed", { entries: [correction({ id: "fixture-name-correction", authorityUnitId: "UNIT-Docs/V1技术设计.md", path: "Docs/V1技术设计.md" })] }, rootAfter + tail, {}, null, 1, "bound to a different Authority Unit or document"],
+  ];
+  for (const [name, setupOptions, headDoc, impact, extra, expected, marker] of consumeCases) {
+    const { root, base } = setupWording(setupOptions);
+    record(name, expected, consume(root, base, headDoc, impact, extra), marker);
+    cleanup(root);
+  }
+
+  // Same-change registry pre-authorization is still self-authorization.
+  {
+    const { root, base } = setupWording({ entries: null });
+    const registry = readRegistry(root);
+    registry.exactWordingCorrections = [correction()];
+    writeRegistry(root, registry);
+    record("F09-W13 same-change registration cannot authorize its own correction", 1, consume(root, base, rootAfter + tail), "cannot self-authorize");
+    cleanup(root);
+  }
+
+  // EXACT_WORDING_CORRECTION is not a bypass for IMPLEMENTED units.
+  {
+    const { root, base } = setupWording();
+    write(root, "Docs/V1产品需求.md", rootBefore + "\n## Normative A\nnew normative\n## Metadata\nold reference\n");
+    refreshSnapshot(root);
+    impactManifest(root, base, [{ authorityUnitId: "AUTH-A", classification: "EXACT_WORDING_CORRECTION", correctionId: "fixture-name-correction", downstream: [] }]);
+    commit(root, "implemented unit wording bypass");
+    record("F09-W14 IMPLEMENTED unit cannot use EXACT_WORDING_CORRECTION", 1, run(root, base), "Substantive Authority Unit AUTH-A cannot use EXACT_WORDING_CORRECTION");
+    cleanup(root);
+  }
+
+  // Registration itself is a separate governance change with a finite schema.
+  const registrationCases = [
+    ["F09-R1 valid registry-only registration passes", [correction()], 0, "Change governance PASS"],
+    ["F09-R2 registration for an IMPLEMENTED unit fails", [correction({ authorityUnitId: "AUTH-A" })], 1, "limited to normative FUTURE_UNIMPLEMENTED"],
+    ["F09-R3 registration for a non-normative unit fails", [correction({ authorityUnitId: "AUTH-METADATA" })], 1, "limited to normative FUTURE_UNIMPLEMENTED"],
+    ["F09-R4 multi-line replacement literal fails", [correction({ to: TO + "\n新增规则" })], 1, "to must be a non-empty single-line literal"],
+    ["F09-R5 identical literals fail", [correction({ to: FROM })], 1, "from and to must differ"],
+    ["F09-R6 invalid content identity fails", [correction({ beforeUnitSha256: "not-a-hash" })], 1, "beforeUnitSha256 must be lowercase SHA-256 hex"],
+    ["F09-R7 duplicate unit registration fails", [correction(), correction({ id: "fixture-second" })], 1, "at most one exact wording correction"],
+    ["F09-R8 wrong document path fails", [correction({ path: "Docs/V1技术设计.md" })], 1, "path must be the registered document"],
+    ["F09-R9 unknown Authority Unit fails", [correction({ authorityUnitId: "AUTH-NOPE" })], 1, "unknown authorityUnitId"],
+    ["F09-R10 non-array registration fails", { id: "x" }, 1, "exactWordingCorrections must be an array"],
+  ];
+  for (const [name, entries, expected, marker] of registrationCases) {
+    const { root, base } = setupWording({ entries: null });
+    const registry = readRegistry(root);
+    registry.exactWordingCorrections = entries;
+    writeRegistry(root, registry);
+    commit(root, "registry-only registration");
+    record(name, expected, run(root, base), marker);
+    cleanup(root);
+  }
+
+  // Registration and consumption cannot share a change with an Authority Doc edit.
+  {
+    const { root, base } = setupWording({ entries: null });
+    const registry = readRegistry(root);
+    registry.exactWordingCorrections = [correction()];
+    writeRegistry(root, registry);
+    write(root, "Docs/V1产品需求.md", rootAfter + tail);
+    refreshSnapshot(root);
+    commit(root, "registration plus doc edit without impact");
+    record("F09-R11 registration cannot land with the Authority Doc edit", 1, run(root, base), "must land separately from Authority Docs");
+    cleanup(root);
+  }
+}
+
 let failed = 0;
 for (const item of results) {
   if (!item.pass) failed += 1;
