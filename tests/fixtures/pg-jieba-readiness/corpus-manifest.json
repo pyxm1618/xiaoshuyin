@@ -1,0 +1,55 @@
+{
+  "feature": "022-pg-jieba-lexical-readiness-spike",
+  "privacy_classification": "NON_PERSONAL_FORMAL_PRODUCT_DOC",
+  "permission": "FROZEN_SPEC_PERMITTED_FORMAL_DOC_FIXTURE",
+  "documents": [
+    {
+      "doc_id": "D01",
+      "text": "历史方案中的“家庭联盟”“共同目标”“共同约定”应继续保留。",
+      "sha256": "725dc334367a28908998ce781d8c05f282692d9b35253e4738a331a118e4852f",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 971"
+    },
+    {
+      "doc_id": "D02",
+      "text": "手机使用合约等历史设计有价值。",
+      "sha256": "4a11f04701d1ebe0274de1b597d12e76b0312220715c99a2b2b99923d67e322d",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 995"
+    },
+    {
+      "doc_id": "D03",
+      "text": "数字使用按实际活动与影响理解，可以涉及手机、平板、电脑和游戏设备；不能沿用旧资料中“电脑不属于手机”的设备排除来漏掉真实问题。学习、联系家人和娱乐用途分开记录，不以统一小时数单独判断是否需要干预。",
+      "sha256": "d738d81e44acc8b74ffaf9f8d2c4cb5ac227ad9cbe2ab3f686923a6b3b23374d",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 809"
+    },
+    {
+      "doc_id": "D04",
+      "text": "小树荫的长期使命不是“让家长获得更多家庭教育知识”，而是：",
+      "sha256": "2d1ae802806c0f4c922b34b2df2b7f9ed71621e7e993fc970e31d8e4dec38447",
+      "source_path": "Docs/总产品需求.md",
+      "source_blob": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29",
+      "source_reference": "line 37"
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "Q01",
+      "text": "手机使用合约",
+      "sha256": "c4e11b191229b2a805be24065a6a1e9bb1ac06c0f578129731ca39a920e5d16e",
+      "expected_literal_match_ids": ["D02"],
+      "declared_distractor_ids": ["D01", "D03", "D04"]
+    },
+    {
+      "query_id": "Q02",
+      "text": "家庭联盟",
+      "sha256": "b8a022686b23ac9fda1a2f83716ab1e4fe0628fda2de9fd5b0e9ed2e35a20c6c",
+      "expected_literal_match_ids": ["D01"],
+      "declared_distractor_ids": ["D02", "D03", "D04"]
+    }
+  ]
+}
