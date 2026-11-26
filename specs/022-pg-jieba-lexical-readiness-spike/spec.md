@@ -2,9 +2,13 @@
 
 > Feature: `022-pg-jieba-lexical-readiness-spike`
 >
-> Role boundary: Plan AI 1 — Specify + Clarify only.
+> Role boundary: Plan AI 1 — Targeted Governance Compatibility Correction only (non-semantic / additive-only reconciliation with repository Spec Governance).
 >
-> Status: FROZEN only after remote read-back proves this `spec.md` is the sole branch delta.
+> Previous Frozen Spec Head: `c583e7d67d3cca7bb5b9f1b533f08448c2362334` (SUPERSEDED ONLY BY TARGETED GOVERNANCE COMPATIBILITY CORRECTION)
+>
+> Previous Frozen Spec Blob: `c11c595d3fc9390bb569651562ba52c36cf9546b`
+>
+> Status: TARGETED GOVERNANCE COMPATIBILITY CORRECTION — FROZEN only after remote read-back proves this `spec.md` is the sole branch delta.
 
 ## 1. Purpose
 
@@ -12,7 +16,7 @@ Verify the smallest independent technical prerequisite for V1 RAG Candidate B: w
 
 This Slice produces truthful PASS / FAIL / BLOCKED / UNKNOWN / NOT_EVALUATED evidence. It does not build production RAG and does not select a production route.
 
-## 2. Authority / Upstream Traceability
+## Upstream Traceability
 
 Controlling authority:
 
@@ -25,6 +29,14 @@ Controlling authority:
 - `specs/019-professional-retrieval-pgvector-readiness/spec.md`
 - `specs/020-embedding-provider-adapter-foundation/{spec,plan,checklist,tasks}.md`
 - `specs/021-sparsevec-readiness-spike/{spec,plan,checklist,tasks}.md` from its current frozen planning branch until admitted to main.
+
+Approved upstream requirement and architecture bindings already governing this Slice:
+
+- `Docs/V1技术设计.md` §4.2, §13.1–§13.2, §20 & `Docs/总体技术架构.md` §11.1: PostgreSQL 18 substrate and Candidate B (`qwen3.7 dense + pg_jieba + 小树荫专业词典`) lexical readiness prerequisite before later RRF/rerank and A/B/C Gold Dataset evaluation; `pg_textsearch` remains DEFERRED.
+- `V1-C03` (`Docs/V1产品需求.md`): real UNKNOWN / NOT_COLLECTED / blocked / inconclusive states cannot be fabricated as PASS or determinate readiness.
+- `V1-C27` (`Docs/V1产品需求.md`): infrastructure/model/runtime failures must surface truthful failure states rather than fabricated success.
+- `V1-C34`, `V1-C37` (`Docs/V1产品需求.md`): Staff/Professional Review authority and reviewed Psychological/Behavioral Intervention Contracts cannot be bypassed or invented by AI, RAG, or test lexicons.
+- `V1-X14` (`Docs/V1产品需求.md`): only real, actually verified capability counts as readiness; mock tokenizers, placeholder substitutions, or unverified assumptions cannot pass.
 
 Authority facts relevant to this Slice:
 
@@ -49,7 +61,9 @@ The missing technical fact is narrower:
 
 Without that proof, starting A/B/C Gold Dataset evaluation would conflate missing infrastructure with retrieval quality.
 
-## 4. In Scope
+## Scope
+
+### In Scope
 
 - Verify actual `pg_jieba` availability and compatibility on the exact Stage A PostgreSQL 18 target used by the project.
 - Record exact PostgreSQL, `pg_jieba`, packaging/source and execution-environment identity used by the Spike.
@@ -60,7 +74,7 @@ Without that proof, starting A/B/C Gold Dataset evaluation would conflate missin
 - Record deterministic/reproducible positive, negative, blocked and inconclusive evidence.
 - Verify cleanup and absence of lasting business or production retrieval state.
 
-## 5. Explicit Out of Scope
+### Explicit Out of Scope
 
 This Slice SHALL NOT:
 
@@ -258,6 +272,21 @@ Positive or negative Spike evidence must bind:
 - limitations.
 
 Evidence must not contain credentials, private family/minor data, unapproved restricted professional text or fabricated Gold labels.
+
+## Acceptance Evidence
+
+In mechanical summary of Functional Requirements (`FR-001`–`FR-012`), Acceptance Scenarios (`AS-01`–`AS-08`), Negative / Failure Scenarios (`NS-01`–`NS-12`), and §15 Evidence Requirements above, valid terminal Spike evidence MUST bind and preserve:
+
+- one exact repository head (together with base main / merge base and changed-file scope) across the run family;
+- exact environment identity (PostgreSQL 18 target version, execution stage/environment identity, and execution role/security facts);
+- exact `pg_jieba` source identity (package/build/source identity);
+- frozen lexicon identity (pre-run immutable fingerprint and per-entry authorized provenance under §8);
+- frozen corpus/query identity (pre-run immutable identity, provenance, and predeclared technical expectations);
+- raw tokenization evidence (actual `pg_jieba` tokenization outputs and predeclared lexicon-sensitive differential behavior, without mock/fallback substitution);
+- raw lexical retrieval evidence (disposable lexical query results over the frozen corpus with distractors, without dense/sparse/RRF/reranker/Gold claims);
+- cleanup proof (verified removal or isolation of all disposable test state after success and failure, and absence of lasting production/business retrieval state);
+- explicit lower predicate states (`PG_JIEBA_COMPATIBILITY`, `LEXICON_LOAD`, `TOKENIZATION`, `LEXICAL_QUERY`, `CLEANUP` with explicit PASS / FAIL / BLOCKED / UNKNOWN / NOT_EVALUATED outcomes and reasons, including all attempted failure/blocked cases);
+- mechanically derived aggregate state (derived from the mandatory lower predicates on the exact head/environment/run family without manual PASS override).
 
 ## 16. Open Questions
 
