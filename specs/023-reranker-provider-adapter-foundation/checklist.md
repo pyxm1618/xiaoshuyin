@@ -125,7 +125,7 @@ Every item is binary/mechanical. “Looks correct”, “reasonable”, “seems
 
 ## I. Scope / Static / Full Regression
 
-- [ ] C23-X01 — Changed files subset. Command: git diff --name-only "$DEVELOPMENT_BASE"...HEAD. Expected only Plan §8 production/test paths plus already-frozen specs. Evidence owner: T011.
+- [ ] C23-X01 — Changed files subset. Command: git diff --name-only "$DEVELOPMENT_BASE"...HEAD. Expected only Plan §8 production/test paths plus the single authorized change-binding manifest and already-frozen specs (no new planning mutation). Evidence owner: T011.
 - [ ] C23-X02 — Static guard. Command: node scripts/guard-static.mjs. Expected exit 0. Evidence owner: T009/T011.
 - [ ] C23-X03 — Static guard self-test. Command: node scripts/guard-static.mjs --self-test. Expected exit 0. Evidence owner: T009/T011.
 - [ ] C23-X04 — Typecheck. Command: bun run typecheck. Expected exit 0. Evidence owner: T011.
@@ -133,7 +133,7 @@ Every item is binary/mechanical. “Looks correct”, “reasonable”, “seems
 - [ ] C23-X06 — package.json and bun.lock unchanged. Command: git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- package.json bun.lock apps/server/api/package.json. Expected exit 0. Evidence owner: T011.
 - [ ] C23-X07 — app.ts/routes unchanged. Command: git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- apps/server/api/src/app.ts apps/server/api/src/routes. Expected exit 0. Evidence owner: T011.
 - [ ] C23-X08 — db unchanged. Command: git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- db. Expected exit 0. Evidence owner: T011.
-- [ ] C23-X09 — no .specify delta in implementation PR. Command: git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- .specify. Expected exit 0. Evidence owner: T011.
+- [ ] C23-X09 — Exact .specify delta in implementation PR: exactly one changed path, .specify/change-bindings/023-reranker-provider-adapter-foundation.json. Commands: `specify_changed=$(git diff --name-only --no-renames "$DEVELOPMENT_BASE"...HEAD -- .specify) && test "$specify_changed" = '.specify/change-bindings/023-reranker-provider-adapter-foundation.json'` and `git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- .specify/implementation-ownership.json .specify/scripts/`. Expected both exit 0; no second manifest or other .specify changes; ownership registry and governance scripts/self-tests unchanged. C23-G12 must also exit 0 on the same final exact HEAD. Evidence owner: T011.
 - [ ] C23-X10 — no retrieval/Gold/runtime platform scope. Architecture test command exits 0. Evidence owner: T009/T011.
 
 ## J. Audit 2 Handoff / Terminal Discipline
