@@ -279,6 +279,7 @@ export function createEmbeddingProviderPort(
       const finishFailure = (
         problem: InternalProblem,
         finalCause: 'NOT_RETRYABLE' | 'RETRY_EXHAUSTED' | 'DEADLINE_EXCEEDED' | 'RETRY_AFTER_EXCEEDS_BUDGET' | 'CANCELLED',
+        cost?: CostRecord,
       ): EmbeddingOutcome => {
         const telemetry = failureTelemetry({
           request,
@@ -302,9 +303,25 @@ export function createEmbeddingProviderPort(
             attempts,
             finalCause,
             capabilityEvidence: evidence(true),
+            ...(cost ? { cost } : {}),
           }),
         });
       };
+
+      const rejectedCallCost = (
+        providerRequestId: string | undefined,
+        usage: EmbeddingUsage,
+        costGuard: 'OK' | 'LIMIT_REACHED_AFTER_CALL',
+      ): CostRecord => buildCostRecord({
+        logicalRequestId: request.requestId,
+        providerRequestId: providerRequestId ?? 'NOT_PROVIDED',
+        usage,
+        configuredModelId: request.configuredModelId,
+        configuredModelVersionOrRevision: request.configuredModelVersionOrRevision,
+        costGuard,
+        ...(config.pricePer1kTokens !== undefined ? { pricePer1kTokens: config.pricePer1kTokens } : {}),
+        ...(config.priceCurrency ? { priceCurrency: config.priceCurrency } : {}),
+      });
 
       while (true) {
         if (signal?.aborted) {
@@ -334,10 +351,17 @@ export function createEmbeddingProviderPort(
               // A 2xx response is billable even when the normalized envelope/model is rejected.
               // Account only aggregate usage the provider actually returned; never synthesize it.
               const rejectedUsage = parsed.usage ? normalizeUsage(parsed.usage) : null;
-              if (rejectedUsage) {
-                costGuard.record(rejectedUsage.totalTokens, config.maxTokensPerCall, config.maxTokensPerProcess);
-              }
-              return finishFailure(parsed, 'NOT_RETRYABLE');
+              if (!rejectedUsage) return finishFailure(parsed, 'NOT_RETRYABLE');
+              const rejectedGuardState = costGuard.record(
+                rejectedUsage.totalTokens,
+                config.maxTokensPerCall,
+                config.maxTokensPerProcess,
+              );
+              return finishFailure(
+                parsed,
+                'NOT_RETRYABLE',
+                rejectedCallCost(parsed.providerRequestId, rejectedUsage, rejectedGuardState),
+              );
             }
             lastProviderRequestId = parsed.providerRequestId;
             const usage = normalizeUsage(parsed.usage);
@@ -353,7 +377,9 @@ export function createEmbeddingProviderPort(
             // validating embeddings so rejected output cannot bypass the process cost guard.
             const guardState = costGuard.record(usage.totalTokens, config.maxTokensPerCall, config.maxTokensPerProcess);
             const validated = validateProviderEmbeddings({ embeddings: parsed.embeddings, request, config });
-            if ('errorClass' in validated) return finishFailure(validated, 'NOT_RETRYABLE');
+            if ('errorClass' in validated) {
+              return finishFailure(validated, 'NOT_RETRYABLE', rejectedCallCost(parsed.providerRequestId, usage, guardState));
+            }
             const cost = buildCostRecord({
               logicalRequestId: request.requestId,
               providerRequestId: parsed.providerRequestId,

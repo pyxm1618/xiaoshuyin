@@ -154,15 +154,85 @@ describe('Slice 20 embedding provider contract', () => {
     const p = createEmbeddingProvider({ env: env({ EMBEDDING_MAX_TOKENS_PER_CALL: '1' }) }, { transport: t, costGuard: guard });
     const failure = fail(await p.embed(req()), code);
     expect(JSON.stringify(failure)).not.toContain('total_tokens');
+    expect(failure.cost).toMatchObject({
+      logicalRequestId: 'r1',
+      providerRequestId: 'p1',
+      usage: { totalTokens: 100, promptTokens: 7, granularity: 'REQUEST_AGGREGATE' },
+      perItemUsage: 'NOT_PROVIDED',
+      perItemExactCost: 'UNKNOWN',
+      configuredModel: { modelId: 'model-a', versionOrRevision: 'rev-1' },
+      pricingProvenance: 'NOT_CONFIGURED',
+      totalCost: 'UNKNOWN',
+      totalCostKind: 'UNKNOWN',
+      currency: 'UNKNOWN',
+      costGuard: 'LIMIT_REACHED_AFTER_CALL',
+    });
+    expect(Object.isFrozen(failure.cost)).toBe(true);
     fail(await p.embed(req({ requestId: 'r2' })), 'COST_LIMIT_REACHED');
     expect(t.calls).toHaveLength(1);
+  });
+
+  it('prices the retained failure cost record from configured price provenance', async () => {
+    const body = { ...(wrapped({ total: 100 }) as Record<string, unknown>), embeddings: [] };
+    const { o } = await call(body, { e: env({ EMBEDDING_PRICE_PER_1K_TOKENS: '2', EMBEDDING_PRICE_CURRENCY: 'CNY' }) });
+    const failure = fail(o, 'AMBIGUOUS_PROVIDER_RESPONSE');
+    expect(failure.cost).toMatchObject({
+      providerRequestId: 'p1',
+      usage: { totalTokens: 100 },
+      pricingProvenance: 'CONFIGURED_PER_1K_TOKENS',
+      totalCost: 0.2,
+      totalCostKind: 'ESTIMATED_FROM_CONFIGURED_PRICE',
+      currency: 'CNY',
+      costGuard: 'OK',
+    });
+  });
+
+  it('retains cost association without synthesizing usage the provider did not return', async () => {
+    const noUsage = fail((await call({ request_id: 'p9', output: { embeddings: [] }, embeddings: [] })).o, 'AMBIGUOUS_PROVIDER_RESPONSE');
+    expect(noUsage.cost).toMatchObject({
+      providerRequestId: 'p9',
+      usage: { totalTokens: 'NOT_PROVIDED', promptTokens: 'NOT_PROVIDED', granularity: 'REQUEST_AGGREGATE' },
+      totalCost: 'UNKNOWN',
+      totalCostKind: 'UNKNOWN',
+      costGuard: 'OK',
+    });
+    const malformed = fail((await call({ output: { embeddings: [] }, usage: { total_tokens: 5 } })).o, 'MALFORMED_PROVIDER_RESPONSE');
+    expect(malformed.providerRequestId).toBe('NOT_PROVIDED');
+    expect(malformed.cost).toMatchObject({ providerRequestId: 'NOT_PROVIDED', usage: { totalTokens: 5 } });
+  });
+
+  it('retains the cost record when returned vectors are rejected after billing', async () => {
+    const failure = fail((await call(wrapped({ dense: [1, 2] }))).o, 'DIMENSION_MISMATCH');
+    expect(failure.cost).toMatchObject({
+      logicalRequestId: 'r1',
+      providerRequestId: 'p1',
+      usage: { totalTokens: 7 },
+      costGuard: 'OK',
+    });
+  });
+
+  it('records rejected-call usage in the cost guard exactly once', async () => {
+    const guard = new EmbeddingCostGuard();
+    const ambiguous = { ...(wrapped({ total: 100 }) as Record<string, unknown>), embeddings: [] };
+    const t = new Fake([res(ambiguous), res(wrapped({ total: 100 }))]);
+    const p = createEmbeddingProvider(
+      { env: env({ EMBEDDING_MAX_TOKENS_PER_CALL: '1000', EMBEDDING_MAX_TOKENS_PER_PROCESS: '250' }) },
+      { transport: t, costGuard: guard },
+    );
+    const failure = fail(await p.embed(req()), 'AMBIGUOUS_PROVIDER_RESPONSE');
+    expect(failure.cost?.costGuard).toBe('OK');
+    const ok = await p.embed(req({ requestId: 'r2' }));
+    expect(ok.kind).toBe('OK');
+    if (ok.kind === 'OK') expect(ok.result.cost.costGuard).toBe('OK');
+    expect(t.calls).toHaveLength(2);
   });
 
   it('does not record aggregate usage the provider did not return as valid', async () => {
     const invalid = { request_id: 'p', output: { embeddings: [] }, embeddings: [], usage: { total_tokens: -5, prompt_tokens: 7 } };
     const guard = new EmbeddingCostGuard(), t = new Fake([res(invalid), res(wrapped())]);
     const p = createEmbeddingProvider({ env: env({ EMBEDDING_MAX_TOKENS_PER_CALL: '1' }) }, { transport: t, costGuard: guard });
-    fail(await p.embed(req()), 'AMBIGUOUS_PROVIDER_RESPONSE');
+    const failure = fail(await p.embed(req()), 'AMBIGUOUS_PROVIDER_RESPONSE');
+    expect(failure.cost).toBeUndefined();
     expect((await p.embed(req({ requestId: 'r2' }))).kind).toBe('OK');
     expect(t.calls).toHaveLength(2);
   });

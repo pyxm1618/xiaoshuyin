@@ -8,7 +8,10 @@ const privateImportTargets = new Set([
   resolve(seam, 'transport'),
   resolve(seam, 'dashscope-protocol'),
 ]);
-const importSpecifier = /\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const privateProtocolModule = './embedding/' + 'dashscope' + '-protocol.js';
+const staticImportSpecifier = /\bimport\s+(?:type\s+)?[^'";]*?\bfrom\s*['"]([^'"]+)['"]/g;
+const sideEffectImportSpecifier = /\bimport\s*['"]([^'"]+)['"]/g;
+const dynamicImportSpecifier = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const expectedSeamFiles = [
   'config.ts', 'contracts.ts', 'cost.ts', 'dashscope-protocol.ts', 'errors.ts',
   'evidence.ts', 'index.ts', 'port.ts', 'telemetry.ts', 'transport.ts',
@@ -30,12 +33,66 @@ function walkTs(root: string): string[] {
   return out;
 }
 
+// Removes comments while preserving string literals, so `from /* ... */ './x'` is
+// still recognized and `//` inside a URL string is not truncated.
+function stripComments(source: string): string {
+  let out = '';
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === "'" || char === '"' || char === '`') {
+      out += char;
+      index += 1;
+      while (index < source.length) {
+        const inner = source[index];
+        if (inner === '\\') {
+          out += source.slice(index, index + 2);
+          index += 2;
+          continue;
+        }
+        out += inner;
+        index += 1;
+        if (inner === char) break;
+      }
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      while (index < source.length && source[index] !== '\n') index += 1;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      index += 2;
+      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) index += 1;
+      index += 2;
+      continue;
+    }
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
+// Extracts every static ES import specifier (named/default/namespace/type/side-effect)
+// plus dynamic import()/require(); resolution is left to resolvedPrivateImport.
+function importSpecifiers(source: string): string[] {
+  const code = stripComments(source);
+  const specifiers: string[] = [];
+  for (const pattern of [staticImportSpecifier, sideEffectImportSpecifier, dynamicImportSpecifier]) {
+    pattern.lastIndex = 0;
+    for (const match of code.matchAll(pattern)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier) specifiers.push(specifier);
+    }
+  }
+  return specifiers;
+}
+
 // Resolves relative specifiers against the importing file so equivalent paths such as
 // `./embedding/transport.js` from src/ai are mechanically recognized as the private module.
 function resolvedPrivateImport(file: string, text: string): string | null {
-  for (const match of text.matchAll(importSpecifier)) {
-    const specifier = match[1] ?? match[2] ?? match[3];
-    if (!specifier || !specifier.startsWith('.')) continue;
+  for (const specifier of importSpecifiers(text)) {
+    if (!specifier.startsWith('.')) continue;
     const target = resolve(dirname(file), specifier).replace(/\.(?:[cm]?[jt]s)$/, '');
     if (privateImportTargets.has(target)) return target;
   }
@@ -161,11 +218,33 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
   });
 
   it.each([
+    ['comment between from and specifier', "import { FetchHttpTransport } from /* boundary */ './embedding/transport.js';"],
+    ['multiline named import', "import {\n  FetchHttpTransport\n} from './embedding/transport.js';"],
+    ['default import', "import T from './embedding/transport.js';"],
+    ['namespace import', `import * as T from '${privateProtocolModule}';`],
+    ['type-only import', "import type { HttpTransport } from /* c */ './embedding/transport.js';"],
+    ['side-effect import', "import './embedding/transport.js';"],
+    ['dynamic import', "const m = await import('./embedding/transport.js');"],
+    ['require call', "const m = require('./embedding/transport.js');"],
+    ['nested path with comment', "import { X } from /* c */ '../ai/embedding/transport.js';"],
+  ])('rejects a %s that reaches a private module', (_name, code) => {
+    expect(() => assertProviderBoundary('apps/server/api/src/ai/consumer.ts', code)).toThrow();
+  });
+
+  it.each([
     ['apps/server/api/src/ai/consumer.ts', './embedding/index.js'],
     ['apps/server/api/src/ai/consumer.ts', './embedding/port.js'],
     ['apps/server/api/src/ai/other/consumer.ts', '../embedding/index.js'],
   ])('allows public Port imports from consumers: %s -> %s', (file, specifier) => {
     expect(() => assertProviderBoundary(file, `import type { P } from '${specifier}';`)).not.toThrow();
+  });
+
+  it.each([
+    ['comment before public specifier', "import { createEmbeddingProvider } from /* public */ './embedding/index.js';"],
+    ['side-effect public import', "import './embedding/index.js';"],
+    ['namespace public import', "import * as E from './embedding/port.js';"],
+  ])('allows a %s', (_name, code) => {
+    expect(() => assertProviderBoundary('apps/server/api/src/ai/consumer.ts', code)).not.toThrow();
   });
 
   it('enforces the approved endpoint policy with no endpoint-override channel', () => {
