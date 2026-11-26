@@ -17,11 +17,11 @@ Remote truth was re-read with `git fetch`-equivalent remote reads and local Git 
 
 | Item | Value |
 |---|---|
-| `origin/main` | `91907537e8ac7f49b7c24c881e07236587eef74d` (`chore(s23): register reranker adapter ownership (#151)`, ownership-registry-only); previous reconciliation points `d043d07a5d9a3aa3766ff54a1582358fe5ad905c` (#150), `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (#147) and `21a2e372754843af5ee4daa109e75b693ce4feb1` (#145) |
+| `origin/main` | `e2b70c06d071dc59fa5d113581e09e3dfe4cea52` (`test(s22): verify pg_jieba lexical readiness on PG18 (#149)`); previous reconciliation points `91907537e8ac7f49b7c24c881e07236587eef74d` (#151, ownership-registry-only), `d043d07a5d9a3aa3766ff54a1582358fe5ad905c` (#150), `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (#147) and `21a2e372754843af5ee4daa109e75b693ce4feb1` (#145) |
 | `origin/spec/021-sparsevec-readiness-spike` | `8792c4cf4e366b5507ac451a68cd31b73e7f5261` |
 | `origin/plan/021-sparsevec-readiness-spike` before reconciliation | `2363bb5e41e6f1a2b92ee4c9f406b784cab711d3` |
 | `origin/plan/021-sparsevec-readiness-spike` at final-closeout takeover | `59c4a520f8353c23a62617a2165200f63458c1b4` |
-| main ↔ Frozen Spec merge base / behind / ahead | `f4765ce004affc464392bf6ade45d886913ed8a9` / Spec behind main 19 / ahead 5 |
+| main ↔ Frozen Spec merge base / behind / ahead | `f4765ce004affc464392bf6ade45d886913ed8a9` / Spec behind main 20 / ahead 5 |
 | main ↔ old Planning merge base / behind / ahead | `3161677256c479e0e6754554a07e08a1fbaf16ef` / 16 / 7 |
 | Frozen Spec ↔ old Planning merge base | `688ad88ee4bbadce29a884f9e31d6e85bc8fee48` (old Planning lacked Spec commit `8792c4cf`) |
 | Open PRs touching Slice 21 | none |
@@ -30,7 +30,7 @@ Remote truth was re-read with `git fetch`-equivalent remote reads and local Git 
 Reconciliation method (no rebase, no force push, no history rewrite):
 
 1. normal merge commit of `origin/spec/021-sparsevec-readiness-spike` (`8792c4cf`) into the old Planning head;
-2. normal merge commits of `origin/main` (`21a2e372`, then `e7885234` PR #147, then `d043d07a` PR #150, then `91907537` PR #151) as main advanced;
+2. normal merge commits of `origin/main` (`21a2e372`, then `e7885234` PR #147, then `d043d07a` PR #150, then `91907537` PR #151, then `e2b70c06` PR #149) as main advanced;
 3. bounded correction commits touching only `plan.md`, `checklist.md`, `tasks.md`.
 
 Mechanical reconciliation facts at the corrected planning state:
@@ -560,7 +560,7 @@ AS-01..AS-08 and NS-01..NS-08 are assigned in `tasks.md` (Frozen Spec Authority 
 ## 20. Developer Handoff Boundary
 
 ```yaml
-PLANNING: reconciled to Frozen Spec 77d1caf4 and main 91907537 (Audit 1 verdict reported externally against exact head)
+PLANNING: reconciled to Frozen Spec 77d1caf4 and main e2b70c06 (Audit 1 verdict reported externally against exact head)
 DEVELOPER IMPLEMENTATION GATE: CLOSED until Slice 20 durable independent Audit 2 PASS evidence is established and Slice 21 Spec/Planning are admitted to main (§4 item 7)
 DEVELOPMENT: NOT AUTHORIZED
 ```
