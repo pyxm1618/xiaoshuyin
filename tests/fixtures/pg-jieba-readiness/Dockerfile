@@ -22,7 +22,7 @@ RUN git clone "${PG_JIEBA_REPO}" . \
   && git submodule status | grep -q "${LIBJIEBA_COMMIT}" \
   && mkdir build \
   && cd build \
-  && cmake .. \
+  && cmake -DPostgreSQL_ADDITIONAL_VERSIONS=18 -DPostgreSQL_TYPE_INCLUDE_DIR="$(pg_config --includedir-server)" .. \
   && make -j"$(nproc)" \
   && make install
 

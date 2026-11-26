@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
@@ -28,19 +28,39 @@ function git(args: string[]): string {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
 }
 
-function cmd(bin: string, args: string[], timeout = 300_000) {
-  const res = spawnSync(bin, args, {
-    cwd: ROOT,
-    encoding: 'utf8',
-    maxBuffer: 32 * 1024 * 1024,
-    timeout,
+function cmd(
+  bin: string,
+  args: string[],
+  timeout = 300_000,
+): Promise<{ ok: boolean; code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(bin, args, { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ ok: false, code: 124, stdout: stdout.trim(), stderr: `${stderr}\nTIMEOUT`.trim() });
+    }, timeout);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString('utf8');
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString('utf8');
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({
+        ok: code === 0,
+        code: code ?? 1,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ ok: false, code: 1, stdout: stdout.trim(), stderr: String(err) });
+    });
   });
-  return {
-    ok: res.status === 0,
-    code: res.status ?? 1,
-    stdout: (res.stdout ?? '').trim(),
-    stderr: (res.stderr ?? '').trim(),
-  };
 }
 
 async function waitForPostgres(port: number, password: string, timeoutMs = 45_000): Promise<void> {
@@ -166,14 +186,14 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
       };
 
       try {
-        const dockerInfo = cmd('docker', ['info', '--format', '{{.ServerVersion}}'], 15_000);
+        const dockerInfo = await cmd('docker', ['info', '--format', '{{.ServerVersion}}'], 15_000);
         if (!dockerInfo.ok) {
           obs.compatibility.docker_available = false;
         } else {
           obs.compatibility.docker_available = true;
           rawEvidence.docker_server_version = dockerInfo.stdout;
 
-          const buildRes = cmd(
+          const buildRes = await cmd(
             'docker',
             ['build', '-f', 'tests/fixtures/pg-jieba-readiness/Dockerfile', '-t', imageTag, '.'],
             600_000,
@@ -193,13 +213,13 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
             obs.compatibility.build_prerequisites_available = true;
             obs.compatibility.build_succeeded = true;
 
-            const inspectImg = cmd('docker', ['image', 'inspect', imageTag, '--format', '{{.Id}}']);
+            const inspectImg = await cmd('docker', ['image', 'inspect', imageTag, '--format', '{{.Id}}']);
             obs.compatibility.derived_image_id = inspectImg.stdout;
             rawEvidence.derived_image_id = inspectImg.stdout;
 
             // 1. Start BASELINE container
-            cmd('docker', ['volume', 'create', baseVolume]);
-            const runBase = cmd('docker', [
+            await cmd('docker', ['volume', 'create', baseVolume]);
+            const runBase = await cmd('docker', [
               'run',
               '-d',
               '--name',
@@ -228,7 +248,7 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
             ]);
             expect(runBase.ok).toBe(true);
 
-            const basePortOut = cmd('docker', ['port', baseContainer, '5432/tcp']);
+            const basePortOut = await cmd('docker', ['port', baseContainer, '5432/tcp']);
             const basePort = Number(basePortOut.stdout.split(':').pop());
             await waitForPostgres(basePort, superPw);
 
@@ -276,7 +296,7 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
             }
 
             // Capture container binary/config hashes
-            const hashRes = cmd('docker', [
+            const hashRes = await cmd('docker', [
               'exec',
               baseContainer,
               'sh',
@@ -386,8 +406,8 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
 
               // 2. Start LEXICON_LOADED container
               obs.lexicon_load.attempted = true;
-              cmd('docker', ['volume', 'create', loadedVolume]);
-              const runLoaded = cmd('docker', [
+              await cmd('docker', ['volume', 'create', loadedVolume]);
+              const runLoaded = await cmd('docker', [
                 'run',
                 '-d',
                 '--name',
@@ -417,7 +437,7 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
               obs.lexicon_load.loaded_startup_succeeded = runLoaded.ok;
 
               if (runLoaded.ok) {
-                const loadedPortOut = cmd('docker', ['port', loadedContainer, '5432/tcp']);
+                const loadedPortOut = await cmd('docker', ['port', loadedContainer, '5432/tcp']);
                 const loadedPort = Number(loadedPortOut.stdout.split(':').pop());
                 await waitForPostgres(loadedPort, superPw);
 
@@ -556,8 +576,8 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
                 rawEvidence.lexical_query = { q01Runs, q02Runs };
 
                 // 3. FAILURE_INJECTION container (missing dictionary name)
-                cmd('docker', ['volume', 'create', failVolume]);
-                const runFail = cmd('docker', [
+                await cmd('docker', ['volume', 'create', failVolume]);
+                const runFail = await cmd('docker', [
                   'run',
                   '-d',
                   '--name',
@@ -587,7 +607,7 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
                 let failObserved = !runFail.ok;
                 let failDetail = runFail.ok ? 'container started' : runFail.stderr;
                 if (runFail.ok) {
-                  const failPortOut = cmd('docker', ['port', failContainer, '5432/tcp']);
+                  const failPortOut = await cmd('docker', ['port', failContainer, '5432/tcp']);
                   const failPort = Number(failPortOut.stdout.split(':').pop());
                   try {
                     await waitForPostgres(failPort, superPw, 10_000);
@@ -626,16 +646,16 @@ describe.skipIf(!ENABLED)('Slice 22 real PostgreSQL 18 + pg_jieba lexical readin
       } finally {
         obs.cleanup.attempted = true;
         for (const c of [baseContainer, loadedContainer, failContainer]) {
-          cmd('docker', ['rm', '-f', c], 30_000);
+          await cmd('docker', ['rm', '-f', c], 30_000);
         }
         for (const v of [baseVolume, loadedVolume, failVolume]) {
-          cmd('docker', ['volume', 'rm', '-f', v], 30_000);
+          await cmd('docker', ['volume', 'rm', '-f', v], 30_000);
         }
-        cmd('docker', ['rmi', '-f', imageTag], 30_000);
+        await cmd('docker', ['rmi', '-f', imageTag], 30_000);
 
-        const remC = cmd('docker', ['ps', '-a', '--filter', `name=${nonce}`, '--format', '{{.Names}}']);
-        const remV = cmd('docker', ['volume', 'ls', '--filter', `name=${nonce}`, '--format', '{{.Name}}']);
-        const remI = cmd('docker', ['images', imageTag, '--format', '{{.Repository}}:{{.Tag}}']);
+        const remC = await cmd('docker', ['ps', '-a', '--filter', `name=${nonce}`, '--format', '{{.Names}}']);
+        const remV = await cmd('docker', ['volume', 'ls', '--filter', `name=${nonce}`, '--format', '{{.Name}}']);
+        const remI = await cmd('docker', ['images', imageTag, '--format', '{{.Repository}}:{{.Tag}}']);
         obs.cleanup.containers_removed = remC.ok && remC.stdout === '';
         obs.cleanup.volumes_removed = remV.ok && remV.stdout === '';
         obs.cleanup.derived_image_removed = remI.ok && remI.stdout === '';
