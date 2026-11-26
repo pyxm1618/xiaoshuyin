@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "changeId": "pr139-stage-a-postgres-hardening",
+  "classification": "REPOSITORY_INFRASTRUCTURE",
+  "exemptionClass": "BUILD_TOOLING",
+  "paths": [
+    "docker-compose.stage-a.yml"
+  ]
+}

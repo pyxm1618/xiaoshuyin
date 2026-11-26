@@ -12,6 +12,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withDrizzleRlsTransaction } from '../../apps/server/api/src/db/drizzle-tx.js';
+import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { createAdminPool } from '../setup/db.js';
 import { createSafetyFixture, type SafetyFixture } from '../setup/safety.js';
 import {
@@ -375,5 +377,82 @@ describe('compliance consistent snapshot (Audit 2 HIGH-01)', () => {
     expect(result.snapshot?.guardianConsent?.decision).toBe('GRANTED');
     expect(result.evaluated.gate).toBe('BLOCK');
     expect(result.evaluated.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+  }, 120_000);
+
+
+  it('B2 — raw RLS consumers keep one compliance authority snapshot across interleaving writes', async () => {
+    const code = featureCode('RAW_RLS_PROFILE_RACE');
+    await publish({
+      code,
+      expectedVersion: null,
+      version: 1,
+      effectiveFrom: new Date(Date.now() - 10 * 60_000),
+    });
+
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='ADULT', minor_mode=false,
+              guardian_person_id=NULL,
+              guardian_consent_record_id=NULL,
+              guardian_consent_version=NULL
+        WHERE person_id=$1`,
+      [owner.personId]
+    );
+
+    const firstReadDone = deferred();
+    const releaseT1 = deferred();
+
+    const t1 = withRlsTransaction(
+      pool,
+      {
+        familyId,
+        accountId: owner.accountId,
+        personId: owner.personId,
+        purpose: 'COMPLIANCE_EVALUATION',
+        isolationLevel: 'REPEATABLE READ',
+      },
+      async (client) => {
+        const db = drizzle(client);
+        const firstPolicy = await loadCompliancePolicySnapshot(db, descriptor(code));
+        firstReadDone.resolve();
+        await releaseT1.promise;
+
+        const evaluated = await evaluateComplianceAtTransactionTime(db, client, {
+          descriptor: descriptor(code),
+          actorPersonId: owner.personId,
+          targetPersonId: owner.personId,
+          supportedObligations: SUPPORTED,
+        });
+        const person = await loadCompliancePersonSnapshot(client, owner.personId);
+        const secondPolicy = await loadCompliancePolicySnapshot(db, descriptor(code));
+        return { firstPolicy, secondPolicy, person, evaluated };
+      }
+    );
+
+    await firstReadDone.promise;
+    try {
+      await admin.query(
+        `UPDATE person_compliance_profiles
+            SET age_band='MINOR_14_17', minor_mode=true
+          WHERE person_id=$1`,
+        [owner.personId]
+      );
+    } finally {
+      releaseT1.resolve();
+    }
+
+    const result = await t1;
+    expect(result.firstPolicy.policies.map((policy) => policy.policyVersion)).toEqual([1]);
+    expect(result.secondPolicy.policies.map((policy) => policy.policyVersion)).toEqual([1]);
+    expect(result.person?.ageBand).toBe('ADULT');
+    expect(result.person?.minorMode).toBe(false);
+    expect(result.evaluated.policyVersion).toBe(1);
+
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='ADULT', minor_mode=false
+        WHERE person_id=$1`,
+      [owner.personId]
+    );
   }, 120_000);
 });

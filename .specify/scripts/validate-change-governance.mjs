@@ -865,6 +865,109 @@ function isAllowedVerificationPath(rel) {
   return /^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/)/.test(rel);
 }
 
+// POST_MERGE_CLOSEOUT is deliberately finite: consumers select pre-authorized files.
+function closeoutPath(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value) &&
+    !value.split("/").some((part) => part === "." || part === "..");
+}
+function closeoutSet(values, label, errors) {
+  if (!Array.isArray(values) || new Set(values).size !== values.length) {
+    errors.push(label + ": expected array without duplicates.");
+    return [];
+  }
+  return values;
+}
+function validateCloseoutRegistry(registry, errors) {
+  if (registry.postMergeCloseouts === undefined) return;
+  if (!Array.isArray(registry.postMergeCloseouts)) { errors.push("postMergeCloseouts must be an array."); return; }
+  const ids = new Set((registry.sharedRemediations ?? []).map((b) => b.id));
+  const features = new Set();
+  for (const binding of registry.postMergeCloseouts) {
+    if (!/^[a-z0-9-]+$/.test(binding?.id ?? "") || ids.has(binding.id)) errors.push("Invalid/duplicate closeout binding id.");
+    ids.add(binding?.id);
+    if (!/^[a-z0-9-]+$/.test(binding?.featureId ?? "") || features.has(binding.featureId)) errors.push("Invalid/duplicate closeout featureId.");
+    features.add(binding?.featureId);
+    const authorizedTaskIds = binding?.authorizedTaskIds;
+    if (!Array.isArray(authorizedTaskIds) || !authorizedTaskIds.length || new Set(authorizedTaskIds).size !== authorizedTaskIds.length ||
+        authorizedTaskIds.some((id) => typeof id !== "string" || !/^T\d{3,}$/.test(id))) {
+      errors.push("Closeout authorizedTaskIds must be a finite/non-empty array of unique task IDs.");
+    }
+    const sources = Array.isArray(binding?.sources) ? binding.sources : [];
+    const sourceIds = new Set();
+    const prs = new Set();
+    for (const source of sources) {
+      if (!/^[a-z0-9-]+$/.test(source?.id ?? "") || sourceIds.has(source.id)) errors.push("Invalid/duplicate closeout source id.");
+      sourceIds.add(source?.id);
+      if (!["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].includes(source?.role)) errors.push("Invalid closeout source role.");
+      if (!Number.isInteger(source?.pr) || source.pr <= 0 || prs.has(source.pr)) errors.push("Invalid/duplicate closeout source PR.");
+      prs.add(source?.pr);
+      for (const field of ["headSha", "mergeCommitSha"]) if (!/^[0-9a-f]{40}$/.test(source?.[field] ?? "")) errors.push("Invalid closeout source " + field);
+      if ((source?.baseBranch ?? "main") !== "main") errors.push("Closeout source baseBranch must be main.");
+    }
+    for (const role of ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"]) if (sources.filter((s) => s.role === role).length !== 1) errors.push("Closeout requires exactly one " + role + " source.");
+    const paths = new Set();
+    if (!Array.isArray(binding?.files) || !binding.files.length) errors.push("Closeout files must be finite/non-empty.");
+    for (const file of binding?.files ?? []) {
+      if (!closeoutPath(file?.path) || paths.has(file.path)) errors.push("Invalid/duplicate closeout file path.");
+      paths.add(file?.path);
+      if (!sourceIds.has(file?.sourceId)) errors.push("Unknown closeout file source.");
+      if (!["DELTA", "TREE"].includes(file?.identity)) errors.push("Invalid closeout file identity.");
+      if (typeof file?.verification !== "boolean") errors.push("Closeout file verification flag required.");
+      if (file?.verification && !isAllowedVerificationPath(file.path)) errors.push("Invalid closeout verification root.");
+      if (file?.identity === "TREE" && (!file.verification || !/^[0-9a-f]{40}$/.test(file.blobSha ?? ""))) errors.push("TREE requires pre-authorized verification path and blob SHA.");
+      if (file?.identity === "DELTA" && file.blobSha !== undefined) errors.push("DELTA cannot declare TREE blob.");
+    }
+  }
+}
+function validateCloseoutConsumer(evidence, records, binding, rel, errors) {
+  const allowedFields = new Set(["schemaVersion", "provenanceKind", "featureId", "taskFile", "closeoutBindingId", "taskIds", "taskVerifications", "ciRuns"]);
+  for (const field of Object.keys(evidence)) if (!allowedFields.has(field)) errors.push(rel + ": unknown closeout consumer field: " + field);
+  if (evidence.schemaVersion !== 4) errors.push(rel + ": POST_MERGE_CLOSEOUT requires schemaVersion=4.");
+  if (!binding) { errors.push(rel + ": missing trusted-base closeout binding."); return; }
+  if (evidence.featureId !== binding.featureId) errors.push(rel + ": closeout feature mismatch.");
+  for (const forbidden of ["implementationPr", "implementationHeadSha", "mergeCommitSha", "sources", "files"]) {
+    if (evidence[forbidden] !== undefined) errors.push(rel + ": consumer cannot supply " + forbidden);
+  }
+  const taskIds = closeoutSet(evidence.taskIds, rel + " taskIds", errors);
+  const mappings = closeoutSet(evidence.taskVerifications, rel + " taskVerifications", errors);
+  const actualIds = mappings.map((m) => m?.taskId);
+  const checked = records.map((r) => r.id);
+  if (new Set(actualIds).size !== actualIds.length || taskIds.length !== checked.length || actualIds.length !== checked.length || checked.some((id) => !taskIds.includes(id) || !actualIds.includes(id))) errors.push(rel + ": checked tasks must exactly match taskIds and taskVerifications.");
+  const authorized = closeoutSet(binding.authorizedTaskIds, rel + " authorizedTaskIds", errors);
+  if (!authorized.length) errors.push(rel + ": trusted-base closeout binding authorizes no tasks.");
+  for (const id of new Set([...taskIds, ...checked])) {
+    if (typeof id !== "string" || !authorized.includes(id)) errors.push(rel + ": task is not pre-authorized by trusted-base closeout binding: " + String(id));
+  }
+  const usedPaths = new Set();
+  const usedSources = new Set();
+  for (const record of records) {
+    const mapping = mappings.find((m) => m?.taskId === record.id);
+    if (!record.req || !record.verify || !mapping || mapping.reqContract !== record.req || mapping.verifyContract !== record.verify) { errors.push(rel + ": missing/mismatched REQ/VERIFY mapping " + record.id); continue; }
+    const paths = closeoutSet(mapping.verificationPaths, rel + " verificationPaths", errors);
+    if (!paths.length) errors.push(rel + ": missing task-specific verification " + record.id);
+    const patterns = verificationPatternsCloseout(record.verify);
+    for (const verificationPath of paths) {
+      const file = binding.files?.find((f) => f.path === verificationPath && f.verification);
+      if (!closeoutPath(verificationPath) || !file) errors.push(rel + ": verification path not pre-authorized: " + verificationPath);
+      if (!patterns.some((p) => globMatches(p, verificationPath))) errors.push(rel + ": verification path does not match task VERIFY: " + verificationPath);
+      usedPaths.add(verificationPath);
+      if (file) usedSources.add(file.sourceId);
+    }
+  }
+  const runs = closeoutSet(evidence.ciRuns, rel + " ciRuns", errors);
+  const runIds = new Set();
+  for (const run of runs) {
+    const source = binding.sources?.find((s) => s.id === run?.sourceId);
+    if (!source || !usedSources.has(source.id) || !Number.isInteger(run?.runId) || run.runId <= 0 || runIds.has(run.runId) || typeof run.name !== "string" || !run.name || run.headSha !== source.headSha || run.conclusion !== "success") errors.push(rel + ": invalid/orphan/non-exact-source-head CI run.");
+    runIds.add(run?.runId);
+  }
+  for (const sourceId of usedSources) if (!runs.some((r) => r.sourceId === sourceId)) errors.push(rel + ": verification source has no CI run: " + sourceId);
+  if (!usedPaths.size) errors.push(rel + ": closeout requires task-specific verification.");
+}
+function verificationPatternsCloseout(verify) {
+  return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.*?\/-]+/g) ?? [])];
+}
+
 function loadTaskProvenanceRegistry(errors) {
   if (!fs.existsSync(path.join(root, TASK_PROVENANCE_REGISTRY))) return { schemaVersion: 2, sharedRemediations: [] };
   const registry = readJson(TASK_PROVENANCE_REGISTRY, errors, "Task provenance registry");
@@ -873,6 +976,7 @@ function loadTaskProvenanceRegistry(errors) {
     errors.push("Task provenance registry must have schemaVersion=2 and sharedRemediations[].");
     return { schemaVersion: 2, sharedRemediations: [] };
   }
+  validateCloseoutRegistry(registry, errors);
   const ids = new Set();
   for (const [index, binding] of registry.sharedRemediations.entries()) {
     const label = "Task provenance sharedRemediations[" + index + "]";
@@ -943,6 +1047,15 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
   if (!fs.existsSync(specsRoot)) return;
 
   const provenanceRegistry = loadTaskProvenanceRegistry(errors);
+  const evidenceRoot = path.join(root, ".specify/task-evidence");
+  if (fs.existsSync(evidenceRoot)) for (const name of fs.readdirSync(evidenceRoot).filter((n) => n.endsWith(".json"))) {
+    const rel = ".specify/task-evidence/" + name;
+    const value = readJson(rel, errors, "Task evidence");
+    if (value?.provenanceKind !== "POST_MERGE_CLOSEOUT") continue;
+    const feature = name.slice(0, -5);
+    if (!/^[a-z0-9-]+$/.test(feature) || value.featureId !== feature || value.taskFile !== "specs/" + feature + "/tasks.md" || !fs.existsSync(path.join(root, "specs", feature, "tasks.md"))) errors.push(rel + ": orphan closeout manifest/task identity.");
+  }
+
   if (changed.includes(TASK_PROVENANCE_REGISTRY)) {
     for (const rel of changed.filter((file) => /^\.specify\/task-evidence\/[^/]+\.json$/.test(file))) {
       const evidence = readJson(rel, errors, "Changed task evidence " + rel);
@@ -1002,12 +1115,20 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
     const content = fs.readFileSync(taskAbs, "utf8");
     const records = parseTaskRecords(content, true);
     const checkedIds = records.map((r) => r.id);
-    if (checkedIds.length === 0) continue;
-
-    const baselineSha = baselineByPath.get(taskRel);
-    if (baselineSha && currentBlobSha(taskRel) === baselineSha) continue;
+    if (checkedIds.length === 0) {
+      const candidate = ".specify/task-evidence/" + entry.name + ".json";
+      if (!fs.existsSync(path.join(root, candidate))) continue;
+      const value = readJson(candidate, errors, "Task evidence");
+      if (value?.provenanceKind !== "POST_MERGE_CLOSEOUT") continue;
+    }
 
     const evidenceRel = ".specify/task-evidence/" + entry.name + ".json";
+    const baselineSha = baselineByPath.get(taskRel);
+    if (baselineSha && currentBlobSha(taskRel) === baselineSha) {
+      if (!fs.existsSync(path.join(root, evidenceRel))) continue;
+      const candidate = readJson(evidenceRel, errors, "Task evidence");
+      if (candidate?.provenanceKind !== "POST_MERGE_CLOSEOUT") continue;
+    }
     if (!fs.existsSync(path.join(root, evidenceRel))) {
       errors.push(taskRel + ": completed tasks require " + evidenceRel + " unless the task file matches the finite legacy baseline.");
       continue;
@@ -1015,6 +1136,18 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
     const evidence = readJson(evidenceRel, errors, "Task evidence for " + entry.name);
     if (!evidence) continue;
 
+    if (evidence.provenanceKind === "POST_MERGE_CLOSEOUT") {
+      let trusted = null;
+      try { trusted = JSON.parse(textAt(opts.base, TASK_PROVENANCE_REGISTRY)); }
+      catch (error) { errors.push(evidenceRel + ": cannot read trusted-base registry: " + error.message); }
+      const binding = trusted?.postMergeCloseouts?.find((b) => b.id === evidence.closeoutBindingId);
+      if (trusted) validateCloseoutRegistry(trusted, errors);
+      const current = provenanceRegistry.postMergeCloseouts?.find((b) => b.id === evidence.closeoutBindingId);
+      if (JSON.stringify(current) !== JSON.stringify(binding)) errors.push(evidenceRel + ": same-change closeout self authorization forbidden.");
+      if (evidence.featureId !== entry.name || evidence.taskFile !== taskRel) errors.push(evidenceRel + ": closeout task identity mismatch.");
+      validateCloseoutConsumer(evidence, records, binding, evidenceRel, errors);
+      continue;
+    }
     if (evidence.schemaVersion !== 3) errors.push(evidenceRel + ": schemaVersion must be 3.");
     if (evidence.featureId !== entry.name) errors.push(evidenceRel + ": task feature identity mismatch; featureId must equal " + entry.name + ".");
     if (evidence.taskFile !== taskRel) errors.push(evidenceRel + ": taskFile must equal " + taskRel + ".");

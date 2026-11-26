@@ -127,6 +127,7 @@ const FROZEN_SCHEMAS = [
   'UpdatePhoneUseContractDraftRequest',
   'ConfirmPhoneUseContractRequest',
   'RevisePhoneUseContractRequest',
+  'ReviewPhoneUseContractRequest',
   'PhoneUseContractTemplateResponse',
   'PhoneUseContractExamplesResponse',
   'PhoneUseContractFaqResponse',
@@ -174,7 +175,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 54 frozen business operations including Common Core Goal runtime, C3 Staff authority and Phone Contract', () => {
+it('contains exactly the 55 frozen business operations including Common Core Goal runtime, C3 Staff authority and Phone Contract', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -220,6 +221,7 @@ it('contains exactly the 54 frozen business operations including Common Core Goa
       'PATCH /api/v1/cases/{id}/digital-use/contract/drafts/{version}',
       'POST /api/v1/cases/{id}/digital-use/contract/{version}/confirm',
       'POST /api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      'POST /api/v1/cases/{id}/digital-use/contract/{version}/review',
       'GET /api/v1/cases/{id}/digital-use/contract/faq',
       'POST /api/v1/cases/{id}/digital-use/roleplays',
       'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
@@ -263,6 +265,7 @@ it('contains exactly the 54 frozen business operations including Common Core Goa
       ['patch', '/api/v1/cases/{id}/digital-use/contract/drafts/{version}'],
       ['post', '/api/v1/cases/{id}/digital-use/contract/{version}/confirm'],
       ['post', '/api/v1/cases/{id}/digital-use/contract/{version}/revise'],
+      ['post', '/api/v1/cases/{id}/digital-use/contract/{version}/review'],
       ['post', '/api/v1/cases/{id}/digital-use/roleplays'],
       ['post', '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns'],
       ['post', '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate'],
@@ -339,6 +342,7 @@ it('contains exactly the 54 frozen business operations including Common Core Goa
       '/api/v1/cases/{id}/digital-use/contract/drafts/{version}',
       '/api/v1/cases/{id}/digital-use/contract/{version}/confirm',
       '/api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      '/api/v1/cases/{id}/digital-use/contract/{version}/review',
       '/api/v1/cases/{id}/digital-use/contract/faq',
       '/api/v1/cases/{id}/digital-use/roleplays',
       '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',

@@ -27,6 +27,7 @@ describe('Consent Structure', () => {
     await client.query(`SELECT app.set_account_context($1, 'FAMILY_MANAGEMENT')`, [a[0].id]);
     const { rows: p } = await client.query(
       `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id`, [a[0].id]);
+    await client.query(`SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`, [a[0].id]);
     const fid = crypto.randomUUID();
     await client.query(`SELECT app.create_family($1, $2, 'CS Test')`, [fid, p[0].id]);
 
@@ -49,6 +50,7 @@ describe('Consent Structure', () => {
     await client.query(`SELECT app.set_account_context($1, 'FAMILY_MANAGEMENT')`, [a[0].id]);
     const { rows: p } = await client.query(
       `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id`, [a[0].id]);
+    await client.query(`SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`, [a[0].id]);
     const fid = crypto.randomUUID();
     await client.query(`SELECT app.create_family($1, $2, 'CS2')`, [fid, p[0].id]);
 

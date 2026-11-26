@@ -271,6 +271,12 @@ const SLICE17_REMOVED_CONSTRAINTS = [
   'business_audit_events_family_id_not_null',
 ].sort();
 
+const FINDING12_REMOVED_CONSTRAINTS = [
+  // Migration 038 intentionally allows the Phone Contract child participation
+  // to remain unbound until a genuine child-authored confirmation binds it.
+  'digital_use_contract_versions_child_participation_id_not_null',
+].sort();
+
 const SLICE17_NEW_CONSTRAINTS = [
   'professional_knowledge_approval_e_knowledge_version_id_not_null',
   'professional_knowledge_approval_e_staff_assignment_ref_not_null',
@@ -1002,7 +1008,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 31 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 36 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -1094,7 +1100,10 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
       expect(afterConstraintNames).not.toContain(name);
     }
-    for (const name of SLICE17_REMOVED_CONSTRAINTS) {
+    for (const name of [
+      ...SLICE17_REMOVED_CONSTRAINTS,
+      ...FINDING12_REMOVED_CONSTRAINTS,
+    ]) {
       expect(afterConstraintNames).not.toContain(name);
     }
     expect(afterConstraintNames).toContain('consent_purpose_field_binding');
@@ -1115,7 +1124,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...CONSENT_OWNER_NEW_CONSTRAINTS,
         ...SLICE12_NEW_CONSTRAINTS,
         ...SLICE13_NEW_CONSTRAINTS,
-        ...SLICE14_NEW_CONSTRAINTS,
+        ...SLICE14_NEW_CONSTRAINTS.filter(
+          (name) => !FINDING12_REMOVED_CONSTRAINTS.includes(name)
+        ),
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,
@@ -1211,7 +1222,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 38 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 43 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -1251,10 +1262,15 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '029_staff_assignment_control_plane.sql',
       '030_digital_use_assessment_context.sql',
       '031_common_core_goal_confirm_goal_package_dependency.sql',
+      '031_professional_knowledge_effective_window_remediation.sql',
       '032_workline_d_safety_identity_authz.sql',
       '033_downstream_dependency_review_state.sql',
       '035_workline_c_post_merge_dependency_propagation.sql',
       '036_security_definer_search_path_hardening.sql',
+      '037_goal_target_compliance_revalidation.sql',
+      '038_phone_contract_child_participation_deferred_binding.sql',
+      '039_final_bounded_remediation.sql',
+      '040_consent_dependency_canonical_matching.sql',
     ]);
   }, 180_000);
 });

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "changeId": "020-embedding-provider-adapter-foundation-current-main",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "020-embedding-provider-adapter-foundation",
+      "specPath": "specs/020-embedding-provider-adapter-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/ai/embedding/config.ts",
+        "apps/server/api/src/ai/embedding/contracts.ts",
+        "apps/server/api/src/ai/embedding/cost.ts",
+        "apps/server/api/src/ai/embedding/dashscope-protocol.ts",
+        "apps/server/api/src/ai/embedding/errors.ts",
+        "apps/server/api/src/ai/embedding/evidence.ts",
+        "apps/server/api/src/ai/embedding/index.ts",
+        "apps/server/api/src/ai/embedding/port.ts",
+        "apps/server/api/src/ai/embedding/telemetry.ts",
+        "apps/server/api/src/ai/embedding/transport.ts"
+      ]
+    }
+  ]
+}

@@ -96,20 +96,13 @@ export function registerConsentRoutes(
             throw Object.assign(new Error(err.message), err);
           }
           const consent = lockedChain.target;
-          if (lockedChain.head.id !== consent.id) {
-            const err = toHttpError(
-              'GUARDIAN_CONSENT_STALE',
-              'Consent record is not the current chain head'
-            );
-            throw Object.assign(new Error(err.message), err);
-          }
           if (consent.family_id !== familyId) {
             throw Object.assign(new Error('Not in family'), {
               statusCode: 403, code: 'NOT_FAMILY_MEMBER',
             });
           }
 
-          // Second authorize: guardian dimension, from the real DB row.
+          // Guardian authorization must precede chain-head/stale disclosure.
           await requireFamilyAction(tx, {
             accountId,
             personId,
@@ -119,6 +112,13 @@ export function registerConsentRoutes(
             resource: { type: 'CONSENT', familyId, consentId },
             guardianPersonId: consent.guardian_person_id,
           });
+          if (lockedChain.head.id !== consent.id) {
+            const err = toHttpError(
+              'GUARDIAN_CONSENT_STALE',
+              'Consent record is not the current chain head'
+            );
+            throw Object.assign(new Error(err.message), err);
+          }
           if (consent.decision === 'REVOKED') {
             throw Object.assign(new Error('Already revoked'), {
               statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
