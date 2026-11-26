@@ -913,7 +913,7 @@ type EmbeddingErrorCode =
   | 'AUTH_TERMINAL' | 'REQUEST_REJECTED'
   | 'DENSE_INVALID_VALUE' | 'DIMENSION_MISMATCH' | 'DENSE_CARDINALITY_MISMATCH'
   | 'SPARSE_MALFORMED' | 'SPARSE_INDEX_INVALID' | 'SPARSE_INDEX_DUPLICATE' | 'SPARSE_VALUE_INVALID' | 'SPARSE_LIMIT_EXCEEDED'
-  | 'RESPONSE_MALFORMED' | 'MODEL_ECHO_MISMATCH'
+  | 'RESPONSE_MALFORMED' | 'MALFORMED_PROVIDER_RESPONSE' | 'AMBIGUOUS_PROVIDER_RESPONSE' | 'MODEL_ECHO_MISMATCH'
   | 'RATE_LIMITED' | 'PROVIDER_UNAVAILABLE' | 'TIMEOUT'
   | 'RETRY_EXHAUSTED' | 'DEADLINE_EXCEEDED' | 'ABORTED';
 
@@ -945,12 +945,19 @@ interface EmbeddingFailure {
 | HTTP 400 / 404 / 422 等确定性 4xx | TERMINAL | `REQUEST_REJECTED` | 否 |
 | provider 错误码映射到确定性失败 | TERMINAL | 对应 code | 否 |
 | dense/sparse/model echo 校验失败 | TERMINAL | 对应 code | 否 |
+| 同时存在 `output.embeddings` 与 top-level `embeddings` | TERMINAL | `AMBIGUOUS_PROVIDER_RESPONSE` | 否 |
+| 未命中唯一冻结 HTTP envelope（含仅 top-level `embeddings`、缺 `output.embeddings` 数组、仅 `data/result/payload/response.embeddings`；root 非对象或缺 `request_id`） | TERMINAL | `MALFORMED_PROVIDER_RESPONSE` | 否 |
 | HTTP 429 | RETRYABLE | `RATE_LIMITED` | 是（受预算，尊重 Retry-After） |
 | HTTP 5xx / 网络错误 | RETRYABLE | `PROVIDER_UNAVAILABLE` | 是（受预算） |
 | 单次 attempt 超时 | RETRYABLE | `TIMEOUT` | 是（受预算） |
 | caller abort | TERMINAL | `ABORTED` | 否 |
 | 重试次数耗尽 | TERMINAL | `RETRY_EXHAUSTED` | 否（`finalCause='RETRY_EXHAUSTED'`） |
 | 总预算耗尽 | TERMINAL | `DEADLINE_EXCEEDED` | 否 |
+
+**Response 错误码层级（与 Spec §14.2 及已合并实现 `errors.ts` / `dashscope-protocol.ts` / `contracts.ts` / `port.ts` 一致）**
+
+- envelope 层：dual envelope → `AMBIGUOUS_PROVIDER_RESPONSE`；未命中 `HTTP_OUTPUT_WRAPPED`（含 flat SDK-like）→ `MALFORMED_PROVIDER_RESPONSE`（§6.13.1）；
+- envelope 命中后的条目层结构违规（dense 非数组、provider `index` 非整数/越界/重复/不完整、`usage` 不可归一化）→ `RESPONSE_MALFORMED`（§6.4；实现现行保留的条目层错误码，不替代上述两个 envelope 层错误码）。
 
 **失败语义不变量**
 
@@ -1436,8 +1443,20 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | V12 | `EMBEDDING_VERIFICATION_ENABLED=true bunx vitest run tests/ai/embedding-provider-verification.test.ts` | **仅** I7 手动 | 10 项 EVC 全部 PASS；产出 `tests/evidence/embedding-provider-verification.json` | **是** |
 | V13 | `git diff --name-only origin/main...HEAD` | 每个 PR | 与任务 Allowed paths 精确一致 | 否 |
 | V14 | `bunx vitest run tests/integration/embedding-provider-no-persistence.test.ts` | I5 后 / PR / CI | exit 0；调用前后 DB 表清单/行数快照逐项相同 | 否 |
-| V15 | `git rev-parse <base>:scripts/guard-static.mjs` / `git rev-parse HEAD:scripts/guard-static.mjs` | G1b PR / 实现 PR / CI | 两值**逐字节相同**（MODE A 的 guard 不变证明） | 否 |
-| V16 | `git grep -nE "dashscope\|@alicloud" -- apps/server/api/src/ai/embedding package.json bun.lock`；并对全仓库 import specifier 做 SDK 扫描 | G1b PR / 实现 PR / CI | 命中数 = 0（无可执行 provider SDK 依赖 / import） | 否 |
+| V15 | `git rev-parse <base>:scripts/guard-static.mjs` / `git rev-parse HEAD:scripts/guard-static.mjs` | G1b PR / 实现 PR（开发者 / 审计复核；CI 无独立 V15 job/step，见下方证据说明） | 两值**逐字节相同**（MODE A 的 guard 不变证明） | 否 |
+| V16 | 下方「V16 命令」代码块中的 `git grep -nE` ERE 扫描；并对全仓库 import specifier 做 SDK 扫描 | G1b PR / 实现 PR（开发者 / 审计复核；CI 无独立 V16 job/step，等价断言见下方证据说明） | 命中数 = 0（无可执行 provider SDK 依赖 / import） | 否 |
+
+**V16 命令**（ERE：`|` 是未转义 alternation；在 `-E` 下写成 `\|` 会匹配字面量 `|`，导致扫描失效）：
+
+```bash
+git grep -nE "dashscope|@alicloud" -- apps/server/api/src/ai/embedding package.json bun.lock
+```
+
+**V15 / V16 证据来源（如实说明）**：
+
+- **V15 = 历史 guard 字节一致性 / diff 证据**，不是独立 CI step。证据由以下事实共同构成：`scripts/guard-static.mjs` 在 G1b（PR #118）base/head、实现 PR（PR #142）base/head 的 blob 均为 `50c6864fc9337b2ca5a996bc98dc5e7647be798c`（亦是 `.specify/task-provenance-registry.json` 中 `s20-post-merge-closeout` 预授权的 TREE blob）；PR #118 / PR #142 的 changed files 均不含 `scripts/guard-static.mjs`；以及 CI 中既有的 static guard（`guard:static`）、canonical `verify-all`（含 guard self-test）与 `tests/architecture/embedding-provider-boundary.test.ts` 回归。
+- **V16 = 依赖 / import 扫描证据**，不是独立 CI step。CI 内的等价机械断言由 `tests/architecture/embedding-provider-boundary.test.ts`（seam 源码 + `package.json` + `bun.lock` 不匹配 `/dashscope|@alicloud/`，seam 外无 provider integration）与 guard Rule 8 `FORBIDDEN_SAFETY_IMPORTS` 承载；上方 `git grep` 命令为开发者 / 审计复核命令。
+- 以上不削弱 MODE A 事实：无 DashScope SDK、无 `@alicloud` 依赖、`scripts/guard-static.mjs` 未改动。
 
 **CI 与 provider 的隔离**：V1–V11 全部离线。V12 永不进入 CI（默认 `describe.skip`，且 CI 无 `DASHSCOPE_API_KEY`）。
 因此 CI 结果**永远不足以**产生 `PROVIDER_VERIFIED`（Spec §18.4）。
@@ -1564,7 +1583,7 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | AS-030 | I3 | V1：重复 index（含不同 token）→ TERMINAL |
 | AS-031 | I3 | V1 + V2：无 bound 成功；有 bound 拒绝 |
 | AS-032 | I3 | V1：`7149,111290,3759,1130` → `1130,3759,7149,111290` |
-| AS-033 | I2+I4 | V2：仅 `request_id`/`embeddings`/`usage` → 成功 + `NOT_AVAILABLE` |
+| AS-033 | I2+I4 | V2：native HTTP `HTTP_OUTPUT_WRAPPED` 响应（`request_id` + `output.embeddings` + `usage`）缺少 provider `model` echo → 成功 + `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`，且 `observedResponseEnvelope==='HTTP_OUTPUT_WRAPPED'`；top-level `embeddings`（flat SDK-like）不是 native HTTP success（→ AS-038 `MALFORMED_PROVIDER_RESPONSE`） |
 | AS-034 | I4 | V1：aggregate-only → per-item `NOT_PROVIDED` |
 | AS-035 | G1b + I6（MODE A governance evidence） | ① ownership 注册存在且指向唯一 seam（§5.2 / CHK-C04..C09）；② `scripts/guard-static.mjs` 与 base blob 逐字节相同（**V15**）；③ architecture/static 证明 provider egress 只在 seam（V3 / T010）；④ consumer 只经 Port（V3 / T010）；⑤ endpoint policy 测试通过（V3 / T010）；⑥ unknown production path 仍 fail closed（`validate-change-governance` + registry 无更宽 matcher）；⑦ 依赖边界 V16 = 0 |
 | AS-036 | G1b 模式判定（MODE B 条件触发） | 当前 MODE A：`dashscope` / `@alicloud` import 扫描命中 0 → **MODE B NOT TRIGGERED**，因此 allow set 与 fixtures **均不存在**（V16 + V7 数量 39 不变 + V15）。若未来出现命中，则由 import 扫描结果驱动 MODE B，并额外要求 positive/negative + cross-path/unknown-path 拒绝 |
@@ -1741,6 +1760,7 @@ bunx vitest run tests/ai/embedding-provider-verification.test.ts
   "configuredModel": { "modelId": "<id>", "versionOrRevision": "<value>" },
   "provider": "ALIBABA_DASHSCOPE",
   "outputTypes": ["dense", "dense+sparse"],
+  "observed_response_envelope": "HTTP_OUTPUT_WRAPPED",
   "inputDigest": "<sha256 of synthetic inputs>",
   "resultSummary": "<sanitized: 维度、sparse 元素数、observedMaxSparseIndex、错误码>",
   "evcCoverage": ["EVC-01", "EVC-02", "EVC-03", "EVC-04", "EVC-05", "EVC-06", "EVC-07", "EVC-08", "EVC-09", "EVC-10"],
@@ -1751,6 +1771,8 @@ bunx vitest run tests/ai/embedding-provider-verification.test.ts
   "secretDisclosureCheck": "PASS"
 }
 ```
+
+`observed_response_envelope` 为必填字段（Spec FR-057 / FR-069 / EVC-03）：成功的 MODE A provider evidence 必须为 `HTTP_OUTPUT_WRAPPED`；若真实观测到 flat SDK-like 或其它 shape，只能形成失败证据并保持 `PROVIDER_NOT_VERIFIED`。本字段是 schema 合同，不代表 T011 已执行或已存在 provider evidence。
 
 **artifact 绝不允许包含**：API key、Authorization header、完整响应 body、输入原文、真实家庭数据、Gold label、
 provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerprint`）。
@@ -1963,12 +1985,14 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 | CN-20 | **（Revision 3）** 旧审计把「Rule 8 必须放宽」与「ownership 必须注册」混为一体，导致「MODE A 是否还需要治理」结论模糊 | 中 | §11-G/D：显式拆分——Rule 8 修改 **NO**、ownership 注册 **YES**；两者互不替代 |
 | CN-21 | **（Revision 3）** `@alicloud` 行文称「Rule 8 允许它在 seam」，在 MODE A 下会造成「已有 allowance」的误读 | 中 | §6.13 行改写为「MODE A 下不存在任何 allowance」；新增治理模式推论行 |
 | CN-22 | **（Revision 3 reconciliation）** C20 覆盖只在正文引用 3 个 ID，缺少 21/21 可核对矩阵 | 中 | 新增 §7.7 `C20-01..C20-21` 覆盖矩阵；§11-A 增加 C20 行 |
-| CN-23 | **（Revision 3 reconciliation）** V16 使用 `rg`，仓库/CI 未保证该二进制存在 | 低 | V16 改为 `git grep -nE "dashscope\|@alicloud" -- ...` + import specifier 扫描 |
+| CN-23 | **（Revision 3 reconciliation）** V16 使用 `rg`，仓库/CI 未保证该二进制存在 | 低 | V16 改为 `git grep -nE` ERE 扫描（alternation 不转义；精确命令见 §7.1「V16 命令」代码块）+ import specifier 扫描 |
 | CN-24 | **（Revision 3 reconciliation）** checklist 缺 C20-21 显式项，且合计仍为 190 | 低 | 新增 `CHK-C27`；C 组 27、合计 191；plan 冻结记录同步为 191 |
 | CN-25 | **（Revision 4）** plan §6.13 仍以 flat `body.embeddings` 描述 native HTTP 成功解析，与 Revision 4 `output.embeddings` 冲突；PR #112 technical finding 正是此点 | 高 | §6.13 表改为严格 `HTTP_OUTPUT_WRAPPED`（`output.embeddings`）；新增 §6.13.1 parser algorithm；T006/T007 同步 |
 | CN-26 | **（Revision 4）** 缺少 ambiguous / flat SDK-like / unknown nesting 的机械失败语义与测试契约 | 高 | §6.13.1 failure semantics；AS-037..AS-039；T009 envelope tests；checklist CHK-D13..CHK-D18 |
 | CN-27 | **（Revision 4）** 覆盖基线沿用 Revision 3（67/36/40/21），未吸收 Revision 4 新增 FR-068/069、AS-037..039、NS-041/042、C20-22/23 | 中 | 全部矩阵、checklist coverage 与 freeze 同步为 FR 69 / AS 39 / NS 42 / C20 23 / EVC 10 |
 | CN-28 | **（Revision 4）** provider verification 未要求记录 `observed_response_envelope`，无法证明真实响应命中 Frozen envelope | 中 | T011、§7.6 EVC-03、CHK-D18、CHK-L09 增加该字段；其它真实 shape 只能是失败证据 + `PROVIDER_NOT_VERIFIED` |
+| CN-29 | **（Post-merge closeout F-01，非语义）** AS-033 行仍以 top-level `embeddings` 描述成功；error union / 分类表缺 `MALFORMED_PROVIDER_RESPONSE`、`AMBIGUOUS_PROVIDER_RESPONSE`；§8.3 artifact schema 缺 `observed_response_envelope` | 中 | AS-033 改为 `HTTP_OUTPUT_WRAPPED` + 无 model echo；§6.6 union / 分类表 / 错误码层级与 Spec §14.2 及已合并实现对齐；§8.3 补齐该字段。Frozen Spec 与 production 行为不变 |
+| CN-30 | **（Post-merge closeout F-03，非语义）** V15 / V16 行写作「CI」执行，易被理解为存在独立 CI step；V16 在 `grep -E` 下错误转义 alternation | 低 | §7.1 改为如实证据说明（V15 = 历史 guard blob / diff 证据；V16 = 依赖 / import 扫描证据）；V16 改为未转义 ERE |
 
 **修正后复检（Revision 4 全文重跑）**：
 
