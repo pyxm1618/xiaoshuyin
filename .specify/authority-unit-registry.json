@@ -6460,9 +6460,25 @@
             "heading": "## 27A. API 契约与强类型客户端"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-136",
@@ -7392,9 +7408,25 @@
             "heading": "### API / Client Contract"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-212",
