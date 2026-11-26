@@ -16,6 +16,7 @@ import {
 } from '../setup/api.js';
 import { buildConsentEvidence, getAcceptanceTextHash, getCurrentNoticeHash, runtimeConsentChannel } from '@xiaoshuyin/compliance';
 import { createCase } from '../setup/participation.js';
+import { markProblemFormulationsForConsentReview } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   PHONE_USE_CONTRACT_CONTENT_VERSION,
@@ -1225,7 +1226,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     }
   });
 
-  it('A3: Consent propagation supports identity-only and exact-version Goal/Contract dependencies', async () => {
+  it('A3 / N-05: Consent revoke reaches unversioned and exact-version Problem Formulation/Goal/Contract dependencies', async () => {
     async function seedGoal(
       fixture: Fixture,
       dependency: Record<string, unknown>,
@@ -1324,29 +1325,196 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       }
     }
 
-    const revokeChild = await loginWithLabel(app, `a3-revoke-${crypto.randomUUID()}`);
-    const revokeFixture = await createTestFixture(`a3-revoke-${crypto.randomUUID()}`, revokeChild);
-    const noticeHash = getCurrentNoticeHash();
-    const request = await admin.query<{id:string}>(
-      `INSERT INTO guardian_consent_requests
-       (family_id,guardian_person_id,subject_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
-       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',now()+interval '24 hours',now()) RETURNING id`,
-      [revokeFixture.familyId,revokeFixture.manager.personId,revokeChild.personId,noticeHash]);
-    const evidence = buildConsentEvidence({channel:runtimeConsentChannel(process.env),acceptedTextHash:getAcceptanceTextHash('v1')!,clientIp:null,userAgent:null,pepper:'a3-real-revoke'});
-    const consent = await admin.query<{id:string}>(
-      `INSERT INTO consent_records
-       (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,policy_version,evidence)
-       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),'v1',$6,'v1',$7::jsonb) RETURNING id`,
-      [revokeFixture.familyId,revokeFixture.manager.personId,revokeFixture.manager.accountId,request.rows[0]!.id,revokeChild.personId,noticeHash,JSON.stringify(evidence)]);
-    await admin.query(`UPDATE person_compliance_profiles SET age_band='UNDER_14',minor_mode=true,verified_source='GUARDIAN_RELAY',guardian_person_id=$2,guardian_consent_record_id=$3,guardian_consent_version=1 WHERE person_id=$1`,[revokeChild.personId,revokeFixture.manager.personId,consent.rows[0]!.id]);
-    const reference = {type:'CONSENT',id:consent.rows[0]!.id.toUpperCase(),version:1};
-    const revokeGoal = await seedGoal(revokeFixture,reference,'real-revoke');
-    const revokeContract = await seedDraftContract(revokeFixture,revokeChild,reference);
-    const revoked = await revokeConsent(app,revokeFixture.manager.token,`a3-${crypto.randomUUID()}`,consent.rows[0]!.id,{reason:'A3 regression'});
-    expect(revoked.statusCode,revoked.body).toBe(200);
-    expect((await admin.query('SELECT review_state FROM goals WHERE id=$1',[revokeGoal])).rows[0].review_state).toBe('NEEDS_REVIEW');
-    expect((await admin.query('SELECT review_state FROM digital_use_contract_versions WHERE id=$1',[revokeContract])).rows[0].review_state).toBe('NEEDS_REVIEW');
+    async function setFormulationDependency(
+      fixture: Fixture,
+      dependency: Record<string, unknown>
+    ): Promise<string> {
+      const row = await admin.query<{ id: string }>(
+        `UPDATE problem_formulations SET dependency_refs=$2::jsonb
+          WHERE case_id=$1 AND version=1 RETURNING id`,
+        [fixture.caseId, JSON.stringify([dependency])]
+      );
+      expect(row.rowCount).toBe(1);
+      return row.rows[0]!.id;
+    }
 
+    async function seedGrantedConsent(fixture: Fixture, child: LoginResult): Promise<string> {
+      const noticeHash = getCurrentNoticeHash();
+      const request = await admin.query<{ id: string }>(
+        `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+         VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',now()+interval '24 hours',now()) RETURNING id`,
+        [fixture.familyId, fixture.manager.personId, child.personId, noticeHash]
+      );
+      const evidence = buildConsentEvidence({
+        channel: runtimeConsentChannel(process.env),
+        acceptedTextHash: getAcceptanceTextHash('v1')!,
+        clientIp: null,
+        userAgent: null,
+        pepper: 'a3-real-revoke',
+      });
+      const consent = await admin.query<{ id: string }>(
+        `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,policy_version,evidence)
+         VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),'v1',$6,'v1',$7::jsonb) RETURNING id`,
+        [
+          fixture.familyId, fixture.manager.personId, fixture.manager.accountId,
+          request.rows[0]!.id, child.personId, noticeHash, JSON.stringify(evidence),
+        ]
+      );
+      await admin.query(
+        `UPDATE person_compliance_profiles SET age_band='UNDER_14',minor_mode=true,verified_source='GUARDIAN_RELAY',guardian_person_id=$2,guardian_consent_record_id=$3,guardian_consent_version=1 WHERE person_id=$1`,
+        [child.personId, fixture.manager.personId, consent.rows[0]!.id]
+      );
+      return consent.rows[0]!.id;
+    }
+
+    async function reviewStates(ids: { formulation: string; goal: string; contract: string }) {
+      const one = async (table: string, id: string) =>
+        (await admin.query<{ review_state: string }>(
+          `SELECT review_state FROM ${table} WHERE id=$1`, [id]
+        )).rows[0]?.review_state;
+      return {
+        formulation: await one('problem_formulations', ids.formulation),
+        goal: await one('goals', ids.goal),
+        contract: await one('digital_use_contract_versions', ids.contract),
+      };
+    }
+    const all = (state: string) => ({ formulation: state, goal: state, contract: state });
+
+    // ── N-05: the REAL production path. Guardian revokes Consent version 1
+    // over HTTP → revoke route → propagation seam → Problem Formulation, Goal
+    // and DigitalUseContractVersion review state.
+    const revokeScenarios: Array<{
+      label: string;
+      stored: (consentId: string) => Record<string, unknown>;
+      affected: boolean;
+    }> = [
+      {
+        label: 'unversioned-stored-exact-version-revoke',
+        stored: (id) => ({ type: 'CONSENT', id }),
+        affected: true,
+      },
+      {
+        label: 'unversioned-uppercase-stored',
+        stored: (id) => ({ type: 'CONSENT', id: id.toUpperCase() }),
+        affected: true,
+      },
+      {
+        label: 'pinned-revoked-version',
+        stored: (id) => ({ type: 'CONSENT', id, version: 1 }),
+        affected: true,
+      },
+      {
+        label: 'pinned-revoked-version-uppercase',
+        stored: (id) => ({ type: 'CONSENT', id: id.toUpperCase(), version: 1 }),
+        affected: true,
+      },
+      {
+        label: 'pinned-other-version',
+        stored: (id) => ({ type: 'CONSENT', id, version: 2 }),
+        affected: false,
+      },
+      {
+        label: 'pinned-other-version-uppercase',
+        stored: (id) => ({ type: 'CONSENT', id: id.toUpperCase(), version: 2 }),
+        affected: false,
+      },
+      {
+        label: 'other-consent-identity',
+        stored: () => ({ type: 'CONSENT', id: crypto.randomUUID() }),
+        affected: false,
+      },
+    ];
+    for (const scenario of revokeScenarios) {
+      const child = await loginWithLabel(app, `n05-child-${crypto.randomUUID()}`);
+      const fixture = await createTestFixture(`n05-${crypto.randomUUID().slice(0, 8)}`, child);
+      const consentId = await seedGrantedConsent(fixture, child);
+      const stored = scenario.stored(consentId);
+      const ids = {
+        formulation: await setFormulationDependency(fixture, stored),
+        goal: await seedGoal(fixture, stored, scenario.label),
+        contract: await seedDraftContract(fixture, child, stored),
+      };
+      expect(await reviewStates(ids), scenario.label).toEqual(all('CURRENT'));
+
+      const revoked = await revokeConsent(
+        app, fixture.manager.token, `n05-${crypto.randomUUID()}`, consentId, { reason: 'N-05 regression' }
+      );
+      expect(revoked.statusCode, `${scenario.label}: ${revoked.body}`).toBe(200);
+      expect(await reviewStates(ids), scenario.label).toEqual(
+        all(scenario.affected ? 'NEEDS_REVIEW' : 'CURRENT')
+      );
+
+      if (scenario.affected) {
+        // Both propagated shapes run; each dependent is audited exactly once.
+        const audits = await admin.query<{ event_type: string; n: string }>(
+          `SELECT event_type, count(*) AS n FROM business_audit_events
+            WHERE family_id=$1 AND metadata->>'reason'='DEPENDENCY_INVALIDATED'
+            GROUP BY event_type ORDER BY event_type`,
+          [fixture.familyId]
+        );
+        expect(audits.rows, scenario.label).toEqual([
+          { event_type: 'GOAL_REVIEW_STATE_CHANGED', n: '1' },
+          { event_type: 'PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED', n: '1' },
+        ]);
+      }
+    }
+
+    // ── N-05: the production seam invoked for version N+1 leaves a ref
+    // pinned to version N untouched, and still reaches an unversioned ref.
+    // An unversioned propagation ({id}) reaches unversioned refs and leaves
+    // version-pinned refs untouched.
+    const seamPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']!, max: 1 });
+    try {
+      for (const scenario of [
+        { label: 'seam-pinned-n-revoke-n-plus-1', propagatedVersion: 2 as number | undefined, version: 1 as number | undefined, upper: false, affected: false },
+        { label: 'seam-pinned-n-plus-1-exact', propagatedVersion: 2 as number | undefined, version: 2 as number | undefined, upper: true, affected: true },
+        { label: 'seam-unversioned-revoke-n-plus-1', propagatedVersion: 2 as number | undefined, version: undefined, upper: true, affected: true },
+        { label: 'seam-unversioned-propagate-to-unversioned', propagatedVersion: undefined, version: undefined, upper: true, affected: true },
+        { label: 'seam-unversioned-propagate-leaves-pinned-untouched', propagatedVersion: undefined, version: 1 as number | undefined, upper: false, affected: false },
+      ]) {
+        const child = await loginWithLabel(app, `n05-child-${crypto.randomUUID()}`);
+        const fixture = await createTestFixture(`n05-${crypto.randomUUID().slice(0, 8)}`, child);
+        const consentId = crypto.randomUUID();
+        const stored: Record<string, unknown> = {
+          type: 'CONSENT',
+          id: scenario.upper ? consentId.toUpperCase() : consentId,
+          ...(scenario.version === undefined ? {} : { version: scenario.version }),
+        };
+        const ids = {
+          formulation: await setFormulationDependency(fixture, stored),
+          goal: await seedGoal(fixture, stored, scenario.label),
+          contract: await seedDraftContract(fixture, child, stored),
+        };
+        const marked = await withRlsTransaction(
+          seamPool,
+          {
+            familyId: fixture.familyId,
+            accountId: fixture.manager.accountId,
+            personId: fixture.manager.personId,
+            purpose: 'GUARDIAN_CONSENT',
+          },
+          (tx) => markProblemFormulationsForConsentReview(
+            tx,
+            scenario.propagatedVersion === undefined
+              ? { familyId: fixture.familyId, consentId }
+              : { familyId: fixture.familyId, consentId, version: scenario.propagatedVersion }
+          )
+        );
+        expect(marked, scenario.label).toBe(scenario.affected ? 1 : 0);
+        expect(await reviewStates(ids), scenario.label).toEqual(
+          all(scenario.affected ? 'NEEDS_REVIEW' : 'CURRENT')
+        );
+      }
+    } finally {
+      await seamPool.end();
+    }
+
+    // ── Matcher primitive. app.propagate_downstream_dependency_review is
+    // exact per PROPAGATED shape; that exactness is what lets the seam emit
+    // {id, version} and {id} together without an unversioned propagation ever
+    // reaching a ref pinned to another version.
     const targetConsentId = crypto.randomUUID();
     const otherConsentId = crypto.randomUUID();
     const scenarios: Array<{
@@ -1362,13 +1530,19 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
         affected: true,
       },
       {
-        label: 'identity-invalidation-to-versioned-storage',
+        label: 'identity-to-identity-mixed-case',
+        stored: { type: 'CONSENT', id: targetConsentId.toUpperCase() },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: true,
+      },
+      {
+        label: 'identity-shape-never-reaches-versioned-storage',
         stored: { type: 'CONSENT', id: targetConsentId, version: 3 },
         invalidated: { type: 'CONSENT', id: targetConsentId },
         affected: false,
       },
       {
-        label: 'versioned-invalidation-to-identity-storage',
+        label: 'versioned-shape-exact-per-primitive',
         stored: { type: 'CONSENT', id: targetConsentId },
         invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
         affected: false,
