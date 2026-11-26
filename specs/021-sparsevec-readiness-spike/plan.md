@@ -17,7 +17,7 @@ Remote truth was re-read with `git fetch`-equivalent remote reads and local Git 
 
 | Item | Value |
 |---|---|
-| `origin/main` | `21a2e372754843af5ee4daa109e75b693ce4feb1` (`chore(governance): support bounded post-merge task provenance (#145)`) |
+| `origin/main` | `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (`chore(s20): close post-merge planning and task evidence (#147)`); previous reconciliation point `21a2e372754843af5ee4daa109e75b693ce4feb1` (#145) |
 | `origin/spec/021-sparsevec-readiness-spike` | `8792c4cf4e366b5507ac451a68cd31b73e7f5261` |
 | `origin/plan/021-sparsevec-readiness-spike` before reconciliation | `2363bb5e41e6f1a2b92ee4c9f406b784cab711d3` |
 | main ↔ Frozen Spec merge base / behind / ahead | `f4765ce004affc464392bf6ade45d886913ed8a9` / Spec behind main 16 / ahead 5 |
@@ -29,7 +29,7 @@ Remote truth was re-read with `git fetch`-equivalent remote reads and local Git 
 Reconciliation method (no rebase, no force push, no history rewrite):
 
 1. normal merge commit of `origin/spec/021-sparsevec-readiness-spike` (`8792c4cf`) into the old Planning head;
-2. normal merge commit of `origin/main` (`21a2e372`) into the result;
+2. normal merge commit of `origin/main` (`21a2e372`) into the result, then a second normal merge of `origin/main` (`e7885234`, PR #147) after main advanced;
 3. correction commit touching only `plan.md`, `checklist.md`, `tasks.md`.
 
 Mechanical reconciliation facts at the corrected planning state:
@@ -57,7 +57,7 @@ Upstream state:
 
 - Slice 19: merged; canonical CI `verify-all` executes `G9` (`tests/architecture/pgvector-readiness-evidence.test.ts`, `tests/db/pgvector-readiness.test.ts`) and `G11` (`scripts/pgvector-readiness.mjs`) against the pinned Stage A image.
 - Slice 20 implementation: PR #142, exact head `27a0ac5761b16ff7837a28936438f30aca1d68e0`, merged as `db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf`. Public entry `apps/server/api/src/ai/embedding/index.ts` exports `createEmbeddingProvider(config = { env }, deps)`; role text type is selected only through the controlled runtime variable `EMBEDDING_TEXT_TYPE = query | document` (default `document`).
-- Slice 20 Audit 2: **durable independent Audit 2 PASS evidence NOT FOUND** for exact head `27a0ac57…` (PR #142 body ends at "READY FOR AUDIT 2"; PR reviews are a bot COMMENTED review and two empty owner COMMENTED reviews; `.specify/task-provenance-registry.json` `s20-post-merge-closeout` is post-merge provenance, not an audit verdict; PR #145 states it makes no task-completion / PASS claim). See §4.
+- Slice 20 Audit 2: **durable independent Audit 2 PASS evidence NOT FOUND** for exact head `27a0ac57…` (PR #142 body ends at "READY FOR AUDIT 2"; PR reviews are a bot COMMENTED review and two empty owner COMMENTED reviews; `.specify/task-provenance-registry.json` `s20-post-merge-closeout` is post-merge provenance, not an audit verdict; PR #145 states it makes no task-completion / PASS claim; PR #147 (`e7885234`) checks Slice 20 T001–T010, T012 via a POST_MERGE_CLOSEOUT manifest — T012 is "STOP at READY FOR AUDIT 2" — keeps T011 unchecked (`PROVIDER_NOT_VERIFIED`), has no PR review, and records no Audit 2 verdict). See §4.
 
 If any value above changes before implementation, T001 re-reads remote truth; no stale snapshot authorizes development.
 
@@ -546,7 +546,7 @@ AS-01..AS-08 and NS-01..NS-08 are assigned in `tasks.md` (Frozen Spec Authority 
 ## 20. Developer Handoff Boundary
 
 ```yaml
-PLANNING: reconciled to Frozen Spec 77d1caf4 and main 21a2e372 (Audit 1 verdict reported externally against exact head)
+PLANNING: reconciled to Frozen Spec 77d1caf4 and main e7885234 (Audit 1 verdict reported externally against exact head)
 DEVELOPER IMPLEMENTATION GATE: CLOSED until Slice 20 durable independent Audit 2 PASS evidence is established and Slice 21 Spec/Planning are admitted to main (§4 item 7)
 DEVELOPMENT: NOT AUTHORIZED
 ```
