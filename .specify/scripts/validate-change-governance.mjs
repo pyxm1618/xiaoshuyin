@@ -24,6 +24,7 @@ const FIXED_EXEMPT_FILES = new Set(["AGENTS.md"]);
 const INFRA_EXEMPTION_CLASSES = new Set(["BUILD_TOOLING", "REPOSITORY_METADATA"]);
 const OWNERSHIP_REGISTRY = ".specify/implementation-ownership.json";
 const AUTHORITY_UNIT_REGISTRY = ".specify/authority-unit-registry.json";
+const TECHNICAL_AUTHORITY_DOCS = new Set(["Docs/总体技术架构.md", "Docs/V1技术设计.md"]);
 const TASK_PROVENANCE_REGISTRY = ".specify/task-provenance-registry.json";
 
 function parseArgs(argv) {
@@ -63,17 +64,22 @@ function gitOk(args) {
 }
 
 function changedFiles(opts) {
-  if (opts.changedFiles) {
-    return fs.readFileSync(opts.changedFiles, "utf8")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-  }
-  return git([
+  // Treat renames as deletion + addition: the old path must never disappear
+  // from ownership, Authority or scope checks. Include deletions in all cases.
+  const actual = git([
     "-c", "core.quotePath=false",
-    "diff", "--name-only", "-z", "--diff-filter=ACDMRTUXB",
+    "diff", "--no-renames", "--name-only", "-z",
     opts.base + "..." + opts.head,
   ]).split("\0").filter(Boolean);
+  if (opts.changedFiles) {
+    const supplied = fs.readFileSync(opts.changedFiles, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean);
+    if (JSON.stringify([...new Set(supplied)].sort()) !== JSON.stringify([...new Set(actual)].sort())) {
+      throw new Error("--changed-files must exactly match the actual Git diff, including deleted and old rename paths.");
+    }
+  }
+  return actual;
 }
 
 function isProductPath(file) {
@@ -572,6 +578,26 @@ function loadAuthorityRegistry(errors) {
         }
       }
 
+      // An optional, separately reviewed grant binds a single exact document
+      // transition, not a lifecycle label or blanket permission over a unit.
+      if (Object.hasOwn(unit, "approvedUnimplementedRevision")) {
+        const grant = unit.approvedUnimplementedRevision;
+        if (!TECHNICAL_AUTHORITY_DOCS.has(doc.path) || !unit.normative ||
+            unit.lifecycle !== "FUTURE_UNIMPLEMENTED" || unit.downstreamBindings.length !== 0 ||
+            !["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW"].includes(kind)) {
+          errors.push(uLabel + ": approvedUnimplementedRevision is restricted to normative future technical units with empty registered downstream.");
+        }
+        if (!grant || typeof grant !== "object" || Array.isArray(grant)) {
+          errors.push(uLabel + ": approvedUnimplementedRevision must be an exact transition object.");
+        } else {
+          assertExactSet(Object.keys(grant), ["previousBlobSha", "newBlobSha", "reason"], uLabel + " approvedUnimplementedRevision fields", errors);
+          if (![grant.previousBlobSha, grant.newBlobSha].every((sha) => typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha)) ||
+              grant.previousBlobSha === grant.newBlobSha || typeof grant.reason !== "string" || !grant.reason.trim()) {
+            errors.push(uLabel + ": approvedUnimplementedRevision requires distinct exact document blob SHAs and a reviewed reason.");
+          }
+        }
+      }
+
       for (const [bIndex, binding] of unit.downstreamBindings.entries()) {
         const bLabel = uLabel + ".downstreamBindings[" + bIndex + "]";
         if (typeof binding?.feature !== "string" || !binding.feature) errors.push(bLabel + ": feature is required.");
@@ -659,6 +685,7 @@ function validateAuthorityImpact(changed, opts, errors) {
   assertExactSet(manifest.authorityChanges.map((x) => x?.path), authorityChanged, "Authority impact changed document set", errors);
 
   const changedUnitIds = [];
+  const documentTransitions = new Map();
   const units = unitMap(registry);
   for (const item of manifest.authorityChanges) {
     if (!item || !AUTHORITY_DOCS.includes(item.path)) continue;
@@ -675,6 +702,7 @@ function validateAuthorityImpact(changed, opts, errors) {
       errors.push("Cannot resolve authority blobs for " + item.path + ": " + (error instanceof Error ? error.message : String(error)));
       continue;
     }
+    documentTransitions.set(item.path, { previousBlobSha: previous, newBlobSha: next });
     if (item.previousBlobSha !== previous) errors.push("Authority impact previousBlobSha mismatch for " + item.path + ": expected " + previous);
     if (item.newBlobSha !== next) errors.push("Authority impact newBlobSha mismatch for " + item.path + ": expected " + next);
     if (previous === next) errors.push("Authority impact lists unchanged document: " + item.path);
@@ -754,10 +782,10 @@ function validateAuthorityImpact(changed, opts, errors) {
     if (unit.lifecycle === "FUTURE_UNIMPLEMENTED") {
       const label = "FUTURE_UNIMPLEMENTED Authority Unit " + unit.id;
       if (impact.classification !== "REVISES_UNIMPLEMENTED_AUTHORITY") {
-        errors.push(label + " requires REVISES_UNIMPLEMENTED_AUTHORITY or separately established real downstream topology.");
+        errors.push(label + " requires REVISES_UNIMPLEMENTED_AUTHORITY with a separately approved exact transition, or separately established real downstream topology.");
         continue;
       }
-      if (!["Docs/总体技术架构.md", "Docs/V1技术设计.md"].includes(registered.doc.path)) {
+      if (!TECHNICAL_AUTHORITY_DOCS.has(registered.doc.path)) {
         errors.push(label + ": unimplemented revision is restricted to technical Authority Docs.");
       }
       if (unit.downstreamBindings.length !== 0 || !Array.isArray(impact.downstream) || impact.downstream.length !== 0) {
@@ -766,12 +794,32 @@ function validateAuthorityImpact(changed, opts, errors) {
       if (typeof impact.impactAssessment !== "string" || !impact.impactAssessment.trim()) {
         errors.push(label + ": unimplemented revision requires a non-empty impactAssessment for independent review.");
       }
+      // A missing downstream registration is not proof of missing implementation.
+      // Consume only an exact transition approved in the base registry, never a
+      // grant invented by the candidate or an arbitrary impactAssessment.
+      let baseRegistryMatches = false;
+      try {
+        baseRegistryMatches = gitBlobSha(blobAt(opts.base, AUTHORITY_UNIT_REGISTRY)) === currentBlobSha(AUTHORITY_UNIT_REGISTRY);
+      } catch {
+        // Missing or unreadable base registry fails closed.
+      }
+      const grant = unit.approvedUnimplementedRevision;
+      const transition = documentTransitions.get(registered.doc.path);
+      if (!baseRegistryMatches || !grant || !transition ||
+          grant.previousBlobSha !== transition.previousBlobSha || grant.newBlobSha !== transition.newBlobSha) {
+        errors.push(label + ": requires a separately approved exact document transition in the base Authority Unit registry; lifecycle and empty bindings alone do not authorize revision.");
+      }
       // No self-authorization, product/spec changes, tests, governance or unrelated files
       // may ride along with an unimplemented technical Authority revision.
       const allowed = new Set([...authorityChanged, ".specify/authority-inputs.json", impactFiles[0]]);
-      if (authorityChanged.some((file) => !["Docs/总体技术架构.md", "Docs/V1技术设计.md"].includes(file)) ||
+      if (authorityChanged.some((file) => !TECHNICAL_AUTHORITY_DOCS.has(file)) ||
           changed.some((file) => !allowed.has(file))) {
         errors.push(label + ": unimplemented revision must be a technical Authority-only change with snapshot and impact manifest.");
+      }
+      for (const file of changed) {
+        if (!gitOk(["cat-file", "-e", opts.head + ":" + file])) {
+          errors.push(label + ": unimplemented revision must not delete or rename away a file: " + file);
+        }
       }
       continue;
     }

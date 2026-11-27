@@ -15,8 +15,8 @@ function write(root, rel, content) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, content, "utf8");
 }
-function run(root, base, env = {}) {
-  const r = spawnSync(process.execPath, [validator, "--base", base, "--head", "HEAD"], {
+function run(root, base, env = {}, args = []) {
+  const r = spawnSync(process.execPath, [validator, "--base", base, "--head", "HEAD", ...args], {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, ...env },
@@ -188,6 +188,22 @@ function impactManifest(root, base, unitImpacts, changeId = "authority-test") {
   write(root, "packages/compliance/src/new.ts", "export const x = 1;\n");
   commit(root, "no binding");
   record("G1-A production implementation without binding fails", 1, run(root, base), "Exactly one changed .specify/change-bindings");
+  cleanup(root);
+}
+
+// G1: deletion and rename out of a protected production path still require ownership binding.
+for (const rename of [false, true]) {
+  const root = project();
+  addFeature(root, "001-feature-a");
+  addOwnership(root, [ownershipRule("owned", "PREFIX", "packages/owned/", "FEATURE", ["001-feature-a"])]);
+  write(root, "packages/owned/old.ts", "export const old = 1;\n");
+  const base = commit(root, "base");
+  if (rename) {
+    fs.mkdirSync(path.join(root, "Docs"), { recursive: true });
+    fs.renameSync(path.join(root, "packages/owned/old.ts"), path.join(root, "Docs/old.ts"));
+  } else fs.unlinkSync(path.join(root, "packages/owned/old.ts"));
+  commit(root, "remove protected path");
+  record("G1 protected production " + (rename ? "rename" : "deletion") + " requires binding", 1, run(root, base), "Exactly one changed .specify/change-bindings");
   cleanup(root);
 }
 
@@ -570,7 +586,15 @@ function setupG2() {
 
 // G2-R8: the unimplemented technical Authority path is narrowly document-only.
 for (const [name, options, expected, marker] of [
-  ["valid technical revision", {}, 0, "Change governance PASS"],
+  ["valid separately authorized technical revision", {}, 0, "Change governance PASS"],
+  ["unregistered future unit with plausible assessment", { noApproval: true }, 1, "requires a separately approved exact document transition"],
+  ["approval for stale source blob", { staleApproval: true }, 1, "requires a separately approved exact document transition"],
+  ["approval for different target blob", { wrongTarget: true }, 1, "requires a separately approved exact document transition"],
+  ["same-PR approval", { headApproval: true }, 1, "cannot self-authorize"],
+  ["deleted unrelated test", { deleteExtra: true }, 1, "technical Authority-only change"],
+  ["rename unrelated file into permitted manifest path", { renameManifest: true }, 1, "technical Authority-only change"],
+  ["deleted snapshot", { deleteSnapshot: true }, 1, "must not delete or rename away a file"],
+  ["supplied paths conceal deletion", { deleteExtra: true, omitDeletedPath: true }, 1, "--changed-files must exactly match the actual Git diff"],
   ["missing downstream declaration", { omitDownstream: true }, 1, "explicitly empty registered and declared downstream"],
   ["fabricated downstream", { downstream: [{ feature: "001-feature-a" }] }, 1, "explicitly empty registered and declared downstream"],
   ["missing impact assessment", { assessment: "" }, 1, "non-empty impactAssessment"],
@@ -586,11 +610,22 @@ for (const [name, options, expected, marker] of [
   const root = setupG2();
   const doc = options.productDoc || options.implemented ? "Docs/V1产品需求.md" : "Docs/V1技术设计.md";
   const id = options.implemented ? "AUTH-A" : options.productDoc ? "AUTH-V1-ROOT" : "UNIT-" + doc;
-  const base = commit(root, "base");
   const old = fs.readFileSync(path.join(root, doc), "utf8");
   const next = options.implemented ? old.replace("old normative", "new normative") :
     old.replace(/^(# [^\n]+\n)/, "$1revised future technical detail\n");
-  write(root, doc, next);
+  const registryPath = ".specify/authority-unit-registry.json";
+  const registry = JSON.parse(fs.readFileSync(path.join(root, registryPath), "utf8"));
+  const grant = {
+    previousBlobSha: options.staleApproval ? "a".repeat(40) : blobSha(old),
+    newBlobSha: options.wrongTarget ? "b".repeat(40) : blobSha(next),
+    reason: "Fixture: prior independent review of exact future-only revision.",
+  };
+  const authorize = () => {
+    registry.documents.find((d) => d.path === doc).units.find((u) => u.id === id).approvedUnimplementedRevision = grant;
+    write(root, registryPath, JSON.stringify(registry, null, 2) + "\n");
+  };
+  if (!options.noApproval && !options.headApproval && !options.productDoc && !options.implemented) authorize();
+  if (options.deleteExtra) write(root, "tests/retired.test.ts", "retired fixture\n");
   const impacts = [{
     authorityUnitId: id,
     classification: options.classification ?? "REVISES_UNIMPLEMENTED_AUTHORITY",
@@ -602,18 +637,37 @@ for (const [name, options, expected, marker] of [
     const other = "Docs/V1产品需求.md";
     const before = fs.readFileSync(path.join(root, other), "utf8");
     const after = before.replace("# V1\n", "# V1\nchanged product authority\n");
-    write(root, other, after);
     authorityChanges.push({ path: other, previousBlobSha: blobSha(before), newBlobSha: blobSha(after) });
     impacts.push({ authorityUnitId: "AUTH-V1-ROOT", classification: "REVISES_UNIMPLEMENTED_AUTHORITY", downstream: [], impactAssessment: "fixture" });
   }
-  if (options.extra) write(root, options.extra, "unrelated change\n");
-  refreshSnapshot(root);
-  write(root, ".specify/authority-impacts/test.json", JSON.stringify({
+  const manifestPath = ".specify/authority-impacts/test.json";
+  const manifestText = JSON.stringify({
     schemaVersion: 2, changeId: "future-technical-revision", status: "CONVERGED",
     authorityChanges, unitImpacts: impacts,
-  }, null, 2) + "\n");
+  }, null, 2) + "\n";
+  if (options.renameManifest) write(root, "tests/retired.json", manifestText);
+  const base = commit(root, "base");
+  if (options.headApproval) authorize();
+  write(root, doc, next);
+  if (options.mixed) {
+    const other = "Docs/V1产品需求.md";
+    write(root, other, fs.readFileSync(path.join(root, other), "utf8").replace("# V1\n", "# V1\nchanged product authority\n"));
+  }
+  if (options.deleteExtra) fs.unlinkSync(path.join(root, "tests/retired.test.ts"));
+  if (options.extra) write(root, options.extra, "unrelated change\n");
+  refreshSnapshot(root);
+  if (options.deleteSnapshot) fs.unlinkSync(path.join(root, ".specify/authority-inputs.json"));
+  if (options.renameManifest) {
+    fs.mkdirSync(path.join(root, ".specify/authority-impacts"), { recursive: true });
+    fs.renameSync(path.join(root, "tests/retired.json"), path.join(root, manifestPath));
+  } else write(root, manifestPath, manifestText);
   commit(root, name);
-  record("G2-R8 " + name, expected, run(root, base), marker);
+  const args = [];
+  if (options.omitDeletedPath) {
+    write(root, "claimed-diff.txt", [doc, ".specify/authority-inputs.json", manifestPath].join("\n") + "\n");
+    args.push("--changed-files", path.join(root, "claimed-diff.txt"));
+  }
+  record("G2-R8 " + name, expected, run(root, base, {}, args), marker);
   cleanup(root);
 }
 
