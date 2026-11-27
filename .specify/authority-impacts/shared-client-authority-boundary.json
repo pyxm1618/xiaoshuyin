@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "changeId": "shared-client-authority-boundary",
+  "status": "CONVERGED",
+  "authorityChanges": [
+    {
+      "path": "Docs/V1技术设计.md",
+      "previousBlobSha": "afef9fcc4af41b6137e5020717135972a3d515fc",
+      "newBlobSha": "2885694c1833c9643797c0947a1b7e581ae2fb05"
+    },
+    {
+      "path": "Docs/总体技术架构.md",
+      "previousBlobSha": "6b4630803f371faf6d93f27361070223d0f661a0",
+      "newBlobSha": "f2e1589e3f87d1970f5ce342887fc7d3bf95dee4"
+    }
+  ],
+  "unitImpacts": [
+    {
+      "authorityUnitId": "AUTH-V1T-003",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Remove named client library from the shared V1 stack table; retain Zod/Swagger/type generation. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    },
+    {
+      "authorityUnitId": "AUTH-V1T-010",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Remove named client library from shared runtime dependency baseline; preserve all other dependencies and exact lockfile policy. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    },
+    {
+      "authorityUnitId": "AUTH-V1T-135",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Delegate internal HTTP/Transport implementation to each engineering Authority; preserve the single-source contract chain, type generation, strong typing, drift CI and shared security/streaming contracts. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    },
+    {
+      "authorityUnitId": "AUTH-V1T-211",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Retain no-drift acceptance for both client surfaces without prescribing an HTTP library; preserve streaming real-device and other acceptance gates. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    },
+    {
+      "authorityUnitId": "AUTH-GA-053",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Keep Zod single source, Fastify validation, OpenAPI, generated types and no duplicate DTOs; delegate only client HTTP/Transport implementation. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    },
+    {
+      "authorityUnitId": "AUTH-GA-062",
+      "classification": "REVISES_UNIMPLEMENTED_AUTHORITY",
+      "downstream": [],
+      "impactAssessment": "Remove the named library from the shared architecture stack, preserve OpenAPI and type generation. Base main 5c2ff5a16d4f9116141f60e973b82b88aa5fbe35: searched 95 main-repository files (all direct specs/*/{spec,plan,tasks,checklist}.md, Docs/frontend markdown, both product Authority docs, root package.json/bun.lock and OpenAPI generation/check scripts). Library references outside the two changed technical Docs were found in Slice 1 plan.md L67/L693 and Slice 4 plan.md L67; both explicitly exclude UI, and the library is absent from root package.json/bun.lock. These are historical baseline projections, not demonstrated implemented HTTP-client requirements; optional continued use is compatible. Phase 2 spec has no such client library requirement. Registered bindings are empty and lifecycle is unchanged. External frontend engineering Authority is not changed or verified by this PR. Independent reviewer must confirm no actual affected downstream dependency, including unregistered dependencies, before merge; if one exists, stop and converge through real topology."
+    }
+  ]
+}
