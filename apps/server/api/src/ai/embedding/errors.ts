@@ -1,4 +1,5 @@
 import type { CapabilityEvidenceRecord } from './evidence.js';
+import type { CostRecord } from './cost.js';
 
 export type EmbeddingErrorClass = 'BLOCKED' | 'UNSUPPORTED' | 'RETRYABLE' | 'TERMINAL';
 
@@ -48,6 +49,13 @@ export interface EmbeddingFailure {
   readonly attempts: number;
   readonly finalCause: EmbeddingFinalCause;
   readonly capabilityEvidence: CapabilityEvidenceRecord;
+  // Present only when a real provider call returned valid aggregate usage that was rejected.
+  readonly cost?: CostRecord;
+}
+
+export interface ProviderAggregateUsage {
+  readonly totalTokens: unknown;
+  readonly promptTokens: unknown;
 }
 
 export interface InternalProblem {
@@ -55,6 +63,7 @@ export interface InternalProblem {
   readonly errorCode: EmbeddingErrorCode;
   readonly providerRequestId?: string;
   readonly retryAfterMs?: number;
+  readonly usage?: ProviderAggregateUsage;
 }
 
 export function makeFailure(input: {
@@ -65,6 +74,7 @@ export function makeFailure(input: {
   readonly attempts: number;
   readonly finalCause: EmbeddingFinalCause;
   readonly capabilityEvidence: CapabilityEvidenceRecord;
+  readonly cost?: CostRecord;
 }): EmbeddingFailure {
   return Object.freeze({
     requestId: input.requestId,
@@ -74,6 +84,7 @@ export function makeFailure(input: {
     attempts: input.attempts,
     finalCause: input.finalCause,
     capabilityEvidence: input.capabilityEvidence,
+    ...(input.cost ? { cost: input.cost } : {}),
   });
 }
 
