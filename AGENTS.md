@@ -102,6 +102,7 @@ Any intended change to one of the four Authority Docs MUST:
 - declare the old/new Authority blob identities, impact classification, affected authoritative specs, required downstream artifacts, and `CONVERGED` completion state;
 - change every declared downstream spec/artifact in the same reviewed change when downstream impact exists;
 - use only the validator's finite exemption classes for a genuine metadata-only/no-downstream-impact correction;
+- for a normative `FUTURE_UNIMPLEMENTED` unit in either technical Authority Doc only, `REVISES_UNIMPLEMENTED_AUTHORITY` permits a document-only revision with explicitly empty registered and declared downstream and a per-unit `impactAssessment` explaining the change and actual downstream dependency review. The change may include only technical Authority Docs, the refreshed snapshot and one impact manifest. The independent audit MUST verify the assessment against real dependencies (including unregistered dependencies), preservation of existing business, safety, compliance and API contracts, and exact scope; if a real downstream dependency exists, stop and use separately registered real topology and normal convergence. This is not an exemption from substantive review or Owner merge authority;
 - complete exact-head automated CI / governance verification and an independent AI read-only/adversarial audit as development-process verification evidence. The independent AI audit is not a GitHub `APPROVED` review and MUST NOT be translated into `required_approving_review_count` or `require_last_push_approval`.
 
 Repository governance additionally enforces three machine-verifiable provenance boundaries:
@@ -111,7 +112,7 @@ Repository governance additionally enforces three machine-verifiable provenance 
   shared ownership is explicit, and unknown production paths fail closed;
 - Authority changes are evaluated through repository-controlled Authority Units in
   `.specify/authority-unit-registry.json`; a changed substantive unit must converge through
-  a pre-registered feature/spec/downstream-requirement/artifact binding, while
+  a pre-registered feature/spec/downstream-requirement/artifact binding when real downstream dependencies exist; the document-only unimplemented technical revision path above does not change lifecycle or bindings.
   `NO_DOWNSTREAM_IMPACT` is restricted to mechanically bounded non-normative units;
 - completed task evidence must bind the feature/task to the real merged implementation PR,
   exact implementation head, files actually changed by that PR, concrete verification

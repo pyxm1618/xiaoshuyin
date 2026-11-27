@@ -37,22 +37,27 @@ export function parseProviderSuccess(
 ): NormalizedProviderResponse | InternalProblem {
   const root = record(body);
   if (!root) return { errorClass: 'TERMINAL', errorCode: 'MALFORMED_PROVIDER_RESPONSE' };
+  const usageRecord = record(root['usage']);
+  const usage = Object.freeze({
+    totalTokens: usageRecord?.['total_tokens'],
+    promptTokens: usageRecord?.['prompt_tokens'],
+  });
   const requestId = root['request_id'];
   if (typeof requestId !== 'string' || requestId.length === 0) {
-    return { errorClass: 'TERMINAL', errorCode: 'MALFORMED_PROVIDER_RESPONSE' };
+    return { errorClass: 'TERMINAL', errorCode: 'MALFORMED_PROVIDER_RESPONSE', usage };
   }
   const output = record(root['output']);
   if (!output || !Array.isArray(output['embeddings'])) {
-    return { errorClass: 'TERMINAL', errorCode: 'MALFORMED_PROVIDER_RESPONSE', providerRequestId: requestId };
+    return { errorClass: 'TERMINAL', errorCode: 'MALFORMED_PROVIDER_RESPONSE', providerRequestId: requestId, usage };
   }
   if (Object.prototype.hasOwnProperty.call(root, 'embeddings')) {
-    return { errorClass: 'TERMINAL', errorCode: 'AMBIGUOUS_PROVIDER_RESPONSE', providerRequestId: requestId };
+    return { errorClass: 'TERMINAL', errorCode: 'AMBIGUOUS_PROVIDER_RESPONSE', providerRequestId: requestId, usage };
   }
 
   let providerModelEcho: ProviderModelEchoStatus = 'PROVIDER_MODEL_ECHO_NOT_AVAILABLE';
   if (Object.prototype.hasOwnProperty.call(root, 'model')) {
     if (typeof root['model'] !== 'string' || root['model'] !== configuredModelId) {
-      return { errorClass: 'TERMINAL', errorCode: 'MODEL_ECHO_MISMATCH', providerRequestId: requestId };
+      return { errorClass: 'TERMINAL', errorCode: 'MODEL_ECHO_MISMATCH', providerRequestId: requestId, usage };
     }
     providerModelEcho = 'PROVIDER_MODEL_ECHO_VERIFIED';
   }
@@ -78,14 +83,10 @@ export function parseProviderSuccess(
     });
   });
 
-  const usageRecord = record(root['usage']);
   return Object.freeze({
     providerRequestId: requestId,
     embeddings: Object.freeze(embeddings),
-    usage: Object.freeze({
-      totalTokens: usageRecord?.['total_tokens'],
-      promptTokens: usageRecord?.['prompt_tokens'],
-    }),
+    usage,
     providerModelEcho,
     observedResponseEnvelope: 'HTTP_OUTPUT_WRAPPED' as const,
   });

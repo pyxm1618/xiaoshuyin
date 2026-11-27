@@ -90,7 +90,7 @@ Mechanical verification against `AGENTS.md` and Frozen Spec (`092c18d514d46a1e4e
 |---|---|---|
 | Authority Docs unchanged | PASS | `Docs/**` diff = 0; all four Authority blobs match `Docs/` on `origin/main` (`e7885234...`) |
 | Frozen Spec Authority | PASS | Bound strictly to `092c18d514d46a1e4e40f3544d428302cde00fa8` / blob `4354ecac585d3d6c675c629d5304faf9422cf5b1`; zero edits to `spec.md` |
-| No scope widening | PASS | Exact `20 / 20` FR, `15 / 15` AS, `12` Tasks; only `apps/server/api/src/ai/reranker/` + 4 test files planned |
+| No scope widening | PASS | Exact `20 / 20` FR, `15 / 15` AS, `12` Tasks; only `apps/server/api/src/ai/reranker/` + 4 test files planned, plus the single mandatory governance-metadata manifest in §8 (no production scope increase) |
 | No Professional Authority creation | PASS | `APPROVED PROFESSIONAL REVIEWER — UNASSIGNED` preserved; zero reviewer/approval tables or labels (`FR-016`, `AS-11`) |
 | No Gold Eval | PASS | Zero Gold Dataset authoring/scoring/metrics (`Recall`, `nDCG`, `MRR`, uplift); Slice 18 boundary preserved (`AS-10`) |
 | No generic Model Gateway | PASS | `NATIVE_HTTP` transport; capability-specific `ai/reranker/` port only; zero provider registry/multi-provider fallback (`FR-018`, `AS-14`) |
@@ -153,6 +153,7 @@ Current repository facts re-read from current main:
 - validate-change-governance.mjs:
   - apps/, packages/, db/ are production paths;
   - tests/, specs/, scripts/, .specify/, .github/, Docs/ are fixed-exempt prefixes.
+  - For a PR changing product paths, the validator nevertheless requires exactly one changed `.specify/change-bindings/*.json` manifest, with exact product-path binding. The sole authorized Slice 23 manifest and its T011 closeout are defined in §8/§22; a planning-only correction must not create it.
 - Root package scripts verified:
   - bun run typecheck -> scripts/typecheck-all.mjs
   - bun run verify-all -> scripts/verify-all.mjs
@@ -309,6 +310,11 @@ Allowed test paths:
 
 No fixture file is required; deterministic provider envelopes may be defined inside tests.
 
+Required governance metadata (T011 only, not feature implementation):
+
+- .specify/change-bindings/023-reranker-provider-adapter-foundation.json
+- Exactly one changed change-binding manifest is required in the final implementation PR. Follow the current validator and existing Slice 20 schema v2 precedent: `schemaVersion: 2`, valid `changeId`, `classification: FEATURE_IMPLEMENTATION`, exactly one `featureBindings` entry with `feature: 023-reranker-provider-adapter-foundation`, `specPath: specs/023-reranker-provider-adapter-foundation`, and `implementationPaths` equal to the exact final changed production paths from the §8 allowlist. No test paths, unrelated paths, duplicate bindings or other feature ownership. T011 creates or finalizes and commits this metadata before final governance verification; any later production correction must reconcile the binding and reverify the final exact head.
+
 Forbidden implementation changes include:
 
 - app.ts or route registration;
@@ -316,7 +322,7 @@ Forbidden implementation changes include:
 - db/**;
 - migrations;
 - scripts/**;
-- .specify/** in the implementation PR;
+- `.specify/**` in the implementation PR except exactly one changed manifest at `.specify/change-bindings/023-reranker-provider-adapter-foundation.json` as specified above; `.specify/implementation-ownership.json`, `.specify/scripts/**` (including `.specify/scripts/tests/**`), a second change-binding manifest and all other `.specify/**` changes remain forbidden;
 - package.json/bun.lock unless a new dependency becomes unavoidable, in which case STOP;
 - Slice 18–22 artifacts;
 - retrieval/fusion/Gold/eval/runtime code.
@@ -765,7 +771,7 @@ No OTel/Phoenix/Langfuse integration and no new telemetry platform is authorized
 
 ## 21. Scope Guard
 
-Implementation changed-file allowlist is the production seam plus four named tests in §8.
+Implementation changed-file allowlist is the production seam plus four named tests in §8 and exactly one required governance-metadata manifest at `.specify/change-bindings/023-reranker-provider-adapter-foundation.json`.
 
 Hard STOP if diff contains:
 
@@ -774,7 +780,7 @@ Hard STOP if diff contains:
 - app.ts/routes;
 - packages/;
 - scripts/;
-- .specify/ in implementation PR;
+- any `.specify/**` delta other than the single authorized manifest in §8, including ownership registry, governance validator/self-tests or a second manifest; a missing required manifest at final closeout is also a hard STOP;
 - retrieval/RAG/fusion/Gold/Context/AI Runtime files;
 - generic gateway/provider registry;
 - another embedding adapter;
@@ -819,14 +825,18 @@ Changed-file scan:
 
 ~~~bash
 git diff --name-only "$DEVELOPMENT_BASE"...HEAD
+specify_changed=$(git diff --name-only --no-renames "$DEVELOPMENT_BASE"...HEAD -- .specify) && test "$specify_changed" = '.specify/change-bindings/023-reranker-provider-adapter-foundation.json'
+git diff --exit-code "$DEVELOPMENT_BASE"...HEAD -- .specify/implementation-ownership.json .specify/scripts/
 ~~~
+
+The exact path equality must exit 0 and proves the entire changed .specify path set is the one authorized manifest (no second manifest or other .specify file); the explicit zero-diff check proves the ownership registry and all governance scripts/self-tests remain unchanged. Run the change-governance validator above on the same committed final exact HEAD; its exit 0 is mandatory.
 
 Secret/scope scan is mechanically owned by tests/architecture/reranker-provider-boundary.test.ts; it must inspect the allowed changed implementation/tests for literal credential material, Authorization values, provider SDK dependencies, forbidden imports and forbidden scopes. It is run by the focused architecture command above and again by verify-all if included in the repository-wide Vitest run.
 
 Expected results:
 - all commands exit 0, except live provider test may truthfully end in an evidence state other than PASS without being rewritten as success;
-- changed files are a subset of §8 plus frozen planning artifacts already present on the branch;
-- implementation PR contains no governance registry modification.
+- changed files are a subset of §8 (production/test paths plus the single required manifest) plus frozen planning artifacts already present on the branch; no new planning mutation is authorized;
+- the `.specify` changed-path set is exactly the authorized manifest; ownership registry and governance scripts/self-tests are unchanged; no other `.specify` delta; change governance exits 0.
 
 ## Verification Plan
 
@@ -838,7 +848,7 @@ Consolidated mechanical verification contract summarizing §16–§19 and §22 (
 | Architecture & negative-scope boundary suite | `bunx vitest run tests/architecture/reranker-provider-boundary.test.ts` | Proves seam isolation (`apps/server/api/src/ai/reranker/`), zero provider SDK dependency, egress only in `transport.ts`, `index.ts`-only public exports, zero DB/persistence/route/retrieval/Gold/gateway/fallback/secret leakage/READY override. |
 | Optional controlled live provider verification | `RERANKER_LIVE_VERIFY=1 RERANKER_LIVE_EVIDENCE_PATH=/tmp/xiaoshuyin-s23-reranker-live.json bunx vitest run tests/ai/reranker-provider-live.test.ts` | Opt-in only on clean exact `HEAD` with approved `DASHSCOPE_API_KEY`, approved workspace base URL, `qwen3-rerank`, `top_n=N`, `return_documents=false`, and safe synthetic fixtures. Absent opt-in -> `NOT_EVALUATED`; missing secret/egress -> `BLOCKED`; incompatible contract -> `FAIL`/`UNKNOWN`. Evidence written outside repo with SHA-256. |
 | Repository static, governance & full regression gates | `node scripts/guard-static.mjs`; `node scripts/guard-static.mjs --self-test`; `node .specify/scripts/validate-governance.mjs`; `node .specify/scripts/tests/run-governance-tests.mjs`; `node .specify/scripts/validate-change-governance.mjs --base "$DEVELOPMENT_BASE" --head HEAD`; `node .specify/scripts/tests/run-change-governance-tests.mjs`; `bun run typecheck`; `bun run verify-all` | Exact-head verification of static guard (unchanged), Spec/Change governance, TypeScript compilation, and canonical repository regression. |
-| Diff & exact-head provenance closeout | `git diff --name-only "$DEVELOPMENT_BASE"...HEAD`; exit-0 diffs on `package.json`, `bun.lock`, `apps/server/api/package.json`, `apps/server/api/src/app.ts`, `apps/server/api/src/routes`, `db`, `.specify` | Confirms allowlist compliance and exact-head binding for independent Audit 2 handoff (`T011`–`T012`). |
+| Diff & exact-head provenance closeout | `git diff --name-only "$DEVELOPMENT_BASE"...HEAD`; exit-0 diffs on `package.json`, `bun.lock`, `apps/server/api/package.json`, `apps/server/api/src/app.ts`, `apps/server/api/src/routes`, `db`, `.specify/implementation-ownership.json`, `.specify/scripts/`; exact `.specify` changed-path equality to the single authorized manifest per §22 | Confirms allowlist compliance and exact-head binding for independent Audit 2 handoff (`T011`–`T012`). |
 
 ## 23. STOP Conditions
 

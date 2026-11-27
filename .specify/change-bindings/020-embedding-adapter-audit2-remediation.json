@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "changeId": "020-embedding-adapter-audit2-remediation",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "020-embedding-provider-adapter-foundation",
+      "specPath": "specs/020-embedding-provider-adapter-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/ai/embedding/dashscope-protocol.ts",
+        "apps/server/api/src/ai/embedding/errors.ts",
+        "apps/server/api/src/ai/embedding/port.ts",
+        "apps/server/api/src/ai/embedding/transport.ts"
+      ]
+    }
+  ]
+}
