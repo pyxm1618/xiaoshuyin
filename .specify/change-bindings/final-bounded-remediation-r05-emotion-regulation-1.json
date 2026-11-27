@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "changeId": "final-bounded-remediation-r05-emotion-regulation-1",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "013-digital-use-family-alliance-runtime",
+      "specPath": "specs/013-digital-use-family-alliance-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-family-alliance.ts"
+      ]
+    }
+  ]
+}

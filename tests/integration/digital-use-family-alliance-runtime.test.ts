@@ -1354,6 +1354,111 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       .toBe(false);
   });
 
+  it('R05: Emotion Regulation 1 records progress without feasibility while other targets keep the gate', async () => {
+    const f = await fixture('er1-progress-only');
+    expect((await respond(f, 'A3000', selfAssessment('NO'))).statusCode).toBe(200);
+
+    const selection = await respond(
+      f,
+      'A3002',
+      {
+        kind: 'TARGET_SELECTION',
+        confirmed: true,
+        selectedTargets: ['EMOTION_REGULATION_1', 'SLEEP'],
+      },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(selection.statusCode, selection.body).toBe(200);
+    let body = selection.json();
+    let er1 = body.targets.find((item: any) => item.targetCode === 'EMOTION_REGULATION_1');
+    let sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(er1?.selected).toBe(true);
+    expect(sleep?.selected).toBe(true);
+
+    const er1Target = await respond(
+      f,
+      'A3080',
+      { kind: 'TARGET_DEFINITION', concreteTargetText: 'Parent listens before responding' },
+      {
+        expectedSelectionRevision: er1.selectionRevision,
+        expectedTargetRevision: er1.revision,
+      }
+    );
+    expect(er1Target.statusCode, er1Target.body).toBe(200);
+    body = er1Target.json();
+    er1 = body.targets.find((item: any) => item.targetCode === 'EMOTION_REGULATION_1');
+
+    // Owner-approved D1: ER1 has no feasibility step, so its PROGRESS node is
+    // reachable directly from the completed target definition.
+    expect(er1.feasibility).toBeNull();
+    expect(body.nodes.find((node: any) => node.nodeCode === 'A3082')?.status)
+      .toBe('AVAILABLE');
+
+    const er1Progress = await respond(
+      f,
+      'A3082',
+      {
+        kind: 'PROGRESS',
+        progress: {
+          kind: 'EMOTION_REGULATION_1',
+          listening: { state: 'KNOWN', count: 3 },
+          affirmation: {
+            state: 'KNOWN',
+            observations: ['affirmed effort', 'affirmed feeling', 'affirmed choice'],
+          },
+          reducedEvaluation: { state: 'KNOWN', count: 2 },
+          selfRegulationJournal: { state: 'KNOWN', text: 'Stayed calm before responding.' },
+          selfCare: { state: 'KNOWN', durationMinutes: 30, activities: ['walk'] },
+          effectEvaluation: {
+            intrinsicMotivation: { state: 'KNOWN', text: 'More self-started behaviour.' },
+            selfEsteemConfidence: { state: 'KNOWN', text: 'More confidence reported.' },
+            abilityPotential: { state: 'KNOWN', text: 'Can complete the replacement behaviour.' },
+          },
+          modifyTarget: 'NO',
+        },
+      },
+      {
+        expectedSelectionRevision: er1.selectionRevision,
+        expectedTargetRevision: er1.revision,
+      }
+    );
+    expect(er1Progress.statusCode, er1Progress.body).toBe(200);
+    body = er1Progress.json();
+    er1 = body.targets.find((item: any) => item.targetCode === 'EMOTION_REGULATION_1');
+    expect(er1.feasibility).toBeNull();
+    expect(er1.progress).toMatchObject({ kind: 'EMOTION_REGULATION_1' });
+
+    // Every other target keeps TARGET -> FEASIBILITY -> PROGRESS unchanged.
+    const sleepTarget = await respond(
+      f,
+      'A3010',
+      { kind: 'TARGET_DEFINITION', concreteTargetText: 'SLEEP baseline target' },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(sleepTarget.statusCode, sleepTarget.body).toBe(200);
+    body = sleepTarget.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3012');
+
+    const sleepProgressBeforeFeasibility = await respond(
+      f,
+      'A3012',
+      sleepProgress('SLEEP progress before feasibility'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(sleepProgressBeforeFeasibility.statusCode, sleepProgressBeforeFeasibility.body)
+      .toBe(409);
+    expect(sleepProgressBeforeFeasibility.json()).toMatchObject({
+      code: 'SCENE_NODE_UNREACHABLE',
+    });
+  });
+
   it('F13-HELP: HELP keeps its frozen reach and needs no FEASIBILITY prerequisite', async () => {
     const f = await fixture('finding13-help');
     expect((await respond(f, 'A3000', selfAssessment('NO'))).statusCode).toBe(200);

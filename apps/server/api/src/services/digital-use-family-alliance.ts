@@ -396,10 +396,18 @@ async function targetInputBasis(
   // FEASIBILITY: the manifest prerequisites for every HELP node remain
   // A3002_SELECTED_TARGET_<code>, exactly as for PROGRESS, and the HELP command
   // only records content/version/history refs.
+  //
+  // Owner-approved Emotion Regulation 1 exception: that target asks the parent
+  // to change their own interaction behaviour, so it records task progress
+  // without a feasibility assessment. Every other target keeps the gate.
   if (identity.role === 'FEASIBILITY' && !current.concrete_target_text) {
     throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
   }
-  if (identity.role === 'PROGRESS' && !current.feasibility_payload) {
+  if (
+    identity.role === 'PROGRESS' &&
+    identity.targetCode !== 'EMOTION_REGULATION_1' &&
+    !current.feasibility_payload
+  ) {
     throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
   }
 
@@ -501,10 +509,15 @@ async function materializeSelectedTargetNodes(
     if (identity.role === 'FEASIBILITY' && !row.concrete_target_text) {
       continue;
     }
-    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node.
+    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node,
+    // except Emotion Regulation 1, which has no feasibility step.
     // HELP is not gated here: its frozen manifest prerequisite is only
     // A3002_SELECTED_TARGET_<code>, so the remediation must not tighten it.
-    if (identity.role === 'PROGRESS' && !row.feasibility_payload) {
+    if (
+      identity.role === 'PROGRESS' &&
+      identity.targetCode !== 'EMOTION_REGULATION_1' &&
+      !row.feasibility_payload
+    ) {
       continue;
     }
 

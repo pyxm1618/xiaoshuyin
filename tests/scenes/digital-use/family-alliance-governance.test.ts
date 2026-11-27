@@ -130,6 +130,30 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
     }
   });
 
+  it('FA-GOV-05A restores the owner-approved Emotion Regulation 1 progress-only flow', () => {
+    const er1Target = familyManifest.find((node) => node.nodeCode === 'A3080')!;
+    const er1Progress = familyManifest.find((node) => node.nodeCode === 'A3082')!;
+    expect(er1Target.role).toBe('TARGET_EMOTION_REGULATION_1');
+    expect(er1Progress.role).toBe('PROGRESS_EMOTION_REGULATION_1');
+    expect(er1Progress.prerequisites).toEqual([
+      'A3002_SELECTED_TARGET_EMOTION_REGULATION_1',
+    ]);
+    expect(er1Progress.prerequisites.some((ref) => ref.startsWith('A3081')))
+      .toBe(false);
+
+    const product = rootFile('Docs/V1产品需求.md');
+    expect(product).toContain('不再对情绪调节1做可行性评估，只做任务进度记录');
+    expect(product).toContain('**FINAL AUTHORITY: NOT REQUIRED。**');
+    expect(product).toContain('其它目标的 feasibility 规则不变');
+    const technical = rootFile('Docs/V1技术设计.md');
+    expect(technical).toContain('Emotion Regulation 1 不做 feasibility');
+    expect(technical).toContain('其它目标的 feasibility 要求不变');
+
+    // Other targets keep the unchanged TARGET -> FEASIBILITY -> PROGRESS gate.
+    const sleepProgress = familyManifest.find((node) => node.nodeCode === 'A3012')!;
+    expect(sleepProgress.prerequisites).toEqual(['A3002_SELECTED_TARGET_SLEEP']);
+  });
+
   it('FA-GOV-06 invalid target/node payload additions are rejected by strict schemas', () => {
     expect(FamilyAllianceNodeResponsePayload.safeParse({
       kind: 'TARGET_SELECTION',

@@ -776,6 +776,12 @@ Therefore:
 - the system may present approved guidance to make a target more feasible;
 - any professional gate outside this Scene artifact remains owned by its upstream/downstream authority.
 
+#### Emotion Regulation 1 exception (owner-approved)
+
+Emotion Regulation 1 asks the parent to change their own interaction behaviour, so it has no feasibility assessment step. After its TARGET definition it proceeds directly to task-progress recording: A3081 remains part of the frozen manifest but is not a prerequisite, and the runtime must not block A3082 for a missing `feasibility_payload`.
+
+This exception is limited to Emotion Regulation 1. Every other target keeps the TARGET → FEASIBILITY → PROGRESS gate and the same five approved dimensions above; no diagnosis, score or cutoff is introduced anywhere.
+
 ### 14.5 Scene-level progress semantics
 
 The “task progress” nodes in A301x–A311x are canonical Scene semantics.
