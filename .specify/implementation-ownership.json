@@ -1326,6 +1326,20 @@
           "003-evidence-core"
         ]
       }
+    },
+    {
+      "id": "family-alliance-semantics-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/family-alliance-semantics.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime"
+        ]
+      }
     }
   ]
 }
