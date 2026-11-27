@@ -752,7 +752,27 @@ function validateAuthorityImpact(changed, opts, errors) {
     }
 
     if (unit.lifecycle === "FUTURE_UNIMPLEMENTED") {
-      errors.push("FUTURE_UNIMPLEMENTED Authority Unit " + unit.id + " has no implemented downstream binding; topology must land in a separate governance change before this Authority Unit can change.");
+      const label = "FUTURE_UNIMPLEMENTED Authority Unit " + unit.id;
+      if (impact.classification !== "REVISES_UNIMPLEMENTED_AUTHORITY") {
+        errors.push(label + " requires REVISES_UNIMPLEMENTED_AUTHORITY or separately established real downstream topology.");
+        continue;
+      }
+      if (!["Docs/总体技术架构.md", "Docs/V1技术设计.md"].includes(registered.doc.path)) {
+        errors.push(label + ": unimplemented revision is restricted to technical Authority Docs.");
+      }
+      if (unit.downstreamBindings.length !== 0 || !Array.isArray(impact.downstream) || impact.downstream.length !== 0) {
+        errors.push(label + ": unimplemented revision requires explicitly empty registered and declared downstream.");
+      }
+      if (typeof impact.impactAssessment !== "string" || !impact.impactAssessment.trim()) {
+        errors.push(label + ": unimplemented revision requires a non-empty impactAssessment for independent review.");
+      }
+      // No self-authorization, product/spec changes, tests, governance or unrelated files
+      // may ride along with an unimplemented technical Authority revision.
+      const allowed = new Set([...authorityChanged, ".specify/authority-inputs.json", impactFiles[0]]);
+      if (authorityChanged.some((file) => !["Docs/总体技术架构.md", "Docs/V1技术设计.md"].includes(file)) ||
+          changed.some((file) => !allowed.has(file))) {
+        errors.push(label + ": unimplemented revision must be a technical Authority-only change with snapshot and impact manifest.");
+      }
       continue;
     }
 
