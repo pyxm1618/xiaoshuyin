@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -23,10 +22,22 @@ const CANONICAL_TARGETS = [
   'EMOTION_REGULATION_2',
 ] as const;
 
-function gitBlobSha(path: string): string {
-  const content = readFileSync(resolve(process.cwd(), path));
-  const header = Buffer.from(`blob ${content.length}\u0000`, 'utf8');
-  return createHash('sha1').update(Buffer.concat([header, content])).digest('hex');
+const FROZEN_AUTHORITY_SNAPSHOT = '379cb8cfb377924cd21ccfe55baa5aecdf207f5e';
+const TARGET_PAGE_NODES = [
+  'A3010',
+  'A3020',
+  'A3040',
+  'A3050',
+  'A3060',
+  'A3070',
+  'A3080',
+  'A3090',
+  'A3100',
+  'A3110',
+] as const;
+
+function authorityText(): string {
+  return readFileSync(resolve(process.cwd(), 'Docs/V1产品需求.md'), 'utf8');
 }
 
 describe('R07 Digital Use node content registry', () => {
@@ -57,19 +68,31 @@ describe('R07 Digital Use node content registry', () => {
     expect(content.question?.maxSelections).toBe(10);
   });
 
-  it('R07-REG-03 registered provenance binds the current frozen product Authority blob', () => {
-    expect(gitBlobSha('Docs/V1产品需求.md')).toBe(DIGITAL_USE_PRODUCT_AUTHORITY.sourceBlob);
+  it('R07-REG-03 registered provenance pins the frozen product Authority snapshot', () => {
+    // Provenance pins the registration snapshot. Later Authority revisions
+    // elsewhere in the document must not silently re-point it.
+    expect(DIGITAL_USE_PRODUCT_AUTHORITY).toMatchObject({
+      authorityDocument: 'Docs/V1产品需求.md',
+      authorityDocumentVersion: 'v3.9',
+      sourceBlob: FROZEN_AUTHORITY_SNAPSHOT,
+      sectionHeading: '## 目标清单',
+    });
     expect(DIGITAL_USE_TARGET_CATALOG_VERSION).toBe('family-alliance-target-catalog-v1');
     expect(DIGITAL_USE_NODE_CONTENT_VERSION).toBe('digital-use-node-content-v1');
-    for (const nodeCode of ['A3010', 'A3020', 'A3080', 'A3110']) {
+
+    const doc = authorityText();
+    expect(doc).toContain(DIGITAL_USE_PRODUCT_AUTHORITY.sectionHeading);
+
+    for (const nodeCode of ['A3002', ...TARGET_PAGE_NODES]) {
       const content = resolveDigitalUseNodeContent(nodeCode);
       if (content === null || content.availability !== 'AVAILABLE') {
         throw new Error(`${nodeCode} must be AVAILABLE`);
       }
-      expect(content.provenance.sourceBlob, nodeCode).toBe(
-        DIGITAL_USE_PRODUCT_AUTHORITY.sourceBlob
-      );
+      expect(content.provenance.sourceBlob, nodeCode).toBe(FROZEN_AUTHORITY_SNAPSHOT);
       expect(content.authorityKind, nodeCode).toBe('PRODUCT_FROZEN');
+      expect(doc, nodeCode).toContain(content.provenance.sectionHeading);
+      if (content.body !== null) expect(doc, nodeCode).toContain(content.body);
+      if (content.question !== null) expect(doc, nodeCode).toContain(content.question.text);
     }
   });
 

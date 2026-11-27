@@ -44,6 +44,21 @@ describe('T1208 authorized Scene/node read contracts', () => {
       routeReasonCode: null,
       recovery: null,
       downstream: { routeIntent: null, available: true, reasonCode: null },
+      content: {
+        nodeCode: 'A1001',
+        contentVersion: 'digital-use-node-content-v1',
+        availability: 'UNAVAILABLE',
+        authorityKind: null,
+        provenance: null,
+        body: null,
+        question: null,
+        missing: [{
+          contentKind: 'PROFESSIONAL_APPROVED_CONTENT',
+          authorityRef: 'Docs/V1产品需求.md',
+          reason: 'professional content not approved',
+        }],
+      },
+      targetCatalog: null,
     });
     expect(parsed.success).toBe(true);
     expect(DigitalUseNodeResponse.safeParse({

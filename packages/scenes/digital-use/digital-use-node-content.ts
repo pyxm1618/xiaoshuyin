@@ -18,6 +18,7 @@ export const DIGITAL_USE_TARGET_CATALOG_VERSION = 'family-alliance-target-catalo
 export const DIGITAL_USE_PRODUCT_AUTHORITY = Object.freeze({
   authorityDocument: 'Docs/V1产品需求.md',
   authorityDocumentVersion: 'v3.9',
+  // Registration snapshot; later Authority revisions must not re-point it silently.
   sourceBlob: '379cb8cfb377924cd21ccfe55baa5aecdf207f5e',
   sectionHeading: '## 目标清单',
 });

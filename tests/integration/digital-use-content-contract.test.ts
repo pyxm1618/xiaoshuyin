@@ -441,6 +441,21 @@ describe('R07 Digital Use node content & mandatory target delivery', () => {
     expect(a1001.json().content.nodeCode).toBe('A1001');
   });
 
+  it('R07-CAT-05 treats an empty selection as normal when no target is mandatory', async () => {
+    const f = await fixture('cat-none', { emotion: ['A'], family: 'A' });
+    await completeA3000(f);
+    const catalog = await catalogOf(f);
+
+    expect(catalog.mandatoryStatus).toBe('RESOLVED');
+    expect(catalog.guidance).toBeNull();
+    expect(catalog.missing).toEqual([]);
+    expect(catalog.selectionRevision).toBe(0);
+    for (const target of catalog.targets) {
+      expect(target.mandatory, target.code).toBe(false);
+      expect(target.selected, target.code).toBe(false);
+    }
+  });
+
   it('R07-CONTENT-01 delivers the frozen A3002 target-selection question with legal values', async () => {
     const f = await fixture('content-a3002');
     await completeA3000(f);
