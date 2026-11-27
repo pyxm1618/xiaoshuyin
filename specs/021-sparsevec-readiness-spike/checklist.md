@@ -16,13 +16,13 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-04 | No pg_jieba / RRF / reranker / Gold Dataset work | zero delta / zero imports | diff + grep |
 | C21-05 | No production migration / table / index / route | zero persistent DB / product delta | diff + DB absence (C21-50) |
 | C21-06 | No Context Builder / AI Task Runtime / generic framework | zero delta | diff |
-| C21-07 | Slice 20 implementation merged | PR #142 head `27a0ac57…` merged as `db07babd…` on main | remote truth |
+| C21-07 | Slice 20 implementation merged | PR #142 head `27a0ac57…` merged as `db07babd…`; bounded remediation PR #153 head `ff89fc97…` merged as `5c2ff5a1…` and present on current `origin/main` | remote truth |
 | C21-08 | Public Slice 20 entry only | imports only `apps/server/api/src/ai/embedding/index.ts`; no `port/contracts/transport/dashscope-protocol/config` module import; no `fetch`/HTTP client in Slice 21 files | grep on the six files |
 | C21-09 | Governance mode | changed paths ⊆ the six Plan §5.1 paths | changed paths |
 | C21-10 | New production ownership | NOT REQUIRED | `validate-change-governance` PASS |
 | C21-11 | Change-binding | NOT REQUIRED | `validate-change-governance` PASS |
 | C21-81 | Ownership registry | `git diff --quiet origin/main F -- .specify/implementation-ownership.json` exits 0 | git |
-| C21-82 | Slice 20 Audit 2 durable evidence (Plan §4 item 4) | FOUND with exact reference before T002; otherwise T001 STOP | T001 report |
+| C21-82 | Slice 20 independent Audit 2 remediation lineage (Plan §4 item 4) | complete lineage verified before T002: original Audit 2 FAIL on `27a0ac57…` (`issuecomment-7189854137`) + final remediation closeout PASS on `ff89fc97…` (`issuecomment-7206763327`) + remediation merge `5c2ff5a1…` present in current `main`; otherwise T001 STOP | T001 report |
 | C21-85 | Slice 21 planning admitted to main (Plan §4 item 7) | `origin/main` blobs of `spec.md`, `plan.md`, `checklist.md`, `tasks.md` equal the Audit-1-passed planning blobs | T001 report |
 
 ## Database Target and Mapping

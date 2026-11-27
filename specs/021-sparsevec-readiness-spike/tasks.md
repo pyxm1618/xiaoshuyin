@@ -29,7 +29,7 @@ Every Frozen Spec FR, AS and NS appears in at least one row; no task is unmapped
 
 | Task | Required evidence | Verification path | Positive evidence | Negative evidence | Blocked evidence | Owner |
 |---|---|---|---|---|---|---|
-| T001 | remote-truth gate report | git/GitHub read-back (Plan §1, §4) | all seven gate predicates (a–g) TRUE | — | any predicate FALSE → `STOP: GATE CLOSED` with the failing predicate | Developer (report) |
+| T001 | remote-truth gate report | git/GitHub read-back (Plan §1, §4) | all seven gate predicates (a–g) TRUE, including the complete Slice 20 Audit 2 remediation lineage | — | any predicate FALSE → `STOP: GATE CLOSED` with the failing predicate | Developer (report) |
 | T002 | governance classification report | V-GOV (Plan §17) | six paths fixed-exempt; ownership delta NONE | non-test path needed → STOP | validator unavailable → BLOCKED | Developer (report) |
 | T003 | committed manifest + architecture manifest tests | V-ARCH; C21-30..C21-34, C21-74..C21-77 | 6 docs / 3 queries frozen, anchors + key-term checks pass | — | source unavailable / anchor absent / key-term check fails / reproduction prohibited → BLOCKED | Developer (fixture) |
 | T004 | mapping/numeric architecture tests | V-ARCH; C21-15..C21-21 | all positive cases accept exactly | all §6 rejects reject with the frozen code | — | Developer (tests) |
@@ -40,7 +40,7 @@ Every Frozen Spec FR, AS and NS appears in at least one row; no task is unmapped
 | T009 | fusion tests + fused rows in evidence | V-ARCH + V-PROV; C21-35..C21-38, C21-78, C21-79 | recompute ≤ 1e-12 and 3/3 strict #1 | deterministic mechanics error → FAIL; ranking miss → UNKNOWN | — | Developer |
 | T010 | final sanitized evidence + state tests + cleanup proofs | V-ARCH, V-SEC; C21-39, C21-41..C21-46, C21-55, C21-61, C21-64..C21-68, C21-84 | schema valid, states derived | cleanup FAIL forces FAIL | lower BLOCKED propagates | Developer |
 | T011 | exact-head validation matrix on F | V-GOV, V-GUARD, V-CANON, V-HEAD, V-SEC, V-SPEC; C21-56..C21-59, C21-63, C21-69, C21-81, C21-83 | every command exit 0; S→F evidence-only | any failure → STOP | CI unavailable → BLOCKED | Developer |
-| T012 | Audit 2 handoff report | remote read-back of S, F, blobs | complete handoff, Developer stopped | — | dependency still unavailable → BLOCKED status in handoff | Developer (report); independent Audit 2 owns the verdict |
+| T012 | Audit 2 handoff report | remote read-back of S, F, blobs | complete handoff incl. the full Slice 20 lineage fields (`original_audit2_result`, `original_audit2_evidence_ref`, `remediation_pr`, `remediation_head`, `final_audit2_closeout_ref`, `remediation_merge_commit`), Developer stopped | — | dependency still unavailable → BLOCKED status in handoff | Developer (report); independent Audit 2 owns the verdict |
 
 ---
 
@@ -63,20 +63,20 @@ Every Frozen Spec FR, AS and NS appears in at least one row; no task is unmapped
 2. `git rev-parse origin/spec/021-sparsevec-readiness-spike:specs/021-sparsevec-readiness-spike/spec.md` must equal `77d1caf4de6fdead3efcdb0cf3e8c594d444efbd`; same blob on the planning head.
 3. Slice 19: read the latest successful canonical CI run on `main`; confirm `G9` and `G11` PASS in its `verify-all.log` artifact and the pinned image in `PGVECTOR_IMAGE_REF`.
 4. Slice 20: confirm PR #142 merged (`27a0ac5761b16ff7837a28936438f30aca1d68e0` → `db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf`) and `origin/main:apps/server/api/src/ai/embedding/index.ts` exports `createEmbeddingProvider` and `loadEmbeddingRuntimeConfig`; `config.ts` accepts `EMBEDDING_TEXT_TYPE` ∈ {query, document}.
-5. Slice 20 Audit 2: locate durable independent Audit 2 PASS evidence per Plan §4 item 4 (PR #142 reviews/comments, successor PR/issue, or committed audit record on `main` naming exact head `27a0ac57…`). Record its URL/commit as `slice20_audit2_evidence_ref`.
+5. Slice 20 independent Audit 2 remediation lineage: mechanically verify ALL of (a) PR #142 exact head `27a0ac5761b16ff7837a28936438f30aca1d68e0` merged as `db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf`; (b) original Audit 2 result on `27a0ac57…` = FAIL with durable evidence `issuecomment-7189854137`; (c) bounded remediation PR #153, final remediation exact head `ff89fc97a4dd13b441a7ae474420674f82050f2f`; (d) final independent remediation closeout on that exact head = PASS with durable evidence `issuecomment-7206763327`; (e) remediation merge `5c2ff5a16d4f9116141f60e973b82b88aa5fbe35` is an ancestor of current `origin/main`; (f) current `origin/main` canonical CI is PASS. Record these six facts as the Slice 20 provenance lineage. Do NOT require a PASS verdict for `27a0ac57…` itself.
 6. Search remote branches, open PRs and `origin/main` tree for any Slice 21 implementation (`git ls-tree -r --name-only origin/main | grep -i sparsevec`; branch names containing `021`).
 7. Record validator/CI blob SHAs (Plan §1 table) and note any drift.
 8. Confirm Slice 21 planning admission (Plan §4 item 7): `git rev-parse origin/main:specs/021-sparsevec-readiness-spike/<file>` for `spec.md`, `plan.md`, `checklist.md`, `tasks.md` equal the Audit-1-passed planning-head blobs.
 
 ### Verification
-- Mechanical predicates, each TRUE: (a) spec blob = `77d1caf4…`; (b) Slice 19 G9/G11 PASS on latest main CI; (c) PR #142 merged and public exports present; (d) `slice20_audit2_evidence_ref` non-empty and resolvable; (e) no competing Slice 21 implementation; (f) `tests/` prefix still in `FIXED_EXEMPT_PREFIXES` of `validate-change-governance.mjs`; (g) Slice 21 planning admitted to main (Action 8).
+- Mechanical predicates, each TRUE: (a) spec blob = `77d1caf4…`; (b) Slice 19 G9/G11 PASS on latest main CI; (c) PR #142 merged and public exports present; (d) complete Slice 20 independent Audit 2 remediation lineage (original implementation provenance + original Audit 2 FAIL evidence `issuecomment-7189854137` + PR #153 remediation + final remediation exact head `ff89fc97…` + final PASS evidence `issuecomment-7206763327` + remediation merge `5c2ff5a1…` present in current main) — never "`27a0ac57…` receives PASS"; (e) no competing Slice 21 implementation; (f) `tests/` prefix still in `FIXED_EXEMPT_PREFIXES` of `validate-change-governance.mjs`; (g) Slice 21 planning admitted to main (Action 8).
 - Any validator/CI blob drift vs Plan §1 is listed and re-read before T002.
 
 **Done**
 - Gate report with all seven predicates TRUE (a–g) and every SHA recorded (C21-01, C21-02, C21-07, C21-82, C21-85 PASS).
 
 **STOP**
-- Predicate (d) FALSE → `STOP: DEVELOPER IMPLEMENTATION GATE CLOSED — Slice 20 durable Audit 2 evidence not established` (the expected result at planning time).
+- Predicate (d) FALSE → `STOP: DEVELOPER IMPLEMENTATION GATE CLOSED — Slice 20 independent Audit 2 remediation lineage not established`.
 - Predicate (g) FALSE → `STOP: Slice 21 planning admission to main required` (separate planning PR; not a Developer action).
 - Any other predicate FALSE; spec blob drift; Port semantic conflict → `UPSTREAM SLICE 20 PORT CAPABILITY RECONCILIATION REQUIRED`.
 
@@ -494,7 +494,7 @@ tests/evidence/sparsevec-readiness-stage-a.json   (the only file in the evidence
 - every repository path; Audit 2; merge; next-slice work.
 
 **Actions**
-Report: repository; current main; S; F; merge base / ahead / behind; Frozen Spec head/blob; planning head; Slice 19 provenance; Slice 20 provenance incl. `slice20_audit2_evidence_ref`; changed files; governance mode; PG/pgvector/image identity; role facts; provider calls (model, text_type, request IDs); mapping/D/nnz; DB round-trip; metrics/references/tolerances; HNSW/boundaries; manifest identity; raw/normalized/fused scores; `chinese_queries_passed`; four flags; aggregate; `candidate_a_readiness_state`; `execution_completion_state`; `sparsevec_spike_status`; `rag_candidate_status`; `readiness_status`; cleanup; scans; canonical regression run ID; limitations.
+Report: repository; current main; S; F; merge base / ahead / behind; Frozen Spec head/blob; planning head; Slice 19 provenance; Slice 20 provenance lineage (`implementation_pr: 142`, `implementation_head`, `implementation_merge_commit`, `original_audit2_result: FAIL`, `original_audit2_evidence_ref: issuecomment-7189854137`, `remediation_pr: 153`, `remediation_head: ff89fc97…`, `final_audit2_closeout_ref: issuecomment-7206763327`, `remediation_merge_commit: 5c2ff5a1…`, `public_entry`); changed files; governance mode; PG/pgvector/image identity; role facts; provider calls (model, text_type, request IDs); mapping/D/nnz; DB round-trip; metrics/references/tolerances; HNSW/boundaries; manifest identity; raw/normalized/fused scores; `chinese_queries_passed`; four flags; aggregate; `candidate_a_readiness_state`; `execution_completion_state`; `sparsevec_spike_status`; `rag_candidate_status`; `readiness_status`; cleanup; scans; canonical regression run ID; limitations.
 
 ### Verification
 - Remote read-back confirms F, S ancestry, spec blob `77d1caf4…`, changed files and evidence blob; the report lists every field above with no placeholder.
@@ -514,4 +514,4 @@ Report: repository; current main; S; F; merge base / ahead / behind; Frozen Spec
 T001 -> T002 -> T003 -> T004 -> T005 -> T006 -> [S frozen] -> T007 -> T008 -> T009 -> T010 -> T011 [F] -> T012
 ```
 
-T001 STOPs at planning time (Slice 20 durable Audit 2 evidence not found); T007 is impossible until T001 passes.
+Historical planning-time fact (2026-11-26, superseded by the 2026-11-27 final reconciliation): T001 previously STOPped because durable Slice 20 Audit 2 PASS evidence for `27a0ac57…` did not exist. This is no longer a current gate. Current T001 verifies the complete Slice 20 Audit 2 remediation lineage instead (original FAIL evidence + audited remediation PASS on `ff89fc97…` + remediation merge `5c2ff5a1…` on main); T001 now STOPs only on predicate (g), i.e. until Slice 21 planning is admitted to main. T007 remains impossible until T001 passes.

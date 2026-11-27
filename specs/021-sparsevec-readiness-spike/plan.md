@@ -13,24 +13,26 @@
 
 ## 1. Remote Truth and Reconciliation
 
-Remote truth was re-read with `git fetch`-equivalent remote reads and local Git on 2026-11-26 (Asia/Shanghai):
+Remote truth was re-read with `git fetch`-equivalent remote reads and local Git on 2026-11-26, and re-read and confirmed again on 2026-11-27 (Asia/Shanghai) for this final planning reconciliation:
 
 | Item | Value |
 |---|---|
-| `origin/main` | `e2b70c06d071dc59fa5d113581e09e3dfe4cea52` (`test(s22): verify pg_jieba lexical readiness on PG18 (#149)`); previous reconciliation points `91907537e8ac7f49b7c24c881e07236587eef74d` (#151, ownership-registry-only), `d043d07a5d9a3aa3766ff54a1582358fe5ad905c` (#150), `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (#147) and `21a2e372754843af5ee4daa109e75b693ce4feb1` (#145) |
+| `origin/main` | `3e0d086cd822c50c7ec65aa27b697d9c1b0409cc` (`docs(authority): delegate client HTTP implementation while retaining shared contracts` (#158)); previous reconciliation points `c329c268127e9860ef8a36d999036e0f199d52b8` (#157), `e2b70c06d071dc59fa5d113581e09e3dfe4cea52` (#149), `91907537e8ac7f49b7c24c881e07236587eef74d` (#151, ownership-registry-only), `d043d07a5d9a3aa3766ff54a1582358fe5ad905c` (#150), `e7885234f4b5c4aec61d6a9dfc2b6ff5e6304512` (#147) and `21a2e372754843af5ee4daa109e75b693ce4feb1` (#145) |
 | `origin/spec/021-sparsevec-readiness-spike` | `8792c4cf4e366b5507ac451a68cd31b73e7f5261` |
 | `origin/plan/021-sparsevec-readiness-spike` before reconciliation | `2363bb5e41e6f1a2b92ee4c9f406b784cab711d3` |
 | `origin/plan/021-sparsevec-readiness-spike` at final-closeout takeover | `59c4a520f8353c23a62617a2165200f63458c1b4` |
-| main ↔ Frozen Spec merge base / behind / ahead | `f4765ce004affc464392bf6ade45d886913ed8a9` / Spec behind main 20 / ahead 5 |
-| main ↔ old Planning merge base / behind / ahead | `3161677256c479e0e6754554a07e08a1fbaf16ef` / 16 / 7 |
+| `origin/plan/021-sparsevec-readiness-spike` at final planning reconciliation base | `14b4606608b5fb90b386771c674c980b7c5eea1f` (behind main 5 / ahead 21 before sync; behind 0 / ahead 22 after the normal main merge) |
+| main ↔ Frozen Spec merge base / behind / ahead | `f4765ce004affc464392bf6ade45d886913ed8a9` / Spec behind main 25 / ahead 5 |
+| main ↔ old Planning merge base / behind / ahead | `3161677256c479e0e6754554a07e08a1fbaf16ef` / 23 / 7 |
 | Frozen Spec ↔ old Planning merge base | `688ad88ee4bbadce29a884f9e31d6e85bc8fee48` (old Planning lacked Spec commit `8792c4cf`) |
-| Open PRs touching Slice 21 | none |
+| main canonical CI at `3e0d086c` | PASS — `CI` and `Spec Governance` workflow runs `success`; required checks `Spec Governance`, `CI`, `Integration Tests`, `Unit Tests`, `Static Checks`, `DB Migration`, `Contract` all `success` |
+| Open PRs touching Slice 21 | none (open PRs #159–#162 do not touch Slice 21) |
 | Competing Slice 21 branches / implementation | none (only `spec/021-…` and `plan/021-…`; no `tests/**sparsevec**`, no `feat/021-*`) |
 
 Reconciliation method (no rebase, no force push, no history rewrite):
 
 1. normal merge commit of `origin/spec/021-sparsevec-readiness-spike` (`8792c4cf`) into the old Planning head;
-2. normal merge commits of `origin/main` (`21a2e372`, then `e7885234` PR #147, then `d043d07a` PR #150, then `91907537` PR #151, then `e2b70c06` PR #149) as main advanced;
+2. normal merge commits of `origin/main` (`21a2e372`, then `e7885234` PR #147, then `d043d07a` PR #150, then `91907537` PR #151, then `e2b70c06` PR #149, then `c329c268` PR #157, then `3e0d086c` PR #158) as main advanced;
 3. bounded correction commits touching only `plan.md`, `checklist.md`, `tasks.md`.
 
 Mechanical reconciliation facts at the corrected planning state:
@@ -44,8 +46,12 @@ Governance/CI contract identities read on `origin/main` (blob SHAs) and used by 
 | Path | Blob |
 |---|---|
 | `.specify/scripts/validate-governance.mjs` | `65110866cfebc8ea313ea77d6e89ed4df3b362fd` |
-| `.specify/scripts/validate-change-governance.mjs` | `9bbd481ec743adec0684835f3ad568edc7778124` |
+| `.specify/scripts/validate-change-governance.mjs` | `be1f4e773134dc94854fcc54e9b129290424dbdd` |
+| `.specify/scripts/tests/run-change-governance-tests.mjs` | `726c20f890ca87105041b7464a2de6a9b5d7bcd6` |
 | `.specify/scripts/validate-task-evidence-remote.mjs` | `96d7d73b22f5c32b71c87d9ff7ac639047133b68` |
+| `.specify/authority-unit-registry.json` | `0f2591cb4711c563c4748b3861dcc0a9b30f3c73` |
+| `.specify/authority-inputs.json` | `a069f71c914e4f5706ad564d7b6af59c4ed54faa` |
+| `.specify/authority-impacts/shared-client-authority-boundary.json` | `b53e9dcb08c5a403b47e5c61ea9c3364819540ad` |
 | `.github/workflows/ci.yml` | `27ed989e330caab6641f1c4a2054a840eb5a5e3c` |
 | `scripts/verify-all.mjs` | `2de9b5dc50836236a56c7bd89d886566047ac5c5` |
 | `scripts/guard-static.mjs` | `50c6864fc9337b2ca5a996bc98dc5e7647be798c` |
@@ -58,7 +64,18 @@ Upstream state:
 
 - Slice 19: merged; canonical CI `verify-all` executes `G9` (`tests/architecture/pgvector-readiness-evidence.test.ts`, `tests/db/pgvector-readiness.test.ts`) and `G11` (`scripts/pgvector-readiness.mjs`) against the pinned Stage A image.
 - Slice 20 implementation: PR #142, exact head `27a0ac5761b16ff7837a28936438f30aca1d68e0`, merged as `db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf`. Public entry `apps/server/api/src/ai/embedding/index.ts` exports `createEmbeddingProvider(config = { env }, deps)`; role text type is selected only through the controlled runtime variable `EMBEDDING_TEXT_TYPE = query | document` (default `document`).
-- Slice 20 Audit 2: **durable independent Audit 2 PASS evidence NOT FOUND** for exact head `27a0ac57…` (PR #142 body ends at "READY FOR AUDIT 2"; PR reviews are a bot COMMENTED review and two empty owner COMMENTED reviews; `.specify/task-provenance-registry.json` `s20-post-merge-closeout` is post-merge provenance, not an audit verdict; PR #145 states it makes no task-completion / PASS claim; PR #147 (`e7885234`) checks Slice 20 T001–T010, T012 via a POST_MERGE_CLOSEOUT manifest — T012 is "STOP at READY FOR AUDIT 2" — keeps T011 unchecked (`PROVIDER_NOT_VERIFIED`), has no PR review, and records no Audit 2 verdict). See §4.
+- Slice 20 independent Audit 2 lifecycle (durable, complete):
+  - original independent Audit 2 on exact head `27a0ac57…`: **FAIL** — MAJOR S20-A2-01..S20-A2-05 block FINAL PASS; durable evidence `https://github.com/pyxm1618/xiaoshuyin/pull/142#issuecomment-7189854137` (`issuecomment-7189854137`);
+  - bounded remediation: PR #153, final remediation exact head `ff89fc97a4dd13b441a7ae474420674f82050f2f`;
+  - final independent remediation closeout on that exact head: **PASS** — all S20-A2 findings CLOSED, 0 MAJOR, Spec Governance / CI / canonical verify-all PASS; durable evidence `https://github.com/pyxm1618/xiaoshuyin/pull/153#issuecomment-7206763327` (`issuecomment-7206763327`);
+  - remediation merge `5c2ff5a16d4f9116141f60e973b82b88aa5fbe35` (PR #153) is present on current `origin/main`.
+  - The original head `27a0ac57…` itself was never re-audited to PASS; the final PASS verdict binds the remediation head `ff89fc97…` and the merged remediation.
+- PR #157 / #158 authority-governance compatibility (read at `3e0d086c`):
+  - `.specify/scripts/validate-change-governance.mjs` (blob `be1f4e77…`) still lists `tests/` in `FIXED_EXEMPT_PREFIXES`; `.specify/scripts/tests/run-change-governance-tests.mjs` blob `726c20f8…`.
+  - `.specify/authority-unit-registry.json` (`0f2591cb…`), `.specify/authority-inputs.json` (`a069f71c…`), `.specify/authority-impacts/shared-client-authority-boundary.json` (`b53e9dcb…`, status `CONVERGED`), `Docs/总体技术架构.md` (`f2e1589e…`), `Docs/V1技术设计.md` (`2885694c…`) change only client HTTP delegation for unimplemented technical Authority units; they introduce no Slice 21 requirement or constraint.
+  - The six Slice 21 implementation paths remain `tests/**` (fixed-exempt; no production ownership required). `scripts/guard-static.mjs` Rule 19 still returns early for `tests/**`, so sparsevec protections are unchanged for test-only implementation.
+  - Slice 20 public entry `apps/server/api/src/ai/embedding/index.ts` (blob `e456ae2c…`) still exports `createEmbeddingProvider` and `loadEmbeddingRuntimeConfig`; `config.ts` (blob `48f41c02…`) still accepts `EMBEDDING_TEXT_TYPE ∈ {query, document}`.
+  - Verdict: `PR #157 / #158 AUTHORITY-GOVERNANCE COMPATIBILITY: PASS`.
 
 If any value above changes before implementation, T001 re-reads remote truth; no stale snapshot authorizes development.
 
@@ -94,7 +111,7 @@ Each gate is evaluated mechanically against the Frozen Spec and current main. Re
 | CC-09 | Security / secret boundary | `DASHSCOPE_API_KEY` only via Slice 20 `env`; never in repo, CLI args, evidence, logs; no new secret mechanism; CI workflow unchanged (§10, §13.4). | PASS |
 | CC-10 | No B/C selection | Evidence vocabulary forbids `RAG READY`, `SELECTED`, `WINNER`; Candidate B/C fields fixed to `UNAFFECTED` (§14). | PASS |
 | CC-11 | No production model pinning | `qwen3.7-text-embedding` is the Spike configured identity only; `EMBEDDING_MODEL_VERSION_OR_REVISION` is a frozen observation label, not a pin (§10.2). | PASS |
-| CC-12 | Implementation gate truthfulness | Slice 20 Audit 2 durable evidence NOT FOUND → Developer gate CLOSED (§4); Planning is not blocked by it. | PASS (planning) / gate CLOSED |
+| CC-12 | Implementation gate truthfulness | Slice 20 final independent Audit 2 remediation dependency: SATISFIED (original Audit 2 FAIL on `27a0ac57…`, remediation head `ff89fc97…` PASS, remediation merge `5c2ff5a1…` on current main — §1, §4). Slice 21 Planning Admission: NOT YET SATISFIED. Developer Gate: CLOSED — PLANNING ADMISSION ONLY (§4). | PASS (planning) / gate CLOSED |
 
 Constitution Check result: **PASS** for planning. No gate requires a Spec change.
 
@@ -105,7 +122,14 @@ Development may start only when T001 proves, on then-current remote truth, ALL o
 1. Frozen Spec blob = `77d1caf4de6fdead3efcdb0cf3e8c594d444efbd`; Planning head = the Audit-1-passed exact head.
 2. Slice 19 merged; latest canonical CI on `main` shows `G9` and `G11` PASS with PG18 / pgvector 0.8.7 pinned image.
 3. Slice 20 implementation merged (PR #142 → `db07babd…`), public entry exports `createEmbeddingProvider` and `loadEmbeddingRuntimeConfig`, and `EMBEDDING_TEXT_TYPE` accepts `query | document`.
-4. **Slice 20 durable independent Audit 2 PASS evidence exists** for exact implementation head `27a0ac5761b16ff7837a28936438f30aca1d68e0`. "Durable" means one of: (a) a GitHub PR review or issue/PR comment on the repository, authored by an auditor role distinct from the Slice 20 Developer, naming the exact head and stating Audit 2 PASS; or (b) a committed audit record on `main` naming the exact head and the PASS verdict. Chat-only or narrative claims do not count.
+4. **Slice 20 independent Audit 2 remediation lineage is complete and present on current `main`**, mechanically verified as ALL of:
+   (a) PR #142 (original implementation) merged with exact head `27a0ac5761b16ff7837a28936438f30aca1d68e0` → merge `db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf`;
+   (b) original independent Audit 2 result on `27a0ac57…` is FAIL with durable evidence `issuecomment-7189854137` (PR #142);
+   (c) bounded remediation PR #153, final remediation exact head `ff89fc97a4dd13b441a7ae474420674f82050f2f`;
+   (d) final independent remediation closeout on that exact head is PASS with durable evidence `issuecomment-7206763327` (PR #153);
+   (e) remediation merge `5c2ff5a16d4f9116141f60e973b82b88aa5fbe35` is an ancestor of current `origin/main`;
+   (f) current `origin/main` canonical CI (`CI` + `Spec Governance` workflows, required checks incl. `Integration Tests`) is PASS.
+   The original head `27a0ac57…` is NOT required to receive a PASS verdict. The independent Audit 2 requirement is satisfied only by the FAIL evidence plus the audited remediation exact-head PASS plus the remediation merge on main — never by narrative or by relabelling `27a0ac57…` as PASS.
 5. No competing Slice 21 implementation/owner exists.
 6. Current change-governance still classifies `tests/**` as fixed-exempt and the six paths need no ownership.
 7. The Slice 21 Spec and the Audit-1-passed Planning are merged to `main` through a separate planning admission PR (repository practice, cf. Slice 20 PR #112 before PR #142): `origin/main:specs/021-sparsevec-readiness-spike/{spec,plan,checklist,tasks}.md` blobs equal the Audit-1-passed planning-head blobs. The implementation branch is created from that `main`, so the implementation PR diff is exactly the six §5.1 paths.
@@ -113,9 +137,10 @@ Development may start only when T001 proves, on then-current remote truth, ALL o
 Planning-time result:
 
 ```text
-DEVELOPER IMPLEMENTATION GATE: CLOSED
+DEVELOPER IMPLEMENTATION GATE: CLOSED — PLANNING ADMISSION ONLY
+satisfied dependencies:
+  - Slice 20 final independent Audit 2 remediation lineage (items 1–6; original Audit 2 FAIL evidence + audited remediation PASS + remediation merge on main)
 blocking dependencies:
-  - Slice 20 durable independent Audit 2 PASS evidence NOT FOUND (exact head 27a0ac5761b16ff7837a28936438f30aca1d68e0)
   - Slice 21 Spec/Planning not yet admitted to main (item 7)
 ```
 
@@ -446,7 +471,32 @@ implementation_subject_head, implementation_subject_tree_clean (true), manifest_
 frozen_spec_head = "8792c4cf4e366b5507ac451a68cd31b73e7f5261", frozen_spec_blob = "77d1caf4de6fdead3efcdb0cf3e8c594d444efbd"
 planning_head (Audit-1-passed exact head)
 slice19_provenance {pgvector_readiness_ci_run, image_ref}
-slice20_provenance {implementation_pr: 142, implementation_head: "27a0ac5761b16ff7837a28936438f30aca1d68e0", merge_commit: "db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf", audit2_evidence_ref, public_entry: "apps/server/api/src/ai/embedding/index.ts"}
+slice20_provenance {
+  implementation_pr: 142,
+  implementation_head:
+    "27a0ac5761b16ff7837a28936438f30aca1d68e0",
+  implementation_merge_commit:
+    "db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf",
+
+  original_audit2_result:
+    "FAIL",
+  original_audit2_evidence_ref:
+    "issuecomment-7189854137",
+
+  remediation_pr:
+    153,
+  remediation_head:
+    "ff89fc97a4dd13b441a7ae474420674f82050f2f",
+
+  final_audit2_closeout_ref:
+    "issuecomment-7206763327",
+
+  remediation_merge_commit:
+    "5c2ff5a16d4f9116141f60e973b82b88aa5fbe35",
+
+  public_entry:
+    "apps/server/api/src/ai/embedding/index.ts"
+}
 stage = "STAGE_A", stage_b = "NOT_EVALUATED", stage_c = "NOT_EVALUATED"
 postgres_version (SHOW server_version), postgres_version_num, tencentdb_kernel_version = "NOT_APPLICABLE_STAGE_A"
 extension_name = "vector", extension_version (queried), image_ref, image_digest_source
@@ -539,7 +589,7 @@ Developer may not change command semantics; only path quoting/shell syntax may b
 
 ## 18. STOP Conditions
 
-STOP (no improvisation) if: Frozen Spec blob drifts; Slice 20 Audit 2 durable evidence absent (T001); Slice 20 Port cannot express the experiment without modification; any forbidden path must change; a production migration/table/index/route is needed; PG/pgvector/image/role drift; a source is unavailable, prohibits reproduction, contains private data, or the anchor/key-term check fails; professional judgement would be needed; cleanup cannot be proven; lineage cannot join; a missing channel would need fallback; HNSW would need truncation/remapping; any result would be labelled READY; any post-hoc change to corpus/queries/targets/weights/tolerances would be needed to pass.
+STOP (no improvisation) if: Frozen Spec blob drifts; Slice 20 independent Audit 2 remediation lineage incomplete (T001); Slice 20 Port cannot express the experiment without modification; any forbidden path must change; a production migration/table/index/route is needed; PG/pgvector/image/role drift; a source is unavailable, prohibits reproduction, contains private data, or the anchor/key-term check fails; professional judgement would be needed; cleanup cannot be proven; lineage cannot join; a missing channel would need fallback; HNSW would need truncation/remapping; any result would be labelled READY; any post-hoc change to corpus/queries/targets/weights/tolerances would be needed to pass.
 
 ## 19. Frozen-Spec Traceability
 
@@ -560,7 +610,10 @@ AS-01..AS-08 and NS-01..NS-08 are assigned in `tasks.md` (Frozen Spec Authority 
 ## 20. Developer Handoff Boundary
 
 ```yaml
-PLANNING: reconciled to Frozen Spec 77d1caf4 and main e2b70c06 (Audit 1 verdict reported externally against exact head)
-DEVELOPER IMPLEMENTATION GATE: CLOSED until Slice 20 durable independent Audit 2 PASS evidence is established and Slice 21 Spec/Planning are admitted to main (§4 item 7)
+PLANNING: reconciled to Frozen Spec 77d1caf4 and main 3e0d086c (Audit 1 verdict reported externally against exact head)
+Slice 20 dependency: SATISFIED
+Planning reconciliation: COMPLETE
+Planning admission: PENDING (fresh independent Audit 1, then a separate planning admission PR to main)
+DEVELOPER IMPLEMENTATION GATE: CLOSED until planning admission to main (§4 item 7)
 DEVELOPMENT: NOT AUTHORIZED
 ```
