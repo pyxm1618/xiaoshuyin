@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "policy": "Authority Units are stable repository-owned heading-bounded units. IMPLEMENTED normative units have finite downstream bindings. FUTURE_UNIMPLEMENTED units fail closed until topology lands separately. Version/date front-matter metadata is the only NO_DOWNSTREAM_IMPACT maintenance class.",
+  "policy": "Authority Units are stable repository-owned heading-bounded units. IMPLEMENTED normative units have finite downstream bindings. FUTURE_UNIMPLEMENTED units fail closed except for document-only technical Authority revisions with empty downstream and reviewed impact assessment; real downstream topology must land separately. Version/date front-matter metadata is the only NO_DOWNSTREAM_IMPACT maintenance class.",
   "documents": [
     {
       "path": "Docs/总产品需求.md",

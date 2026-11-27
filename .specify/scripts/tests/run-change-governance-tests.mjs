@@ -568,6 +568,55 @@ function setupG2() {
   cleanup(root);
 }
 
+// G2-R8: the unimplemented technical Authority path is narrowly document-only.
+for (const [name, options, expected, marker] of [
+  ["valid technical revision", {}, 0, "Change governance PASS"],
+  ["missing downstream declaration", { omitDownstream: true }, 1, "explicitly empty registered and declared downstream"],
+  ["fabricated downstream", { downstream: [{ feature: "001-feature-a" }] }, 1, "explicitly empty registered and declared downstream"],
+  ["missing impact assessment", { assessment: "" }, 1, "non-empty impactAssessment"],
+  ["metadata classification misuse", { classification: "NO_DOWNSTREAM_IMPACT" }, 1, "requires REVISES_UNIMPLEMENTED_AUTHORITY"],
+  ["product Authority misuse", { productDoc: true }, 1, "restricted to technical Authority Docs"],
+  ["spec ride-along", { extra: "specs/001-feature-a/spec.md" }, 1, "technical Authority-only change"],
+  ["production ride-along", { extra: "packages/unknown/new.ts" }, 1, "technical Authority-only change"],
+  ["governance ride-along", { extra: ".specify/scripts/unrelated.mjs" }, 1, "technical Authority-only change"],
+  ["test ride-along", { extra: "tests/a.test.ts" }, 1, "technical Authority-only change"],
+  ["mixed product Authority documents", { mixed: true }, 1, "technical Authority-only change"],
+  ["implemented unit misuse", { implemented: true }, 1, "cannot use REVISES_UNIMPLEMENTED_AUTHORITY"],
+]) {
+  const root = setupG2();
+  const doc = options.productDoc || options.implemented ? "Docs/V1产品需求.md" : "Docs/V1技术设计.md";
+  const id = options.implemented ? "AUTH-A" : options.productDoc ? "AUTH-V1-ROOT" : "UNIT-" + doc;
+  const base = commit(root, "base");
+  const old = fs.readFileSync(path.join(root, doc), "utf8");
+  const next = options.implemented ? old.replace("old normative", "new normative") :
+    old.replace(/^(# [^\n]+\n)/, "$1revised future technical detail\n");
+  write(root, doc, next);
+  const impacts = [{
+    authorityUnitId: id,
+    classification: options.classification ?? "REVISES_UNIMPLEMENTED_AUTHORITY",
+    ...(options.omitDownstream ? {} : { downstream: options.downstream ?? [] }),
+    impactAssessment: options.assessment ?? "Fixture: no existing downstream dependency; independent review required.",
+  }];
+  const authorityChanges = [{ path: doc, previousBlobSha: blobSha(old), newBlobSha: blobSha(next) }];
+  if (options.mixed) {
+    const other = "Docs/V1产品需求.md";
+    const before = fs.readFileSync(path.join(root, other), "utf8");
+    const after = before.replace("# V1\n", "# V1\nchanged product authority\n");
+    write(root, other, after);
+    authorityChanges.push({ path: other, previousBlobSha: blobSha(before), newBlobSha: blobSha(after) });
+    impacts.push({ authorityUnitId: "AUTH-V1-ROOT", classification: "REVISES_UNIMPLEMENTED_AUTHORITY", downstream: [], impactAssessment: "fixture" });
+  }
+  if (options.extra) write(root, options.extra, "unrelated change\n");
+  refreshSnapshot(root);
+  write(root, ".specify/authority-impacts/test.json", JSON.stringify({
+    schemaVersion: 2, changeId: "future-technical-revision", status: "CONVERGED",
+    authorityChanges, unitImpacts: impacts,
+  }, null, 2) + "\n");
+  commit(root, name);
+  record("G2-R8 " + name, expected, run(root, base), marker);
+  cleanup(root);
+}
+
 // G5 local: fake completion without evidence fails.
 {
   const root = project();
