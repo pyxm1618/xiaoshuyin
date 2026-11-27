@@ -1313,6 +1313,19 @@
           "023-reranker-provider-adapter-foundation"
         ]
       }
+    },
+    {
+      "id": "evidence-conflict-group-immutability-migration-041",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/041_evidence_conflict_group_immutability.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "003-evidence-core"
+        ]
+      }
     }
   ]
 }
