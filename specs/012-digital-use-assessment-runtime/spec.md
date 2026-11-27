@@ -748,6 +748,10 @@ Rules:
 5. Client-provided nextNode is never authoritative.
 6. No extra public route is added merely to simplify tests.
 7. A200401 is never addressable as a node endpoint.
+8. (R07, final bounded remediation) GET node additively returns `content` and `targetCatalog`; no new public route is added.
+   - `content` is the backend-owned content projection for the requested node. It is `AVAILABLE` only for content that already exists in the frozen product Authority (the A3002 target-selection question, the A3000/A30x3 help content, and the A30x0 target pages). Professional questionnaire content without an approved version (A1001 / 01002 / 01003) and unregistered nodes return `UNAVAILABLE` with the exact `missing` list; the runtime never fabricates questions, options, dimensions or provenance.
+   - `targetCatalog` is non-null only for A3002 and lists the ten canonical target codes with display names, mandatory basis, the Case-specific mandatory judgment, current selection state, target revisions, `catalogVersion`, Authority provenance and structured `MANDATORY_TARGETS_UNSELECTED` guidance. When the 01002 / 01003 integrated triage evidence is unavailable the catalog reports `mandatoryStatus: UNAVAILABLE` with an `INTEGRATED_TRIAGE_EVIDENCE` missing item; a normal empty selection is never treated as a defect.
+   - The mandatory judgment reuses the same rule that enforces target submission; an unselected mandatory target still fails A3002 with `TARGET_SELECTION_INVALID`.
 
 Exact request/response DTO field names beyond the upstream-required semantics are Plan-level.
 
@@ -1047,6 +1051,10 @@ The complete Slice 12 acceptance suite can run without an LLM/network decision s
 
 No Docs, frozen Slice 1–11 spec, or historical migration is modified to make this Slice fit.
 
+### FR-023 — Backend-owned node content and mandatory target delivery
+
+The node read delivers `content` for the requested node and `targetCatalog` for A3002, both derived from registered Scene Package sources with version and provenance. Content that does not exist in the frozen product Authority fails closed with an exact `missing` list instead of being reconstructed. The Case-specific mandatory target judgment is computed only by the backend; the frontend renders it and never re-derives or invents it.
+
 ---
 
 ## 22. Acceptance Scenarios
@@ -1087,6 +1095,10 @@ No Docs, frozen Slice 1–11 spec, or historical migration is modified to make t
 34. **Problem Formulation handoff**: when sufficient approved Evidence exists, the runtime uses the authoritative PresentProblemFormulation seam and does not jump directly to GOALS.
 35. **No-model regression**: the full canonical Assessment fixture reaches all intended Slice 12 branches without model/network routing.
 36. **Scope negative**: changed-file review proves no A3000+, Goal/Plan, AI/RAG, notification runtime, second Scene, second manifest or second idempotency store was added.
+37. **R07 content delivery**: the A3002 node read returns the frozen ten-option target-selection question and a catalog whose mandatory set matches the 01002/01003 rule; an unselected mandatory target is rejected on submission while a normal empty selection is not an error.
+38. **R07 fail-closed content**: A1001 / 01002 / 01003 and unregistered structured nodes return `UNAVAILABLE` with the exact `missing` list; no professional content is fabricated.
+
+> Scenarios 37–38 were added by the final bounded remediation R07 and are additive to Scenarios 1–36.
 
 ### 22.1 Integrated Triage Authority Acceptance Matrix — additive to Scenarios 1–36
 

@@ -154,10 +154,11 @@ export function familyAllianceTargetIdentity(
   return null;
 }
 
-async function mandatoryTargets(
-  context: FamilyAllianceSemanticContext
+export async function resolveMandatoryFamilyAllianceTargets(
+  tx: pg.PoolClient,
+  caseId: string
 ): Promise<ReadonlySet<FamilyAllianceTargetCode>> {
-  const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
+  const evidence = await loadIntegratedTriageEvidence(tx, caseId);
   if (
     evidence.emotion01002.kind !== 'VALUE' ||
     evidence.family01003.kind !== 'VALUE'
@@ -180,6 +181,12 @@ async function mandatoryTargets(
     required.add('FAMILY_RELATIONSHIP');
   }
   return required;
+}
+
+async function mandatoryTargets(
+  context: FamilyAllianceSemanticContext
+): Promise<ReadonlySet<FamilyAllianceTargetCode>> {
+  return resolveMandatoryFamilyAllianceTargets(context.tx, context.caseId);
 }
 
 async function applyA3000(

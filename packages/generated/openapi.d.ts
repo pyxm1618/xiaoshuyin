@@ -7233,6 +7233,77 @@ export interface operations {
                             available: boolean;
                             reasonCode: string | null;
                         };
+                        content: {
+                            nodeCode: string;
+                            contentVersion: string;
+                            /** @enum {string} */
+                            availability: "AVAILABLE" | "UNAVAILABLE";
+                            authorityKind: "PRODUCT_FROZEN" | null;
+                            provenance: {
+                                authorityDocument: string;
+                                authorityDocumentVersion: string;
+                                sourceBlob: string;
+                                sectionHeading: string;
+                                contentVersion: string;
+                            } | null;
+                            body: string | null;
+                            question: {
+                                text: string;
+                                /** @enum {string} */
+                                selection: "SINGLE" | "MULTI";
+                                /** @constant */
+                                submissionKind: "TARGET_SELECTION";
+                                minSelections: number;
+                                maxSelections: number;
+                                options: {
+                                    value: string;
+                                    label: string;
+                                }[];
+                            } | null;
+                            missing: {
+                                /** @enum {string} */
+                                contentKind: "PROFESSIONAL_APPROVED_CONTENT" | "APPROVED_CONTENT_VERSION" | "INTEGRATED_TRIAGE_EVIDENCE" | "NODE_CONTENT_NOT_REGISTERED";
+                                authorityRef: string;
+                                reason: string;
+                            }[];
+                        };
+                        targetCatalog: {
+                            sceneCode: string;
+                            scenePackageVersion: string;
+                            catalogVersion: string;
+                            authority: {
+                                authorityDocument: string;
+                                authorityDocumentVersion: string;
+                                sourceBlob: string;
+                                sectionHeading: string;
+                                contentVersion: string;
+                            };
+                            selectionRevision: number;
+                            /** @enum {string} */
+                            mandatoryStatus: "RESOLVED" | "UNAVAILABLE";
+                            targets: {
+                                code: string;
+                                displayName: string;
+                                mandatoryBasis: string;
+                                mandatory: boolean | null;
+                                selected: boolean;
+                                targetRevision: number | null;
+                            }[];
+                            guidance: {
+                                /** @constant */
+                                code: "MANDATORY_TARGETS_UNSELECTED";
+                                message: string;
+                                missingMandatoryTargets: string[];
+                                /** @constant */
+                                requiredSelection: "MULTI";
+                            } | null;
+                            missing: {
+                                /** @enum {string} */
+                                contentKind: "PROFESSIONAL_APPROVED_CONTENT" | "APPROVED_CONTENT_VERSION" | "INTEGRATED_TRIAGE_EVIDENCE" | "NODE_CONTENT_NOT_REGISTERED";
+                                authorityRef: string;
+                                reason: string;
+                            }[];
+                        } | null;
                     };
                 };
             };

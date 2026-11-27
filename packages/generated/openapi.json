@@ -16366,6 +16366,399 @@
                         "reasonCode"
                       ],
                       "additionalProperties": false
+                    },
+                    "content": {
+                      "type": "object",
+                      "properties": {
+                        "nodeCode": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "contentVersion": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "availability": {
+                          "type": "string",
+                          "enum": [
+                            "AVAILABLE",
+                            "UNAVAILABLE"
+                          ]
+                        },
+                        "authorityKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "PRODUCT_FROZEN"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "provenance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "authorityDocument": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "authorityDocumentVersion": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "sourceBlob": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{40}$"
+                                },
+                                "sectionHeading": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "contentVersion": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "authorityDocument",
+                                "authorityDocumentVersion",
+                                "sourceBlob",
+                                "sectionHeading",
+                                "contentVersion"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "body": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "question": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "selection": {
+                                  "type": "string",
+                                  "enum": [
+                                    "SINGLE",
+                                    "MULTI"
+                                  ]
+                                },
+                                "submissionKind": {
+                                  "type": "string",
+                                  "const": "TARGET_SELECTION"
+                                },
+                                "minSelections": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "maxSelections": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "options": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "label": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "text",
+                                "selection",
+                                "submissionKind",
+                                "minSelections",
+                                "maxSelections",
+                                "options"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "contentKind": {
+                                "type": "string",
+                                "enum": [
+                                  "PROFESSIONAL_APPROVED_CONTENT",
+                                  "APPROVED_CONTENT_VERSION",
+                                  "INTEGRATED_TRIAGE_EVIDENCE",
+                                  "NODE_CONTENT_NOT_REGISTERED"
+                                ]
+                              },
+                              "authorityRef": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "reason": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "contentKind",
+                              "authorityRef",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "nodeCode",
+                        "contentVersion",
+                        "availability",
+                        "authorityKind",
+                        "provenance",
+                        "body",
+                        "question",
+                        "missing"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "targetCatalog": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "sceneCode": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "scenePackageVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "catalogVersion": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "authority": {
+                              "type": "object",
+                              "properties": {
+                                "authorityDocument": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "authorityDocumentVersion": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "sourceBlob": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{40}$"
+                                },
+                                "sectionHeading": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "contentVersion": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "authorityDocument",
+                                "authorityDocumentVersion",
+                                "sourceBlob",
+                                "sectionHeading",
+                                "contentVersion"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "selectionRevision": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "mandatoryStatus": {
+                              "type": "string",
+                              "enum": [
+                                "RESOLVED",
+                                "UNAVAILABLE"
+                              ]
+                            },
+                            "targets": {
+                              "minItems": 10,
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "displayName": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "mandatoryBasis": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "mandatory": {
+                                    "type": [
+                                      "boolean",
+                                      "null"
+                                    ]
+                                  },
+                                  "selected": {
+                                    "type": "boolean"
+                                  },
+                                  "targetRevision": {
+                                    "anyOf": [
+                                      {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 9007199254740991
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "displayName",
+                                  "mandatoryBasis",
+                                  "mandatory",
+                                  "selected",
+                                  "targetRevision"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "guidance": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "code": {
+                                      "type": "string",
+                                      "const": "MANDATORY_TARGETS_UNSELECTED"
+                                    },
+                                    "message": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "missingMandatoryTargets": {
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "requiredSelection": {
+                                      "type": "string",
+                                      "const": "MULTI"
+                                    }
+                                  },
+                                  "required": [
+                                    "code",
+                                    "message",
+                                    "missingMandatoryTargets",
+                                    "requiredSelection"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "missing": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "contentKind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "PROFESSIONAL_APPROVED_CONTENT",
+                                      "APPROVED_CONTENT_VERSION",
+                                      "INTEGRATED_TRIAGE_EVIDENCE",
+                                      "NODE_CONTENT_NOT_REGISTERED"
+                                    ]
+                                  },
+                                  "authorityRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "reason": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "contentKind",
+                                  "authorityRef",
+                                  "reason"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "sceneCode",
+                            "scenePackageVersion",
+                            "catalogVersion",
+                            "authority",
+                            "selectionRevision",
+                            "mandatoryStatus",
+                            "targets",
+                            "guidance",
+                            "missing"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -16382,7 +16775,9 @@
                     "targets",
                     "routeReasonCode",
                     "recovery",
-                    "downstream"
+                    "downstream",
+                    "content",
+                    "targetCatalog"
                   ],
                   "additionalProperties": false
                 }

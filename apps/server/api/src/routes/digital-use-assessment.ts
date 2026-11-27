@@ -1,5 +1,9 @@
 /**
- * Slice 12 — exactly four public Digital Use Assessment / Scene APIs.
+ * Slice 12 — public Digital Use Assessment / Scene APIs.
+ *
+ * The final bounded remediation R07 delivers node content and the Case-specific
+ * target catalog as additive fields on the already-approved node read; no new
+ * public route was added.
  *
  * No hidden mutation/bypass route exists here. Family/package/phase/node route
  * authority is resolved server-side; request bodies contain only the frozen
