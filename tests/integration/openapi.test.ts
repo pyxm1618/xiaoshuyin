@@ -62,6 +62,7 @@ const FROZEN_SCHEMAS = [
   'CreateMemberRequest',
   'CreateParticipationInviteRequest',
   'CreateParticipationInviteResponse',
+  'CreateParticipationResponseRequest',
   'CreatorInput',
   'CurrentFamilyAmbiguousError',
   'CurrentFamilyNotFoundError',
@@ -107,6 +108,7 @@ const FROZEN_SCHEMAS = [
   'ParticipationNotFoundError',
   'ParticipationNotice',
   'ParticipationResource',
+  'ParticipationResponseDto',
   'ParticipationStateConflictError',
   'ParticipationTargetIneligibleError',
   'PersonSummary',
@@ -175,7 +177,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 55 frozen business operations including Common Core Goal runtime, C3 Staff authority and Phone Contract', () => {
+it('contains exactly the 56 frozen business operations including Common Core Goal runtime, C3 Staff authority, Phone Contract and child Participation Response', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -238,6 +240,7 @@ it('contains exactly the 55 frozen business operations including Common Core Goa
       'POST /api/v1/identity-bindings/pairing-decision',
       'POST /api/v1/participation-invites/{token}/accept',
       'POST /api/v1/participations/{id}/decline',
+      'POST /api/v1/participations/{id}/responses',
       'POST /api/v1/participations/{id}/withdraw',
       'POST /api/v1/staff/capability-grants',
       'POST /api/v1/staff/capability-grants/{grantId}/revoke',
@@ -322,6 +325,8 @@ it('contains exactly the 55 frozen business operations including Common Core Goa
       '/api/v1/participations/{id}/decline',
       '/api/v1/participations/{id}/withdraw',
       '/api/v1/participations/{id}',
+      // R01 — formalized child-authored participation response (supersedes DEFERRED).
+      '/api/v1/participations/{id}/responses',
       // Slice 7 (007-case-primary-switch) — the single approved switch POST.
       '/api/v1/cases/{id}/switch-primary',
       // Slice 12 — exactly four Digital Use Assessment / Scene surfaces.

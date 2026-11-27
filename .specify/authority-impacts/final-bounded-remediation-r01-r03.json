@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "changeId": "final-bounded-remediation-r01-r03",
+  "status": "CONVERGED",
+  "authorityChanges": [
+    {
+      "path": "Docs/V1产品需求.md",
+      "previousBlobSha": "379cb8cfb377924cd21ccfe55baa5aecdf207f5e",
+      "newBlobSha": "fcd7dd5069ee29ad74af78780bb8028722bd68f5"
+    }
+  ],
+  "unitImpacts": [
+    {
+      "authorityUnitId": "AUTH-V1P-009",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "004-case-participant-core",
+          "specPath": "specs/004-case-participant-core",
+          "requirementId": "Requirements",
+          "requiredArtifacts": [
+            "tests/integration/participations-authorization.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1P-100",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "011-digital-use-node-manifest-routing-foundation",
+          "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+          "requirementId": "12. Functional Requirements",
+          "requiredArtifacts": [
+            "tests/scenes/digital-use/authority-regression.test.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}

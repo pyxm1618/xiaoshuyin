@@ -68,4 +68,14 @@ describe('Phase 2 participant age/consent authority projection', () => {
     expect(spec).toContain('不得创造 REVOKED / CANCELLED / unauthorized-void / manager-cancel 终态');
     expect(spec).not.toContain('Slice 4 继续持有 participation resource 生命周期');
   });
+
+  it('supersedes the deferred child response without widening authority', () => {
+    expect(spec).toContain('FR-036 [final-bounded-remediation-20261127 / §28.8]');
+    expect(spec).toContain('POST /api/v1/participations/:id/responses');
+    expect(spec).toContain('formally contracted child-authored participation response surface');
+    expect(spec).toContain('MUST NOT create or mutate assertions, observations, Case content');
+    expect(spec).not.toContain('唯一 DEFERRED 为 `POST /api/v1/participations/:id/responses`');
+    expect(spec).toContain('FR-037 [UPSTREAM: §1.2 / `Docs/V1技术设计.md` §10 Phase 2 Invitation Lifecycle Authority]');
+    expect(spec).toContain('MUST NOT redefine, extend, re-open or add invitation authorization');
+  });
 });

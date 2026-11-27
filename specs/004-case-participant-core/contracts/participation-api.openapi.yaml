@@ -8,12 +8,16 @@ info:
     上游：Docs/V1技术设计.md §10 / §28.8；Docs/V1产品需求.md §1.2 / §1.5 / §17.1 / §19A.2 / V1-C20 / V1-C21 / V1-C39 / V1-C44 / U11；
     specs/005-invited-identity-binding-contract/spec.md。
 
-    本 Slice 只暴露六条最小路由：建邀请、目标查看邀请（未认证、token 作为 bearer capability）、
+    Slice 4 原始交付六条最小路由：建邀请、目标查看邀请（未认证、token 作为 bearer capability）、
     接受、拒绝、退出、读取 participation 最小状态。
 
-    明确不存在：POST /api/v1/participations/:id/responses（DEFERRED）、generic participant
-    response、participant 管理 / 列表 / 批量端点、Case 内容 / Evidence / Assessment /
-    Formulation / Scene / Plan / Task / Notification 端点。
+    Supersession（final-bounded-remediation-20261127）：`POST /api/v1/participations/:id/responses`
+    在 Slice 4 冻结时被明确 DEFERRED（见 §28.8）；现依据 Docs/V1技术设计.md §28.8 正式追加为本契约
+    的第七条路由，复用既有本人身份、participation 状态、Consent / Compliance 与幂等约束，不新增
+    Permission。Slice 4 的其余六条路由与全部授权 / 隐私保护保持不变。
+
+    仍明确不存在：generic participant response、participant 管理 / 列表 / 批量端点、Case 内容 /
+    Evidence / Assessment / Formulation / Scene / Plan / Task / Notification 端点。
 
     身份语义：accept 的身份前置是「已认证 actor 的 resolved personId 等于
     participation.person_id」。Slice 4 不创建 Person、不写 persons.account_id、不重绑、
@@ -260,6 +264,54 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/participations/{id}/responses:
+    post:
+      tags: [participation]
+      operationId: createParticipationResponse
+      summary: 本人提交参与回应消息
+      description: |
+        只有 ACTIVE participation 的本人（resolved personId 等于 participation.person_id）可以提交
+        回应消息；消息以 dialogue_message 记录，authorPersonId 等于本人。PENDING / DECLINED / EXPIRED /
+        WITHDRAWN → 409 PARTICIPATION_STATE_CONFLICT；非本人 / 不存在 → 404 PARTICIPATION_NOT_FOUND；
+        参与处理被 Compliance / Consent 门禁禁止 → 403 PARTICIPATION_PROCESSING_DISALLOWED。
+        幂等：同 actor + command_type + key 返回原结果；同 key 不同 payload → 409。
+        该端点只写参与对话消息，不授予 Case 读取、不产生 Evidence、不自动 accept。
+        本端点在 Slice 4 冻结时被明确 DEFERRED；其正式化由 final-bounded-remediation-20261127
+        依据 Docs/V1技术设计.md §28.8 追加，Slice 4 其余六条路由与全部授权保护不变。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ParticipationIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateParticipationResponseRequest" }
+      responses:
+        "201":
+          description: 本人回应消息已记录
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationResponseDto" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: 无权回应，或参与处理被 Compliance / Consent 门禁禁止
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          $ref: "#/components/responses/ParticipationNotFound"
+        "409":
+          description: participation 非法状态，或幂等 payload mismatch
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationStateConflictError"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /api/v1/participations/{id}:
     get:
       tags: [participation]
@@ -437,6 +489,50 @@ components:
           type: string
           minLength: 8
           maxLength: 128
+
+    CreateParticipationResponseRequest:
+      type: object
+      additionalProperties: false
+      required: [content]
+      description: |
+        本人回应消息内容。idempotencyKey 可放在 body 或 Idempotency-Key header；
+        两者都缺失或非法时 422。内容不做业务判断，不授予任何额外权限。
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    ParticipationResponseDto:
+      type: object
+      additionalProperties: false
+      required: [id, caseId, participationId, authorPersonId, content, createdAt]
+      description: |
+        已记录的本人回应消息最小投影。id 是 dialogue_message 的真实 id；
+        authorPersonId 恒等于已认证本人 Person；不暴露其他家庭成员或 Case 业务对象。
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        participationId:
+          type: string
+          format: uuid
+        authorPersonId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          minLength: 1
+        createdAt:
+          type: string
+          format: date-time
 
     ParticipationResource:
       type: object

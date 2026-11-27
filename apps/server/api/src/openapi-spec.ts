@@ -78,6 +78,8 @@ import {
   InvitationNotAvailableError,
   ParticipationNotFoundError,
   ParticipationValidationError,
+  CreateParticipationResponseRequest,
+  ParticipationResponseDto,
   DigitalUseSceneResponse,
   DigitalUseNodeResponse,
   DigitalUseApiError,
@@ -238,6 +240,8 @@ export function buildOpenApiDocument() {
     ParticipationTargetIneligibleError: toJsonSchema(ParticipationTargetIneligibleError),
     InvitationNotAvailableError: toJsonSchema(InvitationNotAvailableError),
     ParticipationNotFoundError: toJsonSchema(ParticipationNotFoundError),
+    CreateParticipationResponseRequest: toJsonSchema(CreateParticipationResponseRequest),
+    ParticipationResponseDto: toJsonSchema(ParticipationResponseDto),
     PhoneUseContractDto: toJsonSchema(PhoneUseContractDto),
     SavePhoneUseContractDraftRequest: toJsonSchema(SavePhoneUseContractDraftRequest),
     UpdatePhoneUseContractDraftRequest: toJsonSchema(UpdatePhoneUseContractDraftRequest),
@@ -748,6 +752,31 @@ export function buildOpenApiDocument() {
           }),
           '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participations/{id}/responses': {
+      post: {
+        tags: ['participation'],
+        operationId: 'createParticipationResponse',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('ParticipationIdPath')],
+        requestBody: refBody('CreateParticipationResponseRequest'),
+        responses: {
+          '201': refResponse(
+            'Child-authored participation response recorded',
+            'ParticipationResponseDto'
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '403': refResponse('`FORBIDDEN` / `PARTICIPATION_PROCESSING_DISALLOWED`', 'ErrorResponse'),
+          '404': refResponse('`PARTICIPATION_NOT_FOUND`', 'ParticipationNotFoundError'),
+          '409': jsonResponse('State conflict / idempotency mismatch', {
+            oneOf: [
+              ref('ParticipationStateConflictError'),
+              ref('ErrorResponse'),
+            ],
+          }),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
         },
       },
     },
