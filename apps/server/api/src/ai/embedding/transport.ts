@@ -55,6 +55,9 @@ export class FetchHttpTransport implements HttpTransport {
           'content-type': 'application/json',
         },
         body: JSON.stringify(request.body),
+        // The approved endpoint allowlist is validated once at config load; following a
+        // redirect could replay credentials/body to an unapproved destination.
+        redirect: 'error',
         signal: controller.signal,
       });
       const text = await response.text();

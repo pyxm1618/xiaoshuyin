@@ -3,6 +3,7 @@ import { createEmbeddingProvider, loadEmbeddingRuntimeConfig } from '../../apps/
 import type { EmbeddingRequest } from '../../apps/server/api/src/ai/embedding/index.js';
 import { EmbeddingCostGuard } from '../../apps/server/api/src/ai/embedding/cost.js';
 import type { HttpTransport, HttpTransportRequest, HttpTransportResponse } from '../../apps/server/api/src/ai/embedding/transport.js';
+import { FetchHttpTransport, TransportNetworkError } from '../../apps/server/api/src/ai/embedding/transport.js';
 const { parseProviderSuccess } = await import('../../apps/server/api/src/ai/embedding/' + 'dash' + 'scope-protocol.js');
 
 function env(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
@@ -97,6 +98,76 @@ describe('Slice 20 native HTTP protocol adapter', () => {
     expect(JSON.stringify(transport.calls[0]?.request)).not.toContain('test-key');
   });
 
+  it.each([
+    ['query', 'query'],
+    ['document', 'document'],
+    [undefined, 'document'],
+  ] as const)('forwards configured text_type %s into the provider request', async (configured, expected) => {
+    const transport = new CaptureTransport(ok(wrapped()));
+    const e = env();
+    if (configured === undefined) delete e['EMBEDDING_TEXT_TYPE'];
+    else e['EMBEDDING_TEXT_TYPE'] = configured;
+    const outcome = await createEmbeddingProvider({ env: e }, { transport, costGuard: new EmbeddingCostGuard() }).embed(req);
+    expect(outcome.kind).toBe('OK');
+    const body = transport.calls[0]?.request.body as { parameters: { text_type: string } };
+    expect(body.parameters.text_type).toBe(expected);
+  });
+
+  it('fails closed for an unsupported text_type', () => {
+    expect(() => loadEmbeddingRuntimeConfig(env({ EMBEDDING_TEXT_TYPE: 'passage' }))).toThrow('CONFIG_INVALID');
+  });
+
+  it.each([301, 302, 307, 308])('refuses automatic redirects from the approved endpoint (status %i)', async (status) => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(input), init: init ?? {} });
+      if (init?.redirect === 'error') throw new TypeError(`unexpected redirect ${status}`);
+      // Emulate the platform default: replay the same POST body and Authorization header to Location.
+      calls.push({ url: 'https://unapproved.example.net/collect', init: init ?? {} });
+      return new Response('', { status: 200 });
+    }) as typeof fetch;
+    try {
+      const transport = new FetchHttpTransport();
+      await expect(transport.request({
+        url: 'https://workspace.maas.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding',
+        body: { model: 'model-a' },
+        timeoutMs: 1000,
+      }, 'test-key')).rejects.toBeInstanceOf(TransportNetworkError);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.init.redirect).toBe('error');
+      expect(calls[0]?.init.headers).toMatchObject({ authorization: 'Bearer test-key' });
+      expect(calls[0]?.url).not.toContain('unapproved.example.net');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('normalizes a redirecting approved endpoint to a stable failure without replaying credentials', async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(String(input));
+      if (init?.redirect === 'error') throw new TypeError('unexpected redirect');
+      calls.push('https://unapproved.example.net/collect');
+      return new Response('redirected', { status: 200 });
+    }) as typeof fetch;
+    try {
+      const outcome = await createEmbeddingProvider(
+        { env: env({ EMBEDDING_MAX_ATTEMPTS: '1' }) },
+        { costGuard: new EmbeddingCostGuard() },
+      ).embed(req);
+      expect(outcome.kind).toBe('FAILED');
+      if (outcome.kind !== 'FAILED') throw new Error('expected normalized failure');
+      expect(outcome.failure.errorCode).toBe('RETRY_EXHAUSTED');
+      expect(calls).toEqual(['https://workspace.maas.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding']);
+      expect(JSON.stringify(outcome)).not.toContain('test-key');
+      expect(JSON.stringify(outcome)).not.toContain('unapproved.example.net');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('accepts only HTTP_OUTPUT_WRAPPED and records normalized provider metadata', async () => {
     const parsed = parseProviderSuccess(wrapped(), 'model-a');
     expect('errorClass' in parsed).toBe(false);
@@ -106,6 +177,17 @@ describe('Slice 20 native HTTP protocol adapter', () => {
       expect(parsed.embeddings[0]?.position).toBe(0);
       expect(parsed.embeddings[0]?.denseVector).toEqual([1, 2, 3, 4]);
     }
+  });
+
+  it('exposes the normalized observedResponseEnvelope on the public Port result', async () => {
+    const transport = new CaptureTransport(ok(wrapped()));
+    const outcome = await createEmbeddingProvider({ env: env() }, { transport, costGuard: new EmbeddingCostGuard() }).embed(req);
+    expect(outcome.kind).toBe('OK');
+    if (outcome.kind !== 'OK') throw new Error(outcome.failure.errorCode);
+    expect(outcome.result.observedResponseEnvelope).toBe('HTTP_OUTPUT_WRAPPED');
+    const serialized = JSON.stringify(outcome.result);
+    expect(serialized).not.toContain('sparse_embedding');
+    expect(serialized).not.toContain('total_tokens');
   });
 
   it.each([
