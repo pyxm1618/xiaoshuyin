@@ -4,7 +4,7 @@
  * Comprehensive end-to-end and unit verification of migration execution atomicity (Finding #16 remediation).
  *
  * Verifies:
- * 1. Fresh database rebuild: all 43 migrations applied in a single clean run, checksums recorded, replay is a no-op.
+ * 1. Fresh database rebuild: all 44 migrations applied in a single clean run, checksums recorded, replay is a no-op.
  * 2. Existing database upgrade: legacy 001-003 state upgrades cleanly without rewriting historical timestamps.
  * 3. Migration SQL failure rollback through REAL PRODUCTION RUNNER: when a migration statement fails,
  *    the runner rolls back the transaction, DDL is absent, schema_migrations row is absent, and later migrations are skipped.
@@ -287,7 +287,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   }
 
   // ─── 1. Fresh Database Rebuild ───
-  it('fresh database rebuild applies all 43 migrations with correct checksums, and replay is 0 new', async () => {
+  it('fresh database rebuild applies all 44 migrations with correct checksums, and replay is 0 new', async () => {
     const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fresh');
 
     const firstRun = execFileSync('node', ['scripts/db-migrate.mjs'], {
@@ -296,7 +296,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
     });
 
-    expect(firstRun).toContain('Migration complete: 43 new, 0 previously applied.');
+    expect(firstRun).toContain('Migration complete: 44 new, 0 previously applied.');
 
     const client = new Client({ connectionString: dbUrl });
     await client.connect();
@@ -306,7 +306,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
           FROM schema_migrations
          ORDER BY filename
       `);
-      expect(rows.length).toBe(43);
+      expect(rows.length).toBe(44);
 
       const version = (await client.query<{ version: string }>('SELECT version() AS version')).rows[0]!.version;
       expect(version).toMatch(/^PostgreSQL 18\./);
@@ -325,7 +325,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         encoding: 'utf8',
         env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
       });
-      expect(secondRun).toContain('Migration complete: 0 new, 43 previously applied.');
+      expect(secondRun).toContain('Migration complete: 0 new, 44 previously applied.');
     } finally {
       await client.end();
     }
@@ -384,7 +384,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       expect(upgradeRun).toContain('SKIP 001_initial_schema.sql');
       expect(upgradeRun).toContain('SKIP 002_case_core.sql');
       expect(upgradeRun).toContain('SKIP 003_case_idempotency_key_bytes.sql');
-      expect(upgradeRun).toContain('Migration complete: 40 new, 3 previously applied.');
+      expect(upgradeRun).toContain('Migration complete: 41 new, 3 previously applied.');
 
       const clientAfter = new Client({ connectionString: dbUrl });
       await clientAfter.connect();
@@ -395,7 +395,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
            ORDER BY filename
         `)).rows;
 
-        expect(postRows.length).toBe(43);
+        expect(postRows.length).toBe(44);
         await assertFinding15SecurityDefinerPosture(clientAfter, getMigratorRole(dbUrl), finding15UnauthorizedRole);
 
         for (const pre of preRows) {
