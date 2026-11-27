@@ -9,7 +9,7 @@ const privateImportTargets = new Set([
   resolve(seam, 'dashscope-protocol'),
 ]);
 const privateProtocolModule = './embedding/' + 'dashscope' + '-protocol.js';
-const staticImportSpecifier = /\bimport\s+(?:type\s+)?[^'";]*?\bfrom\s*['"]([^'"]+)['"]/g;
+const staticImportSpecifier = /\bimport\s*(?:type\s+)?[^'";]*?\bfrom\s*['"]([^'"]+)['"]/g;
 const sideEffectImportSpecifier = /\bimport\s*['"]([^'"]+)['"]/g;
 const dynamicImportSpecifier = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const expectedSeamFiles = [
@@ -59,12 +59,16 @@ function stripComments(source: string): string {
     }
     if (char === '/' && next === '/') {
       while (index < source.length && source[index] !== '\n') index += 1;
+      // Keep a separator so `import//c\n{...}` cannot fuse into `import{...}`.
+      out += ' ';
       continue;
     }
     if (char === '/' && next === '*') {
       index += 2;
       while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) index += 1;
       index += 2;
+      // Keep a separator so `import/*c*/{...}` cannot fuse into `import{...}`.
+      out += ' ';
       continue;
     }
     out += char;
@@ -218,6 +222,9 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
   });
 
   it.each([
+    ['compact named import without whitespace', "import{FetchHttpTransport} from './embedding/transport.js';"],
+    ['comment-adjacent compact named import', "import/* boundary */{ FetchHttpTransport } from './embedding/transport.js';"],
+    ['compact namespace import without whitespace', "import*as X from './embedding/transport.js';"],
     ['comment between from and specifier', "import { FetchHttpTransport } from /* boundary */ './embedding/transport.js';"],
     ['multiline named import', "import {\n  FetchHttpTransport\n} from './embedding/transport.js';"],
     ['default import', "import T from './embedding/transport.js';"],
@@ -241,6 +248,7 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
 
   it.each([
     ['comment before public specifier', "import { createEmbeddingProvider } from /* public */ './embedding/index.js';"],
+    ['compact public import', "import{createEmbeddingProvider}from './embedding/index.js';"],
     ['side-effect public import', "import './embedding/index.js';"],
     ['namespace public import', "import * as E from './embedding/port.js';"],
   ])('allows a %s', (_name, code) => {
