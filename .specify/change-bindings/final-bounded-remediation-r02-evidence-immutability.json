@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "changeId": "final-bounded-remediation-r02-evidence-immutability",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "003-evidence-core",
+      "specPath": "specs/003-evidence-core",
+      "implementationPaths": [
+        "db/migrations/041_evidence_conflict_group_immutability.sql"
+      ]
+    }
+  ]
+}
