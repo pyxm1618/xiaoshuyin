@@ -9,6 +9,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -503,6 +504,9 @@ function persistEvidenceAndDeriveCleanup(params: {
 
   // Phase 4: the final write itself must not introduce any further repository residue.
   if (params.readRepoStatusFn() !== postPersistenceRepoStatus) {
+    // The just-written record may claim CLEANUP_SECRET_SAFETY=PASS, so it must not survive a
+    // failed execution. Removal failure propagates and keeps the run fail-closed.
+    unlinkSync(safePath);
     throw new Error('RERANKER_LIVE_EVIDENCE_REPO_RESIDUE_AFTER_FINAL_WRITE');
   }
 
@@ -1093,6 +1097,74 @@ describe('Slice 23 controlled live provider verification', () => {
       expect(outcome.evidence.aggregateTechnicalResult).toBe('FAIL');
       const persisted = JSON.parse(readFileSync(evidencePath, 'utf8')) as SanitizedLiveEvidence;
       expect(persisted.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('FAIL');
+    } finally {
+      rmSync(fakeRepo, { recursive: true, force: true });
+      rmSync(sink, { recursive: true, force: true });
+    }
+  });
+
+  it('never leaves a stale PASS evidence artifact when repo residue appears only after the final write (S23-A2-B04 final consistency)', () => {
+    const fakeRepo = mkdtempSync(join(tmpdir(), 's23-reranker-b04-final-repo-'));
+    const sink = mkdtempSync(join(tmpdir(), 's23-reranker-b04-final-sink-'));
+    const evidencePath = join(sink, 'evidence.json');
+    const baselineRepoStatus = 'clean';
+    const finalResidueRepoStatus = '?? residue.json';
+
+    // Repository state is clean while only the provisional record is on disk, so the first
+    // post-persistence check passes and the persisted record claims CLEANUP_SECRET_SAFETY=PASS.
+    // Residue becomes observable only once the final (checkCompleted) record is written, so the
+    // last post-write check must fail.
+    const readRepoStatusFn = (): string => {
+      if (!existsSync(evidencePath)) {
+        return baselineRepoStatus;
+      }
+      const persisted = JSON.parse(readFileSync(evidencePath, 'utf8')) as SanitizedLiveEvidence;
+      return persisted.lowerPredicates.CLEANUP_SECRET_SAFETY === 'UNKNOWN'
+        ? baselineRepoStatus
+        : finalResidueRepoStatus;
+    };
+
+    try {
+      expect(() =>
+        persistEvidenceAndDeriveCleanup({
+          evidencePath,
+          repoRoot: fakeRepo,
+          baselineRepoStatus,
+          readRepoStatusFn,
+          buildEvidence: (cleanupMechanics, cleanupCheckCompleted) =>
+            buildSanitizedEvidence({
+              repositoryHead: 'synthetic-head',
+              trackedTreeClean: true,
+              baseUrl: null,
+              result: null,
+              error: null,
+              attemptCount: 0,
+              elapsedMs: 0,
+              cleanupMechanics,
+              cleanupCheckCompleted,
+              liveState: {
+                attempted: true,
+                provenance: 'REAL_LIVE_CALL',
+                validAccess: false,
+                contractCompatible: null,
+                missingPrerequisite: true,
+                reason: 'BLOCKED: missing approved DASHSCOPE_API_KEY',
+              },
+            }),
+          request: SYNTHETIC_LIVE_REQUEST,
+          env: {},
+        }),
+      ).toThrow(/RERANKER_LIVE_EVIDENCE_REPO_RESIDUE_AFTER_FINAL_WRITE/);
+
+      const staleArtifact = existsSync(evidencePath)
+        ? (JSON.parse(readFileSync(evidencePath, 'utf8')) as SanitizedLiveEvidence)
+        : null;
+      // A failed execution must not leave behind evidence that a consumer could read as CLEANUP PASS.
+      expect(
+        staleArtifact?.lowerPredicates.CLEANUP_SECRET_SAFETY ?? 'ABSENT',
+        'stale PASS evidence artifact must be invalidated after the final write fails',
+      ).toBe('ABSENT');
+      expect(existsSync(evidencePath)).toBe(false);
     } finally {
       rmSync(fakeRepo, { recursive: true, force: true });
       rmSync(sink, { recursive: true, force: true });
