@@ -2359,9 +2359,26 @@
             "heading": "#### 目标可行性评估（情绪调节1）"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "013-digital-use-family-alliance-runtime",
+              "specPath": "specs/013-digital-use-family-alliance-runtime",
+              "requirements": [
+                {
+                  "id": "14.4 Feasibility semantics",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "### 14.4 Feasibility semantics"
+                  },
+                  "requiredArtifacts": [
+                    "tests/integration/digital-use-family-alliance-runtime.test.ts",
+                    "tests/scenes/digital-use/family-alliance-governance.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-072",
@@ -2759,9 +2776,26 @@
             "heading": "### D. Emotion Regulation 1 feasibility"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "013-digital-use-family-alliance-runtime",
+              "specPath": "specs/013-digital-use-family-alliance-runtime",
+              "requirements": [
+                {
+                  "id": "14.4 Feasibility semantics",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "### 14.4 Feasibility semantics"
+                  },
+                  "requiredArtifacts": [
+                    "tests/integration/digital-use-family-alliance-runtime.test.ts",
+                    "tests/scenes/digital-use/family-alliance-governance.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-104",
@@ -5423,9 +5457,26 @@
             "heading": "#### 12.3B.3 Time Management 与 Emotion Regulation 1"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "013-digital-use-family-alliance-runtime",
+              "specPath": "specs/013-digital-use-family-alliance-runtime",
+              "requirements": [
+                {
+                  "id": "14.4 Feasibility semantics",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "### 14.4 Feasibility semantics"
+                  },
+                  "requiredArtifacts": [
+                    "tests/integration/digital-use-family-alliance-runtime.test.ts",
+                    "tests/scenes/digital-use/family-alliance-governance.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-065",
