@@ -15,6 +15,11 @@ import {
   RerankerTechnicalError,
   toSafeRerankerErrorMetadata,
 } from '../../apps/server/api/src/ai/reranker/errors.js';
+import {
+  createRerankerTransport,
+  isRetryableRerankerErrorCode,
+  type RerankerFetch,
+} from '../../apps/server/api/src/ai/reranker/transport.js';
 
 type AssertExactFalse<T extends false> = T;
 
@@ -426,5 +431,361 @@ describe('Slice 23 T003 reranker capability config, error taxonomy, and secret b
       retryable: false,
       providerRequestId: 'req-auth-401',
     });
+  });
+});
+
+describe('Slice 23 T004 reranker native HTTP transport, timeout, and bounded retry', () => {
+  const createTestConfig = () =>
+    createRerankerConfig({
+      baseUrl: 'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1',
+    });
+
+  const makeTransportRequest = () => ({
+    path: '/services/rerank/text-rerank/text-rerank',
+    body: {
+      model: 'qwen3-rerank',
+      input: {
+        query: 'synthetic query',
+        documents: ['synthetic doc 1'],
+      },
+      parameters: {
+        top_n: 1,
+        return_documents: false,
+        instruct: 'Retrieve relevant documents.',
+      },
+    },
+  });
+
+  const makeEnvReader = (secret = 'synthetic-placeholder-key') =>
+    vi.fn((key: string) => (key === 'DASHSCOPE_API_KEY' ? secret : undefined));
+
+  const makeJsonResponse = (status: number, body: unknown): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('constructs Authorization Bearer header only at send time and never persists secrets', async () => {
+    const config = createTestConfig();
+    const envReader = makeEnvReader('synthetic-send-time-secret');
+    const capturedAuthHeaders: string[] = [];
+
+    const fakeFetch: RerankerFetch = vi.fn(async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      capturedAuthHeaders.push(headers.get('Authorization') ?? '');
+      return makeJsonResponse(200, {
+        request_id: 'req-ok-1',
+        output: { results: [{ index: 0, relevance_score: 0.9 }] },
+        usage: { total_tokens: 10 },
+      });
+    });
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader,
+      sleep: vi.fn(async () => {}),
+    });
+
+    expect(envReader).not.toHaveBeenCalled();
+    expect(JSON.stringify(transport)).not.toContain('synthetic-send-time-secret');
+
+    const result = await transport.send(makeTransportRequest());
+
+    expect(envReader).toHaveBeenCalledTimes(1);
+    expect(envReader).toHaveBeenCalledWith('DASHSCOPE_API_KEY');
+    expect(capturedAuthHeaders).toEqual(['Bearer synthetic-send-time-secret']);
+    expect(result.status).toBe(200);
+    expect(result.attempts).toBe(1);
+    expect(transport.provider).toBe('ALIBABA_DASHSCOPE');
+    expect(transport.modelId).toBe('qwen3-rerank');
+    expect(JSON.stringify(transport)).not.toContain('synthetic-send-time-secret');
+  });
+
+  it('enforces 10000ms per-attempt client deadline via AbortController and retries TIMEOUT once after 1000ms', async () => {
+    const config = createTestConfig();
+    const envReader = makeEnvReader();
+    const timerDelays: number[] = [];
+    const sleepCalls: number[] = [];
+    const scheduledCallbacks: Array<() => void> = [];
+
+    const fakeFetch: RerankerFetch = vi.fn((_url, init) => {
+      return new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          reject(new DOMException('Aborted', 'AbortError'));
+          return;
+        }
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+      });
+    });
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader,
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+      setTimer: (cb, ms) => {
+        timerDelays.push(ms);
+        scheduledCallbacks.push(cb);
+        // Trigger client deadline immediately in synthetic test clock
+        queueMicrotask(cb);
+        return scheduledCallbacks.length;
+      },
+      clearTimer: vi.fn(),
+    });
+
+    let caught: unknown;
+    try {
+      await transport.send(makeTransportRequest());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    const err = caught as RerankerTechnicalError;
+    expect(err.code).toBe('TIMEOUT');
+    expect(err.retryable).toBe(true);
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+    expect(timerDelays).toEqual([10_000, 10_000]);
+    expect(sleepCalls).toEqual([1_000]);
+  });
+
+  it('allows at most 2 attempts with 1000ms backoff before attempt 2 and never executes a 3rd attempt', async () => {
+    const config = createTestConfig();
+    const sleepCalls: number[] = [];
+    const fakeFetch: RerankerFetch = vi.fn(async () => {
+      throw new TypeError('connect ECONNREFUSED');
+    });
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: makeEnvReader(),
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+    });
+
+    let caught: unknown;
+    try {
+      await transport.send(makeTransportRequest());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    expect((caught as RerankerTechnicalError).code).toBe('PROVIDER_UNAVAILABLE');
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+    expect(sleepCalls).toEqual([1_000]);
+  });
+
+  it('retries connection failure once and succeeds on attempt 2 without changing provider or model', async () => {
+    const config = createTestConfig();
+    const sleepCalls: number[] = [];
+    const urls: string[] = [];
+    const models: string[] = [];
+
+    const fakeFetch: RerankerFetch = vi
+      .fn()
+      .mockImplementationOnce(async (url, init) => {
+        urls.push(String(url));
+        models.push(JSON.parse(String(init?.body)).model);
+        throw new TypeError('network down');
+      })
+      .mockImplementationOnce(async (url, init) => {
+        urls.push(String(url));
+        models.push(JSON.parse(String(init?.body)).model);
+        return makeJsonResponse(200, {
+          request_id: 'req-retry-ok',
+          output: { results: [{ index: 0, relevance_score: 0.8 }] },
+          usage: { total_tokens: 12 },
+        });
+      });
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: makeEnvReader(),
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+    });
+
+    const res = await transport.send(makeTransportRequest());
+    expect(res.attempts).toBe(2);
+    expect(res.providerRequestId).toBe('req-retry-ok');
+    expect(sleepCalls).toEqual([1_000]);
+    expect(urls).toEqual([
+      'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank',
+      'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank',
+    ]);
+    expect(models).toEqual(['qwen3-rerank', 'qwen3-rerank']);
+  });
+
+  it.each(['ServiceUnavailable', 'ModelUnavailable'])(
+    'retries temporary HTTP 503 %s once after 1000ms',
+    async (providerCode) => {
+      const config = createTestConfig();
+      const sleepCalls: number[] = [];
+      const fakeFetch: RerankerFetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          makeJsonResponse(503, {
+            code: providerCode,
+            message: 'temporary unavailable',
+            request_id: 'req-503-1',
+          }),
+        )
+        .mockResolvedValueOnce(
+          makeJsonResponse(503, {
+            code: providerCode,
+            message: 'still unavailable',
+            request_id: 'req-503-2',
+          }),
+        );
+
+      const transport = createRerankerTransport(config, {
+        fetch: fakeFetch,
+        envReader: makeEnvReader(),
+        sleep: vi.fn(async (ms: number) => {
+          sleepCalls.push(ms);
+        }),
+      });
+
+      let caught: unknown;
+      try {
+        await transport.send(makeTransportRequest());
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(RerankerTechnicalError);
+      const err = caught as RerankerTechnicalError;
+      expect(err.code).toBe('PROVIDER_UNAVAILABLE');
+      expect(err.retryable).toBe(true);
+      expect(err.providerRequestId).toBe('req-503-2');
+      expect(fakeFetch).toHaveBeenCalledTimes(2);
+      expect(sleepCalls).toEqual([1_000]);
+    },
+  );
+
+  it('retries documented transient throttle 429 once after 1000ms', async () => {
+    const config = createTestConfig();
+    const sleepCalls: number[] = [];
+    const fakeFetch: RerankerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makeJsonResponse(429, {
+          code: 'Throttling',
+          message: 'rate limit',
+          request_id: 'req-429-1',
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeJsonResponse(200, {
+          request_id: 'req-429-ok',
+          output: { results: [{ index: 0, relevance_score: 0.7 }] },
+          usage: { total_tokens: 9 },
+        }),
+      );
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: makeEnvReader(),
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+    });
+
+    const res = await transport.send(makeTransportRequest());
+    expect(res.attempts).toBe(2);
+    expect(sleepCalls).toEqual([1_000]);
+    expect(fakeFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      label: 'AUTHENTICATION (401 InvalidApiKey)',
+      status: 401,
+      body: { code: 'InvalidApiKey', message: 'bad key', request_id: 'req-401' },
+      expectedCode: 'AUTHENTICATION',
+    },
+    {
+      label: 'AUTHORIZATION (403 AccessDenied)',
+      status: 403,
+      body: { code: 'AccessDenied', message: 'forbidden', request_id: 'req-403' },
+      expectedCode: 'AUTHORIZATION',
+    },
+    {
+      label: 'INVALID_INPUT (400 InvalidParameter)',
+      status: 400,
+      body: { code: 'InvalidParameter', message: 'bad param', request_id: 'req-400' },
+      expectedCode: 'INVALID_INPUT',
+    },
+    {
+      label: 'quota/budget exhaustion (429 AllocationQuota)',
+      status: 429,
+      body: { code: 'AllocationQuota', message: 'quota exhausted', request_id: 'req-429-quota' },
+      expectedCode: 'RATE_LIMIT',
+    },
+    {
+      label: 'UNSUPPORTED_CAPABILITY (404 ModelNotFound)',
+      status: 404,
+      body: { code: 'ModelNotFound', message: 'not found', request_id: 'req-404' },
+      expectedCode: 'UNSUPPORTED_CAPABILITY',
+    },
+    {
+      label: 'UNKNOWN_PROVIDER_FAILURE (unclassified 500)',
+      status: 500,
+      body: { code: 'SomeUnclassifiedError', message: 'raw secret leak', request_id: 'req-500' },
+      expectedCode: 'UNKNOWN_PROVIDER_FAILURE',
+    },
+  ])('does not retry terminal error $label and preserves safe providerRequestId only', async ({
+    status,
+    body,
+    expectedCode,
+  }) => {
+    const config = createTestConfig();
+    const sleepCalls: number[] = [];
+    const fakeFetch: RerankerFetch = vi.fn(async () => makeJsonResponse(status, body));
+
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: makeEnvReader(),
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+    });
+
+    let caught: unknown;
+    try {
+      await transport.send(makeTransportRequest());
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    const err = caught as RerankerTechnicalError;
+    expect(err.code).toBe(expectedCode);
+    expect(err.retryable).toBe(false);
+    expect(err.providerRequestId).toBe(body.request_id);
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(sleepCalls).toEqual([]);
+    expect(JSON.stringify(toSafeRerankerErrorMetadata(err))).not.toContain('raw secret leak');
+  });
+
+  it.each([
+    'CONFIGURATION',
+    'AUTHENTICATION',
+    'AUTHORIZATION',
+    'INVALID_INPUT',
+    'UNSUPPORTED_CAPABILITY',
+    'MALFORMED_RESPONSE',
+    'IDENTITY_MAPPING_FAILURE',
+    'PARTIAL_RESPONSE',
+    'UNKNOWN_PROVIDER_FAILURE',
+  ] as const)('marks error code %s as non-retryable in transport retry policy', (code) => {
+    expect(isRetryableRerankerErrorCode(code)).toBe(false);
   });
 });
