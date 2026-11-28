@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "changeId": "023-reranker-provider-adapter-foundation-current-main",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "023-reranker-provider-adapter-foundation",
+      "specPath": "specs/023-reranker-provider-adapter-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/ai/reranker/config.ts",
+        "apps/server/api/src/ai/reranker/contracts.ts",
+        "apps/server/api/src/ai/reranker/dashscope.ts",
+        "apps/server/api/src/ai/reranker/errors.ts",
+        "apps/server/api/src/ai/reranker/evidence.ts",
+        "apps/server/api/src/ai/reranker/index.ts",
+        "apps/server/api/src/ai/reranker/rerank.ts",
+        "apps/server/api/src/ai/reranker/telemetry.ts",
+        "apps/server/api/src/ai/reranker/transport.ts"
+      ]
+    }
+  ]
+}
