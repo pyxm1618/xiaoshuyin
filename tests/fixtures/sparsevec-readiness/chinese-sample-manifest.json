@@ -1,0 +1,138 @@
+{
+  "manifest_id": "s21-chinese-sample-v1",
+  "manifest_version": 1,
+  "privacy_assertion": "NO_FAMILY_MINOR_PATIENT_PRIVATE_DATA",
+  "documents": [
+    {
+      "doc_id": "D01",
+      "source_title": "教育部等六部门印发通知部署做好预防中小学生沉迷网络游戏管理工作",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202110/617b9997695ccf00015c2a1d.html",
+      "source_published": "2021-10",
+      "anchor": "为深入贯彻《中华人民共和国未成年人保护法》",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "为深入贯彻《中华人民共和国未成年人保护法》等法律法规要求,认真落实中央有关未成年人网络环境治理的决策部署,日前,教育部、中宣部、中央网信办、工信部、公安部、市场监管总局等部门 联合印发《关于进一步加强预防中小学生沉迷网络游戏管理工作的通知》 ,部署各地做好预防中小学生沉迷网络游戏管理工作。 通知要求, 各地出版管理部门要严格执行网络游戏前置审批制度,督促网络游戏企业加大内容审核力度,坚决杜绝网络游戏中含有可能妨害中小学生身心健康的内容,确保内容优质健康干净。网络游戏企业要采取技术措施,避免中小学生接触不适宜的游戏或者游戏功能。要严格落实网络游戏用户账号实名注册和登录要求,将未成年人用户纳入统一的网络游戏防沉迷管理,不得在规定时间以外以任何形式向中小学生提供网络游戏服务。 通知指出, 学校要严格校内教育管理,做好中小学生手机管理和校内互联网上网服务设施保护工作。",
+      "text_sha256": "61177904802d1dcd99e9a621381d8432dd53a251123e4f80afa2136fb94422c2",
+      "source_fetched_at": "2026-11-28T03:55:38.954Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    },
+    {
+      "doc_id": "D02",
+      "source_title": "《近视防控三十问答》，转给师生家长",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202306/648bc6d9ebf50d603fbc064b.html",
+      "source_published": "2023-06",
+      "anchor": "第二届全国综合防控儿童青少年近视宣讲团",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "第二届全国综合防控儿童青少年近视宣讲团研究提出《近视防控三十问答》,回答广大学生、家长和社会关心的儿童青少年近视防控常识类、预防类和干预矫治类问题。一起来看—— 常识类 一、什么是近视? 正视眼是指5米远以外的平行光线入射调节放松的眼球,通过眼球光学系统清晰成像在视网膜黄斑中心凹上,正常的眼光学系统取决于眼球的屈光力和眼轴长度等参数的匹配。 近视是指5米远以外的平行光线入射调节放松的眼球后,通过眼球光学系统,聚焦在视网膜的前方,在视网膜上形成一个模糊的像,其主要原因是眼轴过长,或者眼的屈光力过大,或者眼轴与眼的屈光力等其它光学参数失去匹配而造成。2021年10月,国家卫生健康委发布的《儿童青少年近视防控适宜技术指南(更新版)》将近视分为近视前期、低度近视和高度近视。若近视度数高,同时伴有眼底结构和功能损伤性改变,则称为病理性近视。",
+      "text_sha256": "13df8d5e755f524626308c78ea62cd1d42bb56e21238e793c42f3bccf482e755",
+      "source_fetched_at": "2026-11-28T03:55:38.988Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    },
+    {
+      "doc_id": "D03",
+      "source_title": "最新通知！教育部印发《学校新型冠状病毒感染防控工作方案》",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202212/63ae672b6ada004457c8d005.html",
+      "source_published": "2022-12",
+      "anchor": "为科学高效统筹学校新型冠状病毒感染防控和教育教学工作",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "为科学高效统筹学校新型冠状病毒感染防控和教育教学工作,全力确保师生生命健康安全,持续保障学校正常秩序,根据《关于对新型冠状病毒感染实施“乙类乙管”的总体方案》,结合教育系统实际,制定本方案。 一、调整优化校园检测策略 高等学校不再开展全员核酸筛查,对校内重点人员按照有关规定开展核酸或抗原检测。除跨地区返校入学外,高等学校师生出入校门和校园公共区域不要求提供核酸证明,其他外来人员进入校园的健康查验办法,由属地或学校征得属地同意后作出规定。根据实际需要和当地条件,中小学校和幼儿园开展师生筛检、轮检、抽检等适宜的核酸检测,师生出入校门无须提供核酸证明,其他外来人员进入校园须提供核酸证明。 二、科学安排教育教学方式 没有疫情的学校开展正常的线下教学活动。疫情流行期间,中小学校、幼儿园采取严格的封闭管理,高等学校可实施分区管理。",
+      "text_sha256": "562676b6885113ea11eaa9e594f762bce12541f6ebf97ad38195cff4e1fa22e9",
+      "source_fetched_at": "2026-11-28T03:55:39.018Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    },
+    {
+      "doc_id": "D04",
+      "source_title": "研究生教育学科专业目录（2022年）发布，自2023年起实施",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202209/63214de5f858056a22552341.html",
+      "source_published": "2022-09",
+      "anchor": "通知要求，新版目录自2023年起实施",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "通知要求,新版目录自2023年起实施。现有博士、硕士学位授权点需按照新版目录开展对应调整的,具体调整办法另行通知。根据博士、硕士学位授权点对应调整结果,2023年下半年启动的新一轮研究生招生、培养工作按新版目录进行。在校生及2022年启动招生、2023年9月入学学生的培养仍按原学科专业执行。 先一起来看《研究生教育学科专业目录(2022年)》—— 研究生教育学科专业目录 (2022年) 说 明 一、《研究生教育学科专业目录》分为学科门类、一级学科和专业学位类别,是国家进行学位授权审核与学科专业管理、学位授予单位开展学位授予与人才培养工作的基本依据,适用于硕士博士学位授予、招生培养,学科专业建设和教育统计、就业指导服务等工作。 二、本目录是在原《学位授予和人才培养学科目录(2011年颁布,2018年修订)》基础上编制形成的。",
+      "text_sha256": "c1bc3eddc86113a69804c9769d55bf760d54d0be3f3def158dd58da1271dfb29",
+      "source_fetched_at": "2026-11-28T03:55:39.047Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    },
+    {
+      "doc_id": "D05",
+      "source_title": "教育部等5部门联合印发意见，规范高校在线开放课程教学管理",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202204/624665851916aa00012e9a5a.html",
+      "source_published": "2022-04",
+      "anchor": "正式印发",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "正式印发 ,《意见》提出高校要切实履行在线开放课程教学管理责任,要加强对在线开放课程教师的管理高校,要严格学生在线学习规范与考试纪律等举措。 一起来看《意见》全文↓↓↓ 教育部等五部门关于加强普通高等学校在线开放课程教学管理的若干意见 为规范普通高等学校(以下简称高校)在线开放课程教学管理,维护在线开放课程教学秩序,根据《中华人民共和国高等教育法》《中华人民共和国网络安全法》《普通高等学校学生管理规定》《网络交易监督管理办法》等法律法规,现就加强高校用以认定学分的在线开放课程教学管理提出以下意见。 一、高校要切实履行在线开放课程教学管理责任 1.高校是在线开放课程教学管理的责任主体,要制定本校在线开放课程教学管理办法,规范课程选用、教学、评价、督导和学分认定等管理制度,将在线开放课程纳入日常教学管理,做到线上与线下课程同管理、同要求。",
+      "text_sha256": "517fffe94837df47d95c8032377d370a661583cf43707260bd3cc95d69a07f0e",
+      "source_fetched_at": "2026-11-28T03:55:39.075Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    },
+    {
+      "doc_id": "D06",
+      "source_title": "教育部公布第三批基础学科拔尖学生培养计划2.0基地名单",
+      "source_authority": "中华人民共和国教育部（moe.gov.cn）",
+      "source_url": "http://fx.xwapp.moe.gov.cn/article/202111/61a44c5f695ccf00015c496f.html",
+      "source_published": "2021-11",
+      "anchor": "加快培养基础学科拔尖人才",
+      "extraction_rule_id": "S21-EXTRACT-V1",
+      "excerpt": "加快培养基础学科拔尖人才。在前两批遴选建设199个基础学科拔尖学生培养基地的基础上,根据《教育部等六部门关于实施基础学科拔尖学生培养计划2.0的意见》(教高〔2018〕8号)、《教育部关于2019—2021年基础学科拔尖学生培养基地建设工作的通知》(教高函〔2019〕14号)和《教育部办公厅关于2021年度基础学科拔尖学生培养基地建设工作的通知》(教高厅函〔2021〕9号)等文件要求,经各地各高校申报、专家审议,教育部按相关工作程序确定了 基础学科拔尖学生培养计划2.0基地(2021年度)名单 。",
+      "text_sha256": "73fcbb5dfc26bcc3183ad5a69decc8cd16d54187a42c6b308276f8abe3a5e40e",
+      "source_fetched_at": "2026-11-28T03:55:39.102Z",
+      "http_status": 200,
+      "rights_basis": "PUBLIC_OFFICIAL_GOVERNMENT_INFORMATION",
+      "outbound_permission": "PERMITTED_PUBLIC_NONPERSONAL",
+      "contains_personal_data": false
+    }
+  ],
+  "queries": [
+    {
+      "query_id": "Q01",
+      "query_text": "怎样预防中小学生沉迷网络游戏",
+      "query_sha256": "6f1287dc8b1e27fc4abbc610e3155f6fb810e7df67bc1d29791bdbff538e8771",
+      "expected_doc_id": "D01",
+      "key_term": "网络游戏",
+      "distractor_doc_ids": [
+        "D04",
+        "D05"
+      ]
+    },
+    {
+      "query_id": "Q02",
+      "query_text": "儿童青少年近视防控有哪些常识和预防方法",
+      "query_sha256": "7cc9f4ce08e5446bb430583d33e1a7be654bb0a5b6ae04dcaca2536d7a0fa7d9",
+      "expected_doc_id": "D02",
+      "key_term": "近视",
+      "distractor_doc_ids": [
+        "D04",
+        "D06"
+      ]
+    },
+    {
+      "query_id": "Q03",
+      "query_text": "学校如何做好新型冠状病毒感染防控工作",
+      "query_sha256": "05e634b70f6799a31dc90ca5aeef151649efbc0f989670f767269b8e2e3e8d7a",
+      "expected_doc_id": "D03",
+      "key_term": "新型冠状病毒感染",
+      "distractor_doc_ids": [
+        "D05",
+        "D06"
+      ]
+    }
+  ]
+}
