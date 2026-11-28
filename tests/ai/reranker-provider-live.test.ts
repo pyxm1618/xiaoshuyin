@@ -170,6 +170,43 @@ function isTrackedTreeClean(): boolean {
   return status.length === 0;
 }
 
+function extractFetchUrl(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.toString();
+  }
+  return input.url;
+}
+
+async function withCountingGlobalFetch<T>(
+  baseUrl: string,
+  run: () => Promise<T>,
+): Promise<{ readonly value: T; readonly attemptCount: number }> {
+  const targetUrl = `${baseUrl}/services/rerank/text-rerank/text-rerank`;
+  const originalFetch = globalThis.fetch;
+  let attemptCount = 0;
+
+  const countingFetch = ((
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    if (extractFetchUrl(input) === targetUrl) {
+      attemptCount += 1;
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+
+  globalThis.fetch = countingFetch;
+  try {
+    const value = await run();
+    return { value, attemptCount };
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
 function scanSanitizedEvidence(
   evidence: SanitizedLiveEvidence,
   request: RerankRequest,
@@ -348,6 +385,124 @@ describe('Slice 23 controlled live provider verification', () => {
     expect(notEvaluatedReport.aggregateTechnicalResult).toBe('UNKNOWN');
   });
 
+  it('counts actual delegated rerank HTTP attempts accurately across 0, 1, and 2 (retry) fetch scenarios offline', async () => {
+    const testBaseUrl = 'https://offline-ws.cn-beijing.maas.aliyuncs.com/api/v1';
+    const targetUrl = `${testBaseUrl}/services/rerank/text-rerank/text-rerank`;
+    const originalGlobalFetch = globalThis.fetch;
+    const previousApiKey = process.env['DASHSCOPE_API_KEY'];
+
+    const makeSuccessResponse = (requestId: string) =>
+      new Response(
+        JSON.stringify({
+          request_id: requestId,
+          output: {
+            results: [
+              { index: 0, relevance_score: 0.91 },
+              { index: 2, relevance_score: 0.45 },
+              { index: 1, relevance_score: 0.12 },
+            ],
+          },
+          usage: { total_tokens: 42 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+
+    // Scenario 1: 0 actual fetches (invalid input rejected before transport)
+    {
+      let delegatedCalls = 0;
+      const fakeFetch = (async () => {
+        delegatedCalls += 1;
+        throw new Error('should not be called');
+      }) as typeof fetch;
+      globalThis.fetch = fakeFetch;
+      try {
+        const { attemptCount } = await withCountingGlobalFetch(testBaseUrl, async () => {
+          await expect(
+            rerank(
+              { ...SYNTHETIC_LIVE_REQUEST, query: '   ' },
+              { baseUrl: testBaseUrl },
+            ),
+          ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+        });
+        expect(attemptCount).toBe(0);
+        expect(delegatedCalls).toBe(0);
+        expect(globalThis.fetch).toBe(fakeFetch);
+      } finally {
+        globalThis.fetch = originalGlobalFetch;
+      }
+      expect(globalThis.fetch).toBe(originalGlobalFetch);
+    }
+
+    // Scenario 2: 1 delegated fetch (first attempt succeeds; unrelated URL ignored)
+    {
+      let delegatedCalls = 0;
+      const fakeFetch = (async () => {
+        delegatedCalls += 1;
+        return makeSuccessResponse('req-offline-1');
+      }) as typeof fetch;
+      globalThis.fetch = fakeFetch;
+      process.env['DASHSCOPE_API_KEY'] = 'offline-synthetic-key';
+      try {
+        const { value, attemptCount } = await withCountingGlobalFetch(testBaseUrl, async () => {
+          await globalThis.fetch('https://unrelated.example.com/health');
+          return rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl: testBaseUrl });
+        });
+        expect(value.providerRequestId).toBe('req-offline-1');
+        expect(attemptCount).toBe(1);
+        expect(delegatedCalls).toBe(2);
+        expect(globalThis.fetch).toBe(fakeFetch);
+      } finally {
+        globalThis.fetch = originalGlobalFetch;
+        if (previousApiKey === undefined) {
+          delete process.env['DASHSCOPE_API_KEY'];
+        } else {
+          process.env['DASHSCOPE_API_KEY'] = previousApiKey;
+        }
+      }
+      expect(globalThis.fetch).toBe(originalGlobalFetch);
+    }
+
+    // Scenario 3: 2 delegated fetches (503 retryable failure followed by 200 success)
+    {
+      let delegatedCalls = 0;
+      const fakeFetch = (async (input: Parameters<typeof fetch>[0]) => {
+        expect(extractFetchUrl(input)).toBe(targetUrl);
+        delegatedCalls += 1;
+        if (delegatedCalls === 1) {
+          return new Response(
+            JSON.stringify({
+              request_id: 'req-offline-retry-1',
+              code: 'ServiceUnavailable',
+              message: 'temporary pressure',
+            }),
+            { status: 503, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return makeSuccessResponse('req-offline-retry-2');
+      }) as typeof fetch;
+      globalThis.fetch = fakeFetch;
+      process.env['DASHSCOPE_API_KEY'] = 'offline-synthetic-key';
+      try {
+        const { value, attemptCount } = await withCountingGlobalFetch(testBaseUrl, () =>
+          rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl: testBaseUrl }),
+        );
+        expect(value.providerRequestId).toBe('req-offline-retry-2');
+        expect(attemptCount).toBe(2);
+        expect(delegatedCalls).toBe(2);
+        expect(attemptCount).toBeLessThanOrEqual(2);
+        expect(globalThis.fetch).toBe(fakeFetch);
+      } finally {
+        globalThis.fetch = originalGlobalFetch;
+        if (previousApiKey === undefined) {
+          delete process.env['DASHSCOPE_API_KEY'];
+        } else {
+          process.env['DASHSCOPE_API_KEY'] = previousApiKey;
+        }
+      }
+      expect(globalThis.fetch).toBe(originalGlobalFetch);
+    }
+  });
+
   it('executes controlled live verification only when RERANKER_LIVE_VERIFY=1, otherwise preserves NOT_EVALUATED with zero network calls', async () => {
     if (!isLiveOptedIn()) {
       const report = evaluateTechnicalEvidence({
@@ -421,21 +576,22 @@ describe('Slice 23 controlled live provider verification', () => {
     let result: RerankResult | null = null;
     let technicalError: RerankerTechnicalError | null = null;
 
-    try {
-      result = await rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl });
-    } catch (err) {
-      if (err instanceof RerankerTechnicalError) {
-        technicalError = err;
-      } else {
-        technicalError = new RerankerTechnicalError({
-          code: 'UNKNOWN_PROVIDER_FAILURE',
-          retryable: false,
-        });
+    const { attemptCount } = await withCountingGlobalFetch(baseUrl, async () => {
+      try {
+        result = await rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl });
+      } catch (err) {
+        if (err instanceof RerankerTechnicalError) {
+          technicalError = err;
+        } else {
+          technicalError = new RerankerTechnicalError({
+            code: 'UNKNOWN_PROVIDER_FAILURE',
+            retryable: false,
+          });
+        }
       }
-    }
+    });
 
     const elapsedMs = Math.max(0, Date.now() - startedAt);
-    const attemptCount = technicalError?.code === 'CONFIGURATION' ? 0 : 1;
 
     let validAccess = true;
     let contractCompatible: boolean | null = null;
