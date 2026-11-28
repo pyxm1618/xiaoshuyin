@@ -145,9 +145,13 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
     expect(product).toContain('不再对情绪调节1做可行性评估，只做任务进度记录');
     expect(product).toContain('**FINAL AUTHORITY: NOT REQUIRED。**');
     expect(product).toContain('其它目标的 feasibility 规则不变');
+    expect(product).toContain('不提供 A3081 可行性评估环节');
+    expect(product).toContain('历史已产生的 A3081 节点身份、历史记录与合法的历史读取全部保留');
     const technical = rootFile('Docs/V1技术设计.md');
     expect(technical).toContain('Emotion Regulation 1 不做 feasibility');
     expect(technical).toContain('其它目标的 feasibility 要求不变');
+    expect(technical).toContain('不得为新的 ER1 流程 materialize A3081');
+    expect(technical).toContain('历史节点与历史记录保留可读');
 
     // Other targets keep the unchanged TARGET -> FEASIBILITY -> PROGRESS gate.
     const sleepProgress = familyManifest.find((node) => node.nodeCode === 'A3012')!;

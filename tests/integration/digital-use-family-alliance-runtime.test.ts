@@ -446,51 +446,91 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       body = targetResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
 
-      const feasibilityResponse = await respond(
-        f,
-        family.nodes[1],
-        {
-          kind: 'FEASIBILITY',
-          feasibility: {
-            problemBehavior: {
-              concreteBehavior: { state: 'KNOWN', text: `${family.code} current problem behaviour` },
-              need: { state: 'KNOWN', text: 'Current behaviour serves an immediate need.' },
-              motivationBenefit: { state: 'KNOWN', text: 'Current behaviour has short-term benefit.' },
-              abilityConditions: { state: 'KNOWN', text: 'Current conditions make it easy to repeat.' },
-              challengeResistance: { state: 'UNKNOWN' },
-            },
-            replacementBehavior: {
-              concreteQuantified: {
-                state: 'KNOWN',
-                concreteTargetText: `${family.code} measurable target`,
+      if (family.code === 'EMOTION_REGULATION_1') {
+        // Owner decision D1: the new flow offers no ER1 feasibility
+        // assessment, so its frozen A3081 node is never materialized and a
+        // direct FEASIBILITY submission is refused rather than optional.
+        expect(body.nodes.map((node: any) => node.nodeCode))
+          .not.toContain('A3081');
+        const forbiddenFeasibility = await respond(
+          f,
+          family.nodes[1],
+          {
+            kind: 'FEASIBILITY',
+            feasibility: {
+              problemBehavior: {
+                concreteBehavior: { state: 'KNOWN', text: 'should never be stored' },
+                need: { state: 'UNKNOWN' },
+                motivationBenefit: { state: 'UNKNOWN' },
+                abilityConditions: { state: 'UNKNOWN' },
+                challengeResistance: { state: 'UNKNOWN' },
               },
-              need: { state: 'KNOWN', rating: 8 },
-              motivationBenefit: { state: 'KNOWN', rating: 7 },
-              abilityPossibility: { state: 'KNOWN', rating: 6 },
-              challengeResistance: { state: 'UNKNOWN' },
+              replacementBehavior: {
+                concreteQuantified: { state: 'UNKNOWN' },
+                need: { state: 'UNKNOWN' },
+                motivationBenefit: { state: 'UNKNOWN' },
+                abilityPossibility: { state: 'UNKNOWN' },
+                challengeResistance: { state: 'UNKNOWN' },
+              },
             },
           },
-        },
-        {
-          expectedSelectionRevision: target.selectionRevision,
-          expectedTargetRevision: target.revision,
-        }
-      );
-      expect(feasibilityResponse.statusCode, `${family.nodes[1]} ${feasibilityResponse.body}`).toBe(200);
-      body = feasibilityResponse.json();
-      target = body.targets.find((item: any) => item.targetCode === family.code);
-      expect(target.feasibility.problemBehavior.concreteBehavior).toMatchObject({
-        state: 'KNOWN',
-      });
-      expect(target.feasibility.replacementBehavior.need).toMatchObject({
-        state: 'KNOWN',
-        rating: 8,
-      });
-      expect(target.feasibility).not.toHaveProperty('score');
-      expect(target.feasibility).not.toHaveProperty('cutoff');
-      expect(target.sourceRefs).toEqual(
-        expect.arrayContaining([expect.objectContaining({ type: 'ASSERTION' })])
-      );
+          {
+            expectedSelectionRevision: target.selectionRevision,
+            expectedTargetRevision: target.revision,
+          }
+        );
+        expect(forbiddenFeasibility.statusCode, forbiddenFeasibility.body).toBe(409);
+        expect(forbiddenFeasibility.json()).toMatchObject({
+          code: 'FEASIBILITY_NOT_APPLICABLE',
+        });
+        expect(target.feasibility).toBeNull();
+      } else {
+        const feasibilityResponse = await respond(
+          f,
+          family.nodes[1],
+          {
+            kind: 'FEASIBILITY',
+            feasibility: {
+              problemBehavior: {
+                concreteBehavior: { state: 'KNOWN', text: `${family.code} current problem behaviour` },
+                need: { state: 'KNOWN', text: 'Current behaviour serves an immediate need.' },
+                motivationBenefit: { state: 'KNOWN', text: 'Current behaviour has short-term benefit.' },
+                abilityConditions: { state: 'KNOWN', text: 'Current conditions make it easy to repeat.' },
+                challengeResistance: { state: 'UNKNOWN' },
+              },
+              replacementBehavior: {
+                concreteQuantified: {
+                  state: 'KNOWN',
+                  concreteTargetText: `${family.code} measurable target`,
+                },
+                need: { state: 'KNOWN', rating: 8 },
+                motivationBenefit: { state: 'KNOWN', rating: 7 },
+                abilityPossibility: { state: 'KNOWN', rating: 6 },
+                challengeResistance: { state: 'UNKNOWN' },
+              },
+            },
+          },
+          {
+            expectedSelectionRevision: target.selectionRevision,
+            expectedTargetRevision: target.revision,
+          }
+        );
+        expect(feasibilityResponse.statusCode, `${family.nodes[1]} ${feasibilityResponse.body}`).toBe(200);
+        body = feasibilityResponse.json();
+        target = body.targets.find((item: any) => item.targetCode === family.code);
+        expect(target.feasibility.problemBehavior.concreteBehavior).toMatchObject({
+          state: 'KNOWN',
+        });
+        expect(target.feasibility.replacementBehavior.need).toMatchObject({
+          state: 'KNOWN',
+          rating: 8,
+        });
+        expect(target.feasibility).not.toHaveProperty('score');
+        expect(target.feasibility).not.toHaveProperty('cutoff');
+        expect(target.sourceRefs).toEqual(
+          expect.arrayContaining([expect.objectContaining({ type: 'ASSERTION' })])
+        );
+      }
 
       if (family.code === 'EXERCISE') {
         // AS-19 (positive half): now that EXERCISE has completed its own TARGET
@@ -697,7 +737,13 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.caseId]
     );
     expect(history.rows).toHaveLength(10);
-    expect(history.rows.every((row) => row.n === 5)).toBe(true);
+    // Owner decision D1: every target keeps selection + TARGET + FEASIBILITY +
+    // PROGRESS + HELP, except Emotion Regulation 1, which has no FEASIBILITY.
+    expect(
+      history.rows.every(
+        (row) => row.n === (row.target_code === 'EMOTION_REGULATION_1' ? 4 : 5)
+      )
+    ).toBe(true);
 
     const forbidden = await admin.query<{ n: number }>(
       `SELECT
@@ -1375,6 +1421,38 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(er1?.selected).toBe(true);
     expect(sleep?.selected).toBe(true);
 
+    // No early-execution bypass: before the ER1 TARGET definition, neither the
+    // frozen feasibility node (A3081) nor the progress node (A3082) is offered.
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3081');
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3082');
+    const earlyProgress = await respond(
+      f,
+      'A3082',
+      {
+        kind: 'PROGRESS',
+        progress: {
+          kind: 'EMOTION_REGULATION_1',
+          listening: { state: 'KNOWN', count: 1 },
+          affirmation: { state: 'KNOWN', observations: ['early attempt'] },
+          reducedEvaluation: { state: 'KNOWN', count: 0 },
+          selfRegulationJournal: { state: 'UNKNOWN' },
+          selfCare: { state: 'UNKNOWN' },
+          effectEvaluation: {
+            intrinsicMotivation: { state: 'UNKNOWN' },
+            selfEsteemConfidence: { state: 'UNKNOWN' },
+            abilityPotential: { state: 'UNKNOWN' },
+          },
+          modifyTarget: 'NO',
+        },
+      },
+      {
+        expectedSelectionRevision: er1.selectionRevision,
+        expectedTargetRevision: er1.revision,
+      }
+    );
+    expect(earlyProgress.statusCode, earlyProgress.body).toBe(409);
+    expect(earlyProgress.json()).toMatchObject({ code: 'SCENE_NODE_UNREACHABLE' });
+
     const er1Target = await respond(
       f,
       'A3080',
@@ -1389,10 +1467,81 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     er1 = body.targets.find((item: any) => item.targetCode === 'EMOTION_REGULATION_1');
 
     // Owner-approved D1: ER1 has no feasibility step, so its PROGRESS node is
-    // reachable directly from the completed target definition.
+    // reachable directly from the completed target definition, and its frozen
+    // A3081 node is not offered to the new flow at all.
     expect(er1.feasibility).toBeNull();
     expect(body.nodes.find((node: any) => node.nodeCode === 'A3082')?.status)
       .toBe('AVAILABLE');
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3081');
+
+    const er1FeasibilityPayload = {
+      kind: 'FEASIBILITY',
+      feasibility: {
+        problemBehavior: {
+          concreteBehavior: { state: 'KNOWN', text: 'should never be stored' },
+          need: { state: 'UNKNOWN' },
+          motivationBenefit: { state: 'UNKNOWN' },
+          abilityConditions: { state: 'UNKNOWN' },
+          challengeResistance: { state: 'UNKNOWN' },
+        },
+        replacementBehavior: {
+          concreteQuantified: { state: 'UNKNOWN' },
+          need: { state: 'UNKNOWN' },
+          motivationBenefit: { state: 'UNKNOWN' },
+          abilityPossibility: { state: 'UNKNOWN' },
+          challengeResistance: { state: 'UNKNOWN' },
+        },
+      },
+    };
+    const forbiddenFeasibility = await respond(f, 'A3081', er1FeasibilityPayload, {
+      expectedSelectionRevision: er1.selectionRevision,
+      expectedTargetRevision: er1.revision,
+    });
+    expect(forbiddenFeasibility.statusCode, forbiddenFeasibility.body).toBe(409);
+    expect(forbiddenFeasibility.json()).toMatchObject({
+      code: 'FEASIBILITY_NOT_APPLICABLE',
+    });
+
+    // Historical compatibility: an A3081 row created by the pre-change flow
+    // stays readable, and the new refusal never mutates it.
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id,case_id,scene_package_version,node_code,source_node_code,
+          status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
+       VALUES ($1,$2,'v1','A3081','A3081','COMPLETED',ARRAY['SLICE13_LEGACY_FIXTURE'],
+               '[]'::jsonb,'[]'::jsonb,1,now())`,
+      [f.familyId, f.caseId]
+    );
+    const historicalRead = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3081`,
+      headers: auth(f.manager.token),
+    });
+    expect(historicalRead.statusCode, historicalRead.body).toBe(200);
+    expect(historicalRead.json()).toMatchObject({
+      node: {
+        nodeCode: 'A3081',
+        sourceNodeCode: 'A3081',
+        status: 'COMPLETED',
+        revision: 1,
+        branchReasonCodes: ['SLICE13_LEGACY_FIXTURE'],
+      },
+    });
+
+    const forbiddenAfterHistory = await respond(f, 'A3081', er1FeasibilityPayload, {
+      expectedSelectionRevision: er1.selectionRevision,
+      expectedTargetRevision: er1.revision,
+    });
+    expect(forbiddenAfterHistory.statusCode, forbiddenAfterHistory.body).toBe(409);
+    expect(forbiddenAfterHistory.json()).toMatchObject({
+      code: 'FEASIBILITY_NOT_APPLICABLE',
+    });
+    const historicalRow = await admin.query(
+      `SELECT status, revision FROM scene_node_states
+        WHERE case_id=$1 AND node_code='A3081'`,
+      [f.caseId]
+    );
+    expect(historicalRow.rows).toEqual([{ status: 'COMPLETED', revision: 1 }]);
 
     const er1Progress = await respond(
       f,

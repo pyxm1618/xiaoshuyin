@@ -421,16 +421,16 @@ Complete only when the exact implementation head satisfies the scope and verific
 ## T1317 — EMOTION_REGULATION_1 canonical family runtime (A3080/A3081/A3082/A3083)
 
 **Goal**  
-Implement the EMOTION_REGULATION_1 target family's exact canonical target → feasibility → progress → help semantics.
+Implement the EMOTION_REGULATION_1 target family's owner-approved flow: target → progress → help, with A3081 retained for historical identity/reads only.
 
 **Expected Scope**  
-Implement A3080, A3081, A3082, A3083 using shared primitives plus the family-specific approved interaction/content references. Target node updates target-item semantics; feasibility records the five approved dimensions; progress records Scene-level progress/Evidence refs; help uses Manifest-approved help/re-entry.
+Implement A3080, A3082, A3083 using shared primitives plus the family-specific approved interaction/content references. Target node updates target-item semantics; the new flow does not materialize or display A3081 and rejects new feasibility submissions with `FEASIBILITY_NOT_APPLICABLE`; progress records Scene-level progress/Evidence refs; help uses Manifest-approved help/re-entry.
 
 **Mandatory Contracts**  
-No node renumbering, numeric adjacency, invented thresholds, Task/Checkin/Outcome, or cross-family semantic compression.   
+No node renumbering, numeric adjacency, invented thresholds, Task/Checkin/Outcome, or cross-family semantic compression. A3081 historical records and legal historical reads are preserved.
 
 **Verification**  
-Canonical path integration test for A3080 → A3081 → A3082 → A3083; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard.
+Canonical path integration test for A3080 → A3082 → A3083 with A3081 absent from the new flow and refused as a new submission; historical A3081 read remains 200; A3082 unreachable before A3080 completes; target/progress/help record fidelity; re-entry/history; node identity guard.
 
 **Prerequisites**  
 T1310.
@@ -674,7 +674,7 @@ Task Count: 25
 | T1314 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3050 → A3051 → A3052 → A3053; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. |
 | T1315 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3060 → A3061 → A3062 → A3063; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. |
 | T1316 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3070 → A3071 → A3072 → A3073; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. |
-| T1317 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3080 → A3081 → A3082 → A3083; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. |
+| T1317 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3080 → A3082 → A3083 with A3081 historical-only: new flow omits A3081, new feasibility is refused (`FEASIBILITY_NOT_APPLICABLE`), historical read stays 200, A3082 unreachable before A3080; target/progress/help record fidelity; re-entry/history; node identity guard. |
 | T1318 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007/009. | Canonical path integration test for A3090 → A3091 → A3092 → A3093; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. A3090-A3093 retention fixture included. |
 | T1319 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007. | Canonical path integration test for A3100 → A3101 → A3102 → A3103; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. |
 | T1320 | Frozen Spec §§9.1,9.5-9.6,14.4-14.6,25.2; S13-FR-007/010. | Canonical path integration test for A3110 → A3111 → A3112 → A3113; target/feasibility/progress/help record fidelity; re-entry/history; node identity guard. A3111 reachability + no-threshold fixture included. |
