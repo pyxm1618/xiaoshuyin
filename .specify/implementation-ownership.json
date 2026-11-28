@@ -506,9 +506,10 @@
         "path": "apps/server/api/src/services/professional-knowledge-consumption.ts"
       },
       "ownership": {
-        "kind": "FEATURE",
+        "kind": "SHARED",
         "features": [
-          "017-professional-knowledge-foundation"
+          "017-professional-knowledge-foundation",
+          "024-dense-only-retrieval-foundation"
         ]
       }
     },
@@ -1202,7 +1203,8 @@
           "009-safety-hold-control-foundation",
           "010-compliance-feature-policy-foundation",
           "012-digital-use-assessment-runtime",
-          "016-psychological-behavioral-intervention-contract-authority-reconciliation"
+          "016-psychological-behavioral-intervention-contract-authority-reconciliation",
+          "024-dense-only-retrieval-foundation"
         ]
       }
     },
@@ -1311,6 +1313,45 @@
         "kind": "FEATURE",
         "features": [
           "023-reranker-provider-adapter-foundation"
+        ]
+      }
+    },
+    {
+      "id": "dense-retrieval-024",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/ai/dense-retrieval/"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "024-dense-only-retrieval-foundation"
+        ]
+      }
+    },
+    {
+      "id": "dense-retrieval-schema-024",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/dense-retrieval-schema.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "024-dense-only-retrieval-foundation"
+        ]
+      }
+    },
+    {
+      "id": "knowledge-embeddings-migration-042",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/042_knowledge_embeddings.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "024-dense-only-retrieval-foundation"
         ]
       }
     }
