@@ -181,7 +181,7 @@ tests/architecture/sparsevec-readiness-evidence.test.ts
 1. Implement Plan §6 rules 1–12 in the exact validation order with the frozen reject codes.
 2. Implement canonical text `{c:v,...}/1000000000` for parameter binding only.
 3. Implement the DB mode function of Plan §7.1 as a pure helper (inputs: env object) and test RUN / FAIL / SKIP cases, including "only `DATABASE_URL` set" → SKIP.
-4. Tests: index 0 → 1; D-1 → D; D reject; key 5000 with dense dim 1024 accepted; non-ascending reject; duplicate incl. zero-valued duplicate reject; NaN/±Inf reject; `3.5e38` overflow reject; `1e-46` underflow reject; ±0 removal; all-zero / empty / null reject; `sparseVocabularyMax` defined/undefined behavior.
+4. Tests: index 0 → 1; D-1 → D; D reject; key 5000 with dense dim 1024 accepted; duplicate incl. zero-valued duplicate reject; NaN/±Inf reject; `3.5e38` overflow reject; `1e-46` underflow reject; ±0 removal; all-zero / empty / null reject. Add named tests: `synthetic unsorted unique fixture canonicalizes correctly` (validate index/value, detect duplicates before zero removal, ascending mapping); `synthetic duplicate including zero rejects before zero removal`; `actual non-ascending normalized Port payload rejects` (no synthetic sort); `sparseVocabularyMax = D allowed`; `sparseVocabularyMax > D rejects experiment` (preflight even with in-range items); `index >= sparseVocabularyMax rejects when bound <= D` (including zero-valued entry); `missing sparseVocabularyMax records NOT_PROVIDED and observed-only compatibility`. Synthetic canonicalization is architecture-only, never in real Provider → DB path.
 5. State test: only the full mapping suite derives `MAPPING_CONTRACT_VERIFIED = VERIFIED`.
 
 ### Verification
@@ -299,12 +299,13 @@ tests/evidence/sparsevec-readiness-stage-a.json    (written by the run; committe
 **Actions**
 1. Gate: `SPARSEVEC_PROVIDER_VERIFY=1` plus Plan §7.1 manual opt-in; otherwise SKIP.
 2. Assert `git rev-parse HEAD` = S and clean tree; store `implementation_subject_head = S`.
-3. Create document and query Port instances via `createEmbeddingProvider({ env })` with env exactly per Plan §10.2 (explicit `EMBEDDING_TEXT_TYPE=document` / `query`).
+3. Execute Plan §6 experiment-level authoritative namespace preflight for both role configurations before provider calls or DB mapping; > D → INVALID_EXPERIMENT_CONFIG / FAIL, no observed-index exception. Create document and query Port instances via `createEmbeddingProvider({ env })` with env exactly per Plan §10.2 (explicit `EMBEDDING_TEXT_TYPE=document` / `query`).
 4. One `embed()` for D01–D06 (document instance) and one for Q01–Q03 (query instance), `outputType: 'dense+sparse'`, `denseDimension: 1024`.
 5. Verify identity invariants (C21-70..C21-73); OK outcomes; 6 + 3 items; dense length 1024; non-null nonempty sparse; Plan §6 mapping for every item.
 6. Insert into TEMP `s21_items(sample_id text primary key, role text, dense vector(1024), sparse sparsevec(1000000000))` with bound parameters; read back; compute lineage hashes (Plan §10.3).
 7. Compute exact dense and sparse DB scores for every (query, document) pair; compare to independent references within frozen tolerances; attempt HNSW path if every row ≤ 1,000 nnz.
-8. Re-assert `git rev-parse HEAD` = S at run end.
+8. Generate the external access-controlled immutable audit bundle for the same run at S per Plan §14, validate privacy, publish via an existing approved mechanism, verify fetched bytes/hash and version identity, run/S linkage and independent auditor access, and record the six reference metadata fields in sanitized evidence. Never commit bundle bytes or vector arrays to Git. If no approved mechanism or auditor access exists, record BLOCKED, no positive PASS; integrity/identity mismatch is FAIL; do not create new infrastructure.
+9. Re-assert `git rev-parse HEAD` = S at run end.
 
 ### Verification
 - Command V-PROV (Plan §17) executed at HEAD = S exits 0 and writes the evidence file to `SPARSEVEC_EVIDENCE_PATH`.
@@ -312,13 +313,13 @@ tests/evidence/sparsevec-readiness-stage-a.json    (written by the run; committe
 - If the Slice 20 config fails with `SECRET_MISSING` / `CONFIG_MISSING`: evidence written with `SPARSE_PAYLOAD_VERIFIED = BLOCKED` and no positive flag.
 
 **Done**
-- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` with complete linkage, or a truthfully derived FAIL/BLOCKED.
+- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` with complete linkage including the retrievable immutable bundle (C21-40), or a truthfully derived FAIL/BLOCKED.
 
 **STOP**
 - Credential/endpoint unavailable → BLOCKED (no fabricated evidence); model ≠ `qwen3.7-text-embedding` or cross-role drift → INVALID_EXPERIMENT_CONFIG; raw provider bypass needed; payload incompatible with D/float32/16,000 → FAIL; Slice 20 Port cannot express roles → `UPSTREAM SLICE 20 PORT CAPABILITY RECONCILIATION REQUIRED`.
 
 **Acceptance / Evidence Ownership**
-- Linked evidence (row T007); Slice 20 retains transport/normalization/telemetry/cost ownership.
+- Linked evidence (row T007), external immutable bundle ref/hash and verified access for Audit 2; Slice 20 retains transport/normalization/telemetry/cost ownership.
 
 ---
 
@@ -423,7 +424,7 @@ tests/evidence/sparsevec-readiness-stage-a.json    (run output)
 1. Populate every Plan §14 key (including the V1技术设计 §4.2 fields, `tencentdb_kernel_version = "NOT_APPLICABLE_STAGE_A"`, `evidence_ref = "tests/evidence/sparsevec-readiness-stage-a.json#subject=<S>#run=<run_id>"`).
 2. Derive lower flags, aggregate, `candidate_a_readiness_state`, `execution_completion_state`, `sparsevec_spike_status`, `readiness_status`, `rag_candidate_status` with Plan §15 precedence.
 3. Verify cleanup and planner restoration; cleanup failure forces FAIL.
-4. Run the evidence schema, vocabulary, no-overclaim, no-self-reference-key and privacy tests against the written file.
+4. Run the evidence schema, vocabulary, no-overclaim, no-self-reference-key and privacy tests against the written file. Validate all six §14 reference metadata fields: immutable/version-pinned object reference, SHA-256 format, media type, version/object identity, run ID and S equality; require concrete metadata for positive real-run evidence, explicit nonpositive sentinel otherwise. Verify fetched bundle bytes SHA-256, run/S identity and privacy; no vector arrays or bundle bytes in repository evidence JSON. Named schema/state negatives cover absent/mismatched metadata and missing/unreadable bundle (BLOCKED; mismatch FAIL; never positive PASS), preserving existing state precedence.
 
 ### Verification
 - `bunx vitest run tests/architecture/sparsevec-readiness-evidence.test.ts` exits 0 with the evidence file present (schema/state/privacy tests executed, not skipped).
@@ -431,7 +432,7 @@ tests/evidence/sparsevec-readiness-stage-a.json    (run output)
 - Plan §13.4 negated secret grep exits 0 with empty stdout on the Slice 21 paths.
 
 **Done**
-- One sanitized artifact truthfully representing PASS / FAIL / BLOCKED / UNKNOWN / NOT_EVALUATED.
+- One sanitized artifact truthfully representing PASS / FAIL / BLOCKED / UNKNOWN / NOT_EVALUATED; positive real-run evidence requires the verified external immutable reference, never in-repository vector arrays.
 
 **STOP**
 - Cleanup/planner restoration failure; incomplete lineage; any state requiring manual override.
@@ -496,11 +497,13 @@ tests/evidence/sparsevec-readiness-stage-a.json   (the only file in the evidence
 **Actions**
 Report: repository; current main; S; F; merge base / ahead / behind; Frozen Spec head/blob; planning head; Slice 19 provenance; Slice 20 provenance lineage (`implementation_pr: 142`, `implementation_head`, `implementation_merge_commit`, `original_audit2_result: FAIL`, `original_audit2_evidence_ref: issuecomment-7189854137`, `remediation_pr: 153`, `remediation_head: ff89fc97…`, `final_audit2_closeout_ref: issuecomment-7206763327`, `remediation_merge_commit: 5c2ff5a1…`, `public_entry`); changed files; governance mode; PG/pgvector/image identity; role facts; provider calls (model, text_type, request IDs); mapping/D/nnz; DB round-trip; metrics/references/tolerances; HNSW/boundaries; manifest identity; raw/normalized/fused scores; `chinese_queries_passed`; four flags; aggregate; `candidate_a_readiness_state`; `execution_completion_state`; `sparsevec_spike_status`; `rag_candidate_status`; `readiness_status`; cleanup; scans; canonical regression run ID; limitations.
 
+Handoff also includes `normalized_payload_evidence_ref`, bundle SHA-256, version/object identity, run_id, implementation_subject_head, media type and auditor access status; provide access through the approved mechanism without credentials in the report. Audit 2 must be able to fetch and independently verify/recompute all Plan §14 numerical evidence; unavailable bundle means BLOCKED and no positive PASS. Developer does not execute Audit 2.
+
 ### Verification
 - Remote read-back confirms F, S ancestry, spec blob `77d1caf4…`, changed files and evidence blob; the report lists every field above with no placeholder.
 
 **Done**
-- Developer status (`C21-60`): `READY FOR INDEPENDENT AUDIT 2` (PASS or reproducible FAIL evidence complete), `BLOCKED` (dependency/credential/source/permission unavailable) or `INCONCLUSIVE` (UNKNOWN). Developer stops.
+- Developer status (`C21-60`): `READY FOR INDEPENDENT AUDIT 2` (PASS or reproducible FAIL evidence complete), `BLOCKED` (dependency/credential/source/permission or required bundle access unavailable) or `INCONCLUSIVE` (UNKNOWN). Developer stops.
 
 **STOP**
 - Do not perform Audit 2; do not merge; no production retrieval work.
