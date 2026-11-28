@@ -246,16 +246,24 @@ export async function loadCompliancePersonSnapshot(
 }
 
 /**
- * Narrow consumer-side serialization seam for mutable feature-policy
- * publication. Uses the exact advisory-lock key owned by migration 011's
- * publication/overlap guards and the caller's existing transaction.
+ * Narrow consumer-side pin on mutable feature-policy publication. Takes the
+ * exact advisory-lock key owned by migration 011's publication/overlap guards
+ * in SHARED mode, inside the caller's existing transaction:
+ *
+ *   consumer  ↔ consumer   shared / shared        → concurrent
+ *   publisher ↔ consumer   exclusive / shared     → mutually exclusive
+ *   publisher ↔ publisher  exclusive / exclusive  → serialized
+ *
+ * The policy therefore still cannot change underneath an evaluating
+ * transaction, while unrelated families evaluating the same feature identity
+ * no longer queue behind each other.
  */
 export async function lockComplianceFeatureEvaluationBasis(
   executor: CompliancePersonQueryExecutor,
   feature: ComplianceFeatureDescriptor
 ): Promise<void> {
   await executor.query(
-    `SELECT pg_advisory_xact_lock(
+    `SELECT pg_advisory_xact_lock_shared(
        hashtextextended($1 || chr(31) || $2, 0)
      )`,
     [feature.featureCode, feature.featureContractRevision]

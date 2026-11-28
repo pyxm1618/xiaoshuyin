@@ -179,8 +179,10 @@ export function registerConsentRoutes(
             }
           );
 
-          // AUTH-006: only formulations pinned to the exact superseded Consent
-          // version enter review. Other Cases/objects remain untouched.
+          // AUTH-006 / N-05: dependents pinned to the exact superseded Consent
+          // version, and dependents holding an unversioned (identity) ref to
+          // this Consent, enter review. Refs pinned to another version and
+          // other Cases/objects remain untouched.
           await markProblemFormulationsForConsentReview(tx, {
             familyId,
             consentId: consent.id,
