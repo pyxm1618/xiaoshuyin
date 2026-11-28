@@ -363,6 +363,17 @@ async function currentNodeBasis(
   return { current, initialA3000 };
 }
 
+function isEmotionRegulation1Feasibility(
+  node: Pick<DigitalUseNodeManifestEntry, 'stream' | 'role'>
+): boolean {
+  const identity = familyAllianceTargetIdentity(node);
+  return (
+    identity !== null &&
+    identity.role === 'FEASIBILITY' &&
+    identity.targetCode === 'EMOTION_REGULATION_1'
+  );
+}
+
 async function targetInputBasis(
   tx: pg.PoolClient,
   input: FamilyAllianceExecutionInput,
@@ -396,11 +407,25 @@ async function targetInputBasis(
   // FEASIBILITY: the manifest prerequisites for every HELP node remain
   // A3002_SELECTED_TARGET_<code>, exactly as for PROGRESS, and the HELP command
   // only records content/version/history refs.
+  //
+  // Owner-approved Emotion Regulation 1 exception: that target asks the parent
+  // to change their own interaction behaviour, so it records task progress
+  // without a feasibility assessment. Every other target keeps the gate.
   if (identity.role === 'FEASIBILITY' && !current.concrete_target_text) {
     throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
   }
-  if (identity.role === 'PROGRESS' && !current.feasibility_payload) {
-    throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+  if (identity.role === 'PROGRESS') {
+    // Layer 2 invariant, Owner decision D1: every other target keeps
+    // TARGET -> FEASIBILITY -> PROGRESS. Emotion Regulation 1 has no
+    // feasibility assessment, so its PROGRESS step requires the TARGET
+    // definition instead; skipping that is not allowed.
+    const prerequisiteMet =
+      identity.targetCode === 'EMOTION_REGULATION_1'
+        ? Boolean(current.concrete_target_text)
+        : Boolean(current.feasibility_payload);
+    if (!prerequisiteMet) {
+      throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+    }
   }
 
   return [{ type: 'TARGET_ITEM', id: current.id }];
@@ -493,6 +518,15 @@ async function materializeSelectedTargetNodes(
     if (candidate.stream !== 'FAMILY_ALLIANCE') continue;
     const identity = familyAllianceTargetIdentity(candidate);
     if (identity === null || !selected.has(identity.targetCode)) continue;
+    // Emotion Regulation 1 has no feasibility assessment in the new flow, so
+    // its frozen FEASIBILITY node is never newly materialized. Historical rows
+    // remain untouched and readable.
+    if (
+      identity.role === 'FEASIBILITY' &&
+      identity.targetCode === 'EMOTION_REGULATION_1'
+    ) {
+      continue;
+    }
     const row = selectedRowByCode.get(identity.targetCode);
     if (!row) throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
 
@@ -501,11 +535,17 @@ async function materializeSelectedTargetNodes(
     if (identity.role === 'FEASIBILITY' && !row.concrete_target_text) {
       continue;
     }
-    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node.
+    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node,
+    // except Emotion Regulation 1, which has no feasibility step: its PROGRESS
+    // step requires the TARGET definition instead.
     // HELP is not gated here: its frozen manifest prerequisite is only
     // A3002_SELECTED_TARGET_<code>, so the remediation must not tighten it.
-    if (identity.role === 'PROGRESS' && !row.feasibility_payload) {
-      continue;
+    if (identity.role === 'PROGRESS') {
+      const prerequisiteMet =
+        identity.targetCode === 'EMOTION_REGULATION_1'
+          ? Boolean(row.concrete_target_text)
+          : Boolean(row.feasibility_payload);
+      if (!prerequisiteMet) continue;
     }
 
     await ensureSceneNodeAvailable(tx, {
@@ -543,6 +583,14 @@ export async function executeFamilyAllianceNodeInTransaction(
       node,
       input.expectedCaseVersion
     );
+
+    // Owner decision D1: Emotion Regulation 1 asks the parent to change their
+    // own interaction behaviour, so the new flow offers no feasibility
+    // assessment at all. The frozen node identity stays readable for historical
+    // rows, but no new A3081 feasibility submission is accepted.
+    if (isEmotionRegulation1Feasibility(node)) {
+      throw familyHttpError('FEASIBILITY_NOT_APPLICABLE');
+    }
 
     // Pin the single Slice 12 package anchor in the caller-owned transaction.
     // This prevents an owner-side package replacement from racing after the

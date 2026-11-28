@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 2,
+  "changeId": "final-bounded-remediation-r05-emotion-regulation-1",
+  "status": "CONVERGED",
+  "authorityChanges": [
+    {
+      "path": "Docs/V1产品需求.md",
+      "previousBlobSha": "379cb8cfb377924cd21ccfe55baa5aecdf207f5e",
+      "newBlobSha": "b32c7366375568ebf5f5e352c8704f0fe23e0307"
+    },
+    {
+      "path": "Docs/V1技术设计.md",
+      "previousBlobSha": "2885694c1833c9643797c0947a1b7e581ae2fb05",
+      "newBlobSha": "f84ed89710bf040500f520e5b6e82362c2cd5a26"
+    }
+  ],
+  "unitImpacts": [
+    {
+      "authorityUnitId": "AUTH-V1P-071",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "013-digital-use-family-alliance-runtime",
+          "specPath": "specs/013-digital-use-family-alliance-runtime",
+          "requirementId": "14.4 Feasibility semantics",
+          "requiredArtifacts": [
+            "tests/integration/digital-use-family-alliance-runtime.test.ts",
+            "tests/scenes/digital-use/family-alliance-governance.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1P-103",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "013-digital-use-family-alliance-runtime",
+          "specPath": "specs/013-digital-use-family-alliance-runtime",
+          "requirementId": "14.4 Feasibility semantics",
+          "requiredArtifacts": [
+            "tests/integration/digital-use-family-alliance-runtime.test.ts",
+            "tests/scenes/digital-use/family-alliance-governance.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1T-064",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "013-digital-use-family-alliance-runtime",
+          "specPath": "specs/013-digital-use-family-alliance-runtime",
+          "requirementId": "14.4 Feasibility semantics",
+          "requiredArtifacts": [
+            "tests/integration/digital-use-family-alliance-runtime.test.ts",
+            "tests/scenes/digital-use/family-alliance-governance.test.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}
