@@ -52,7 +52,7 @@ Selection criterion: smallest naturally complete next technical capability with 
 | Context Builder | DEFER. Consumer of eligible Top Context; separate responsibilities per §14A. |
 | AI Task Runtime | DEFER. Downstream bounded AI orchestration per §15; no retrieval foundation shortcut. |
 
-## Purpose and Scope
+## Scope
 
 One goal: establish a bounded, reusable **persisted dense retrieval + reranking technical foundation** for Candidate C, from exact versioned knowledge-derived chunks and embeddings, through pre-ranking eligibility, actual pgvector dense retrieval and the normalized reranker, to bounded traceable Top Context candidates. It is not a temporary vector readiness spike, not a production RAG route, and not a professional quality claim.
 
