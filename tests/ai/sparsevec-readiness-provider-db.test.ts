@@ -17,21 +17,30 @@ import {
   PINNED_PGVECTOR_VERSION,
   SPARSE_D,
   SPARSE_IP_REL_TOL,
+  EVIDENCE_MODE_NOT_EVALUATED,
+  EVIDENCE_MODE_SAFE_REPOSITORY_NUMERIC,
   computeFixedFusion,
   deriveFusionPrototypeVerified,
+  deriveLowerFlags,
   deriveSpikeEvidenceStates,
+  evaluateModeANumericEvidence,
   mapActualPortSparseToPgSparsevec,
+  parsePgDenseVectorText,
   parsePgSparsevecText,
-  preflightSparseVocabularyBound,
   referenceDenseCosine,
   referenceSparseInnerProduct,
   resolveDbProbeMode,
+  resolveProviderPreflight,
+  sha256Canonical,
   sha256Utf8,
   validateChineseManifest,
   validateSanitizedEvidence,
   type ChineseSampleManifest,
   type EvidenceFlags,
   type FusionQueryResult,
+  type ModeADbReadback,
+  type ModeAItem,
+  type ModeAQueryDocumentResult,
 } from '../helpers/sparsevec-readiness.js';
 
 const ROOT = resolve(import.meta.dirname, '../..');
@@ -128,22 +137,20 @@ if (!shouldRun) {
           blockedReason = `BLOCKED:${code}`;
         }
 
-        // Check preflight sparseVocabularyMax before any provider call
-        if (!blockedReason && docConfig && queryConfig) {
-          const preDoc = preflightSparseVocabularyBound(docConfig.sparseVocabularyMax);
-          const preQuery = preflightSparseVocabularyBound(queryConfig.sparseVocabularyMax);
-          if (!preDoc.ok || !preQuery.ok) {
-            throw new Error('INVALID_EXPERIMENT_CONFIG: sparseVocabularyMax > D');
+        // Provider pre-call gate: credential/endpoint config + experiment namespace
+        // preflight only. Evidence delivery (Mode A) happens after the run, so no
+        // external bundle metadata is required before the provider call.
+        if (!blockedReason) {
+          const preflight = resolveProviderPreflight({
+            docConfig,
+            queryConfig,
+            docErrorCode: docConfig ? null : 'CONFIG_MISSING',
+            queryErrorCode: queryConfig ? null : 'CONFIG_MISSING',
+          });
+          if (!preflight.ok) {
+            if (preflight.kind === 'FAIL') throw new Error(preflight.reason);
+            blockedReason = preflight.blockedReason;
           }
-        }
-
-        // Check approved immutable evidence mechanism (must exist before claiming positive PASS)
-        const approvedBundleRef = process.env.SPARSEVEC_IMMUTABLE_BUNDLE_REF?.trim();
-        const approvedBundleSha = process.env.SPARSEVEC_IMMUTABLE_BUNDLE_SHA256?.trim();
-        const approvedBundleVer = process.env.SPARSEVEC_IMMUTABLE_BUNDLE_VERSION?.trim();
-        const approvedBundleMedia = process.env.SPARSEVEC_IMMUTABLE_BUNDLE_MEDIA_TYPE?.trim();
-        if (!blockedReason && (!approvedBundleRef || !approvedBundleSha || !approvedBundleVer || !approvedBundleMedia)) {
-          blockedReason = 'BLOCKED:NO_APPROVED_IMMUTABLE_EVIDENCE_MECHANISM';
         }
 
         const sourceFingerprints = manifestParsed.documents.map((d) => ({
@@ -155,9 +162,12 @@ if (!shouldRun) {
 
         if (blockedReason || !docConfig || !queryConfig) {
           const flags: EvidenceFlags = {
-            MAPPING_CONTRACT_VERIFIED: 'VERIFIED',
-            SPARSE_PAYLOAD_VERIFIED: 'BLOCKED',
-            PGVECTOR_SPARSEVEC_VERIFIED: 'VERIFIED',
+            ...deriveLowerFlags({
+              mapping: 'PASS',
+              provider: 'BLOCKED',
+              evidenceMode: 'NOT_EVALUATED',
+              linkedPgvector: 'NOT_EVALUATED',
+            }),
             FUSION_PROTOTYPE_VERIFIED: 'NOT_EVALUATED',
           };
           const states = deriveSpikeEvidenceStates({
@@ -219,12 +229,15 @@ if (!shouldRun) {
             observed_nnz_max: 0,
             observed_min_index: 0,
             observed_max_index: 0,
-            normalized_payload_evidence_ref: sentinel,
-            normalized_payload_evidence_sha256: sentinel,
-            normalized_payload_evidence_version: sentinel,
-            normalized_payload_evidence_media_type: sentinel,
-            normalized_payload_evidence_run_id: runId,
-            normalized_payload_evidence_subject_head: subjectHeadS,
+            evidence_mode: EVIDENCE_MODE_NOT_EVALUATED,
+            repository_numeric_evidence: EVIDENCE_MODE_NOT_EVALUATED,
+            repository_numeric_evidence_sha256: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_ref: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_sha256: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_version: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_media_type: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_run_id: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_subject_head: EVIDENCE_MODE_NOT_EVALUATED,
             mapping_result: 'VERIFIED',
             db_roundtrip_result: 'VERIFIED',
             distance_result: 'VERIFIED',
@@ -301,6 +314,9 @@ if (!shouldRun) {
 
         await client.query('BEGIN');
         const lineageItems: Record<string, unknown>[] = [];
+        const modeAItems: ModeAItem[] = [];
+        const modeADbReadback: ModeADbReadback[] = [];
+        const modeAPairs: ModeAQueryDocumentResult[] = [];
         const docMappedEntries = new Map<string, ReturnType<typeof mapActualPortSparseToPgSparsevec>>();
         const docDenseVecs = new Map<string, readonly number[]>();
         const queryMappedEntries = new Map<string, ReturnType<typeof mapActualPortSparseToPgSparsevec>>();
@@ -339,10 +355,27 @@ if (!shouldRun) {
               'INSERT INTO s21_items (sample_id, role, dense, sparse) VALUES ($1, $2, $3::vector(1024), $4::sparsevec(1000000000))',
               [d.doc_id, 'document', denseLiteral, mapped.canonicalText],
             );
-            const rb = await client.query('SELECT sparse::text AS sp FROM s21_items WHERE sample_id = $1', [d.doc_id]);
+            const rb = await client.query('SELECT dense::text AS dv, sparse::text AS sp FROM s21_items WHERE sample_id = $1', [
+              d.doc_id,
+            ]);
             const parsedRb = parsePgSparsevecText(rb.rows[0].sp);
             expect(parsedRb.dimension).toBe(SPARSE_D);
             expect(parsedRb.entries).toEqual(mapped.entries);
+
+            modeAItems.push({
+              sample_id: d.doc_id,
+              role: 'document',
+              provider_request_id: docOutcome.result.providerRequestId,
+              dense: [...item.dense],
+              sparse: item.sparse.map((entry) => ({ index: entry.index, value: entry.value })),
+            });
+            modeADbReadback.push({
+              sample_id: d.doc_id,
+              role: 'document',
+              dense: parsePgDenseVectorText(rb.rows[0].dv),
+              sparse_dimension: parsedRb.dimension,
+              sparse: parsedRb.entries.map((entry) => ({ coord: entry.coord, value: entry.value })),
+            });
 
             lineageItems.push({
               sample_id: d.doc_id,
@@ -377,10 +410,27 @@ if (!shouldRun) {
               'INSERT INTO s21_items (sample_id, role, dense, sparse) VALUES ($1, $2, $3::vector(1024), $4::sparsevec(1000000000))',
               [q.query_id, 'query', denseLiteral, mapped.canonicalText],
             );
-            const rb = await client.query('SELECT sparse::text AS sp FROM s21_items WHERE sample_id = $1', [q.query_id]);
+            const rb = await client.query('SELECT dense::text AS dv, sparse::text AS sp FROM s21_items WHERE sample_id = $1', [
+              q.query_id,
+            ]);
             const parsedRb = parsePgSparsevecText(rb.rows[0].sp);
             expect(parsedRb.dimension).toBe(SPARSE_D);
             expect(parsedRb.entries).toEqual(mapped.entries);
+
+            modeAItems.push({
+              sample_id: q.query_id,
+              role: 'query',
+              provider_request_id: queryOutcome.result.providerRequestId,
+              dense: [...item.dense],
+              sparse: item.sparse.map((entry) => ({ index: entry.index, value: entry.value })),
+            });
+            modeADbReadback.push({
+              sample_id: q.query_id,
+              role: 'query',
+              dense: parsePgDenseVectorText(rb.rows[0].dv),
+              sparse_dimension: parsedRb.dimension,
+              sparse: parsedRb.entries.map((entry) => ({ coord: entry.coord, value: entry.value })),
+            });
 
             lineageItems.push({
               sample_id: q.query_id,
@@ -427,6 +477,17 @@ if (!shouldRun) {
             const fusion = computeFixedFusion(q.query_id, q.expected_doc_id, candidates);
             maxFusionDiff = Math.max(maxFusionDiff, fusion.recompute_max_abs_diff);
             fusionResults.push(fusion);
+            for (const c of fusion.candidates) {
+              modeAPairs.push({
+                query_id: q.query_id,
+                doc_id: c.sample_id,
+                raw_dense: c.raw_dense,
+                raw_sparse: c.raw_sparse,
+                norm_dense: c.norm_dense,
+                norm_sparse: c.norm_sparse,
+                fused: c.fused,
+              });
+            }
           }
 
           await client.query('COMMIT');
@@ -435,15 +496,63 @@ if (!shouldRun) {
           cleanupStatus = cleanupCnt.rows[0].cnt === 0 ? 'CLEAN' : 'FAILED';
 
           const chinesePassed = fusionResults.filter((f) => f.strict_first).length;
+
+          const repositoryNumericEvidence = {
+            schema_version: 1 as const,
+            run_id: runId,
+            implementation_subject_head: subjectHeadS,
+            provider_config: {
+              configured_model_id: docOutcome.result.configuredModel.modelId,
+              model_version_label: docOutcome.result.configuredModel.versionOrRevision,
+              output_type: docOutcome.result.outputType,
+              dense_dimension: 1024,
+              document_text_type: 'document',
+              query_text_type: 'query',
+              endpoint_config_fingerprint: docOutcome.result.telemetry.endpointConfigFingerprint,
+            },
+            provider_calls: [
+              {
+                role: 'document' as const,
+                text_type: 'document' as const,
+                request_id: docOutcome.result.requestId,
+                provider_request_id: docOutcome.result.providerRequestId,
+                sample_ids: manifestParsed.documents.map((d) => d.doc_id),
+              },
+              {
+                role: 'query' as const,
+                text_type: 'query' as const,
+                request_id: queryOutcome.result.requestId,
+                provider_request_id: queryOutcome.result.providerRequestId,
+                sample_ids: manifestParsed.queries.map((q) => q.query_id),
+              },
+            ],
+            items: modeAItems,
+            db_readback: modeADbReadback,
+            query_document_results: modeAPairs,
+          };
+          const repositoryNumericEvidenceSha256 = sha256Canonical(repositoryNumericEvidence);
+          const modeAEvaluation = evaluateModeANumericEvidence(
+            repositoryNumericEvidence,
+            repositoryNumericEvidenceSha256,
+            { runId, subjectHead: subjectHeadS, manifest: manifestParsed },
+          );
+
+          const lowerFlags = deriveLowerFlags({
+            mapping: 'PASS',
+            provider: 'RAN_COMPLETE',
+            evidenceMode: modeAEvaluation.state,
+            linkedPgvector: cleanupStatus === 'CLEAN' ? 'PASS' : 'FAIL',
+          });
           const fusionFlag = deriveFusionPrototypeVerified({
             fusionMechanicsOk: maxFusionDiff <= FUSION_RECOMPUTE_ABS_TOL,
-            lowerTechnicalFlagsVerified: cleanupStatus === 'CLEAN',
+            lowerTechnicalFlagsVerified:
+              lowerFlags.MAPPING_CONTRACT_VERIFIED === 'VERIFIED' &&
+              lowerFlags.SPARSE_PAYLOAD_VERIFIED === 'VERIFIED' &&
+              lowerFlags.PGVECTOR_SPARSEVEC_VERIFIED === 'VERIFIED',
             chineseQueriesPassed: chinesePassed,
           });
           const flags: EvidenceFlags = {
-            MAPPING_CONTRACT_VERIFIED: 'VERIFIED',
-            SPARSE_PAYLOAD_VERIFIED: 'VERIFIED',
-            PGVECTOR_SPARSEVEC_VERIFIED: cleanupStatus === 'CLEAN' ? 'VERIFIED' : 'FAIL',
+            ...lowerFlags,
             FUSION_PROTOTYPE_VERIFIED: fusionFlag,
           };
           const states = deriveSpikeEvidenceStates({
@@ -529,12 +638,15 @@ if (!shouldRun) {
             observed_nnz_max: observedNnzMax,
             observed_min_index: observedMinIndex,
             observed_max_index: observedMaxIndex,
-            normalized_payload_evidence_ref: approvedBundleRef!,
-            normalized_payload_evidence_sha256: approvedBundleSha!,
-            normalized_payload_evidence_version: approvedBundleVer!,
-            normalized_payload_evidence_media_type: approvedBundleMedia!,
-            normalized_payload_evidence_run_id: runId,
-            normalized_payload_evidence_subject_head: subjectHeadS,
+            evidence_mode: EVIDENCE_MODE_SAFE_REPOSITORY_NUMERIC,
+            repository_numeric_evidence: repositoryNumericEvidence,
+            repository_numeric_evidence_sha256: repositoryNumericEvidenceSha256,
+            normalized_payload_evidence_ref: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_sha256: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_version: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_media_type: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_run_id: EVIDENCE_MODE_NOT_EVALUATED,
+            normalized_payload_evidence_subject_head: EVIDENCE_MODE_NOT_EVALUATED,
             mapping_result: 'VERIFIED',
             db_roundtrip_result: 'VERIFIED',
             distance_result: 'VERIFIED',

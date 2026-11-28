@@ -13,6 +13,16 @@ export const PINNED_PGVECTOR_IMAGE_REF =
 export const FROZEN_SPEC_HEAD = '8792c4cf4e366b5507ac451a68cd31b73e7f5261';
 export const FROZEN_SPEC_BLOB = '77d1caf4de6fdead3efcdb0cf3e8c594d444efbd';
 
+export const EVIDENCE_MODE_SAFE_REPOSITORY_NUMERIC = 'SAFE_REPOSITORY_NUMERIC_EVIDENCE';
+export const EVIDENCE_MODE_EXTERNAL_IMMUTABLE_REFERENCE = 'EXTERNAL_IMMUTABLE_REFERENCE';
+export const EVIDENCE_MODE_NOT_EVALUATED = 'NOT_EVALUATED';
+export const EVIDENCE_MODE_VALUES = [
+  EVIDENCE_MODE_SAFE_REPOSITORY_NUMERIC,
+  EVIDENCE_MODE_EXTERNAL_IMMUTABLE_REFERENCE,
+  EVIDENCE_MODE_NOT_EVALUATED,
+] as const;
+export type EvidenceMode = (typeof EVIDENCE_MODE_VALUES)[number];
+
 export type SparseRejectCode =
   | 'SPARSE_MISSING'
   | 'INDEX_OUT_OF_RANGE'
@@ -63,6 +73,48 @@ export interface SparsePreflightFailure {
   readonly ok: false;
   readonly code: 'INVALID_EXPERIMENT_CONFIG';
   readonly detail: string;
+}
+
+export type ProviderPreflightResult =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly kind: 'BLOCKED'; readonly blockedReason: string }
+  | { readonly ok: false; readonly kind: 'FAIL'; readonly reason: string };
+
+/**
+ * Provider pre-call gate (Plan §10.1). Only real execution prerequisites:
+ * Slice 20 runtime config (credential + approved endpoint) and experiment
+ * namespace preflight. No external evidence bundle is required before the call.
+ */
+export function resolveProviderPreflight(params: {
+  readonly docConfig: { readonly sparseVocabularyMax?: number } | null;
+  readonly queryConfig: { readonly sparseVocabularyMax?: number } | null;
+  readonly docErrorCode?: string | null;
+  readonly queryErrorCode?: string | null;
+}): ProviderPreflightResult {
+  if (!params.docConfig) {
+    return {
+      ok: false,
+      kind: 'BLOCKED',
+      blockedReason: `BLOCKED:${params.docErrorCode ?? 'CONFIG_MISSING'}`,
+    };
+  }
+  if (!params.queryConfig) {
+    return {
+      ok: false,
+      kind: 'BLOCKED',
+      blockedReason: `BLOCKED:${params.queryErrorCode ?? 'CONFIG_MISSING'}`,
+    };
+  }
+  const docPreflight = preflightSparseVocabularyBound(params.docConfig.sparseVocabularyMax);
+  const queryPreflight = preflightSparseVocabularyBound(params.queryConfig.sparseVocabularyMax);
+  if (!docPreflight.ok || !queryPreflight.ok) {
+    return {
+      ok: false,
+      kind: 'FAIL',
+      reason: 'INVALID_EXPERIMENT_CONFIG: sparseVocabularyMax > D or invalid',
+    };
+  }
+  return { ok: true };
 }
 
 export function preflightSparseVocabularyBound(
@@ -554,6 +606,429 @@ export function deriveFusionPrototypeVerified(params: {
   return params.chineseQueriesPassed === 3 ? 'VERIFIED' : 'UNKNOWN';
 }
 
+export function parsePgDenseVectorText(text: string): number[] {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
+    throw new Error('Invalid pgvector dense text');
+  }
+  const body = trimmed.slice(1, -1);
+  if (body.length === 0) return [];
+  return body.split(',').map((part) => Math.fround(Number(part)));
+}
+
+function canonicalizeForHash(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeForHash);
+  if (value && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) out[key] = canonicalizeForHash(source[key]);
+    return out;
+  }
+  return value;
+}
+
+export function canonicalSerialize(value: unknown): string {
+  return JSON.stringify(canonicalizeForHash(value));
+}
+
+export function sha256Canonical(value: unknown): string {
+  return sha256Utf8(canonicalSerialize(value));
+}
+
+export interface ModeAProviderConfig {
+  readonly configured_model_id: string;
+  readonly model_version_label: string;
+  readonly output_type: string;
+  readonly dense_dimension: number;
+  readonly document_text_type: string;
+  readonly query_text_type: string;
+  readonly endpoint_config_fingerprint: string;
+}
+
+export interface ModeAProviderCall {
+  readonly role: 'document' | 'query';
+  readonly text_type: 'document' | 'query';
+  readonly request_id: string;
+  readonly provider_request_id: string;
+  readonly sample_ids: readonly string[];
+}
+
+export interface ModeAItem {
+  readonly sample_id: string;
+  readonly role: 'document' | 'query';
+  readonly provider_request_id: string;
+  readonly dense: readonly number[];
+  readonly sparse: readonly { readonly index: number; readonly value: number }[];
+}
+
+export interface ModeADbReadback {
+  readonly sample_id: string;
+  readonly role: 'document' | 'query';
+  readonly dense: readonly number[];
+  readonly sparse_dimension: number;
+  readonly sparse: readonly { readonly coord: number; readonly value: number }[];
+}
+
+export interface ModeAQueryDocumentResult {
+  readonly query_id: string;
+  readonly doc_id: string;
+  readonly raw_dense: number;
+  readonly raw_sparse: number;
+  readonly norm_dense: number;
+  readonly norm_sparse: number;
+  readonly fused: number;
+}
+
+export interface RepositoryNumericEvidence {
+  readonly schema_version: 1;
+  readonly run_id: string;
+  readonly implementation_subject_head: string;
+  readonly provider_config: ModeAProviderConfig;
+  readonly provider_calls: readonly ModeAProviderCall[];
+  readonly items: readonly ModeAItem[];
+  readonly db_readback: readonly ModeADbReadback[];
+  readonly query_document_results: readonly ModeAQueryDocumentResult[];
+}
+
+export type ModeAEvidenceEvaluation =
+  | { readonly state: 'COMPLETE'; readonly canonicalSha256: string }
+  | { readonly state: 'INCOMPLETE'; readonly errors: string[] }
+  | { readonly state: 'MISMATCH'; readonly errors: string[] };
+
+const MODE_A_DENSE_DIMENSION = 1024;
+const MODE_A_MODEL_ID = 'qwen3.7-text-embedding';
+const MODE_A_OUTPUT_TYPE = 'dense+sparse';
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isFiniteDenseVector(value: unknown, dimension: number): value is readonly number[] {
+  return (
+    Array.isArray(value) &&
+    value.length === dimension &&
+    value.every((entry) => isFiniteNumber(entry))
+  );
+}
+
+/**
+ * Mode A evidence evaluation (Plan §14 SAFE_REPOSITORY_NUMERIC_EVIDENCE).
+ * INCOMPLETE: required numeric reproduction data missing or malformed -> BLOCKED.
+ * MISMATCH: present but run/lineage/hash/score/fusion inconsistent -> FAIL.
+ */
+export function evaluateModeANumericEvidence(
+  payload: unknown,
+  storedSha256: unknown,
+  context: {
+    readonly runId: string;
+    readonly subjectHead: string;
+    readonly manifest: ChineseSampleManifest;
+  },
+): ModeAEvidenceEvaluation {
+  const incomplete: string[] = [];
+  if (!isPlainObject(payload)) {
+    return { state: 'INCOMPLETE', errors: ['repository_numeric_evidence missing or not an object'] };
+  }
+  const p = payload;
+
+  if (p.schema_version !== 1) incomplete.push('schema_version must be 1');
+  if (typeof p.run_id !== 'string' || p.run_id.length === 0) incomplete.push('run_id missing');
+  if (typeof p.implementation_subject_head !== 'string' || p.implementation_subject_head.length === 0) {
+    incomplete.push('implementation_subject_head missing');
+  }
+
+  const cfg = p.provider_config;
+  if (!isPlainObject(cfg)) {
+    incomplete.push('provider_config missing');
+  } else {
+    if (cfg.configured_model_id !== MODE_A_MODEL_ID) incomplete.push('provider_config.configured_model_id mismatch');
+    if (typeof cfg.model_version_label !== 'string' || cfg.model_version_label.length === 0) {
+      incomplete.push('provider_config.model_version_label missing');
+    }
+    if (cfg.output_type !== MODE_A_OUTPUT_TYPE) incomplete.push('provider_config.output_type mismatch');
+    if (cfg.dense_dimension !== MODE_A_DENSE_DIMENSION) incomplete.push('provider_config.dense_dimension mismatch');
+    if (cfg.document_text_type !== 'document') incomplete.push('provider_config.document_text_type mismatch');
+    if (cfg.query_text_type !== 'query') incomplete.push('provider_config.query_text_type mismatch');
+    if (typeof cfg.endpoint_config_fingerprint !== 'string' || cfg.endpoint_config_fingerprint.length === 0) {
+      incomplete.push('provider_config.endpoint_config_fingerprint missing');
+    }
+  }
+
+  const calls = p.provider_calls;
+  if (!Array.isArray(calls) || calls.length !== 2) {
+    incomplete.push('provider_calls must contain exactly 2 entries');
+  } else {
+    const roles = new Set<string>();
+    for (const call of calls) {
+      if (!isPlainObject(call)) {
+        incomplete.push('provider_calls entry malformed');
+        continue;
+      }
+      const role = call.role;
+      if (role !== 'document' && role !== 'query') {
+        incomplete.push('provider_calls role invalid');
+        continue;
+      }
+      if (roles.has(role)) incomplete.push(`provider_calls duplicate role ${role}`);
+      roles.add(role);
+      if (call.text_type !== role) incomplete.push(`provider_calls ${role} text_type must equal role`);
+      if (typeof call.request_id !== 'string' || call.request_id.length === 0) {
+        incomplete.push(`provider_calls ${role} request_id missing`);
+      }
+      if (typeof call.provider_request_id !== 'string' || call.provider_request_id.length === 0) {
+        incomplete.push(`provider_calls ${role} provider_request_id missing`);
+      }
+      if (!Array.isArray(call.sample_ids) || call.sample_ids.length === 0) {
+        incomplete.push(`provider_calls ${role} sample_ids missing`);
+      }
+    }
+    if (!roles.has('document') || !roles.has('query')) incomplete.push('provider_calls must cover both roles');
+  }
+
+  const expectedDocIds = context.manifest.documents.map((d) => d.doc_id);
+  const expectedQueryIds = context.manifest.queries.map((q) => q.query_id);
+  const expectedPairs = new Set<string>();
+  for (const q of context.manifest.queries) {
+    for (const d of context.manifest.documents) expectedPairs.add(`${q.query_id}|${d.doc_id}`);
+  }
+
+  const items = p.items;
+  const itemSparseByRole = new Map<string, MappedSparseCoordinate[]>();
+  const itemDenseById = new Map<string, readonly number[]>();
+  if (!Array.isArray(items) || items.length !== expectedDocIds.length + expectedQueryIds.length) {
+    incomplete.push('items must contain 6 documents + 3 queries');
+  } else {
+    const seen = new Set<string>();
+    for (const item of items) {
+      if (!isPlainObject(item)) {
+        incomplete.push('items entry malformed');
+        continue;
+      }
+      const id = item.sample_id;
+      const role = item.role;
+      if (typeof id !== 'string' || (role !== 'document' && role !== 'query')) {
+        incomplete.push('items entry missing sample_id or role');
+        continue;
+      }
+      if (seen.has(id)) incomplete.push(`items duplicate sample_id ${id}`);
+      seen.add(id);
+      const expectedIds = role === 'document' ? expectedDocIds : expectedQueryIds;
+      if (!expectedIds.includes(id)) incomplete.push(`items unexpected ${role} sample_id ${id}`);
+      if (typeof item.provider_request_id !== 'string' || item.provider_request_id.length === 0) {
+        incomplete.push(`items ${id} provider_request_id missing`);
+      }
+      if (!isFiniteDenseVector(item.dense, MODE_A_DENSE_DIMENSION)) {
+        incomplete.push(`items ${id} dense must be ${MODE_A_DENSE_DIMENSION} finite numbers`);
+      } else {
+        itemDenseById.set(id, item.dense);
+      }
+      const sparse = item.sparse;
+      if (!Array.isArray(sparse) || sparse.length === 0) {
+        incomplete.push(`items ${id} sparse missing or empty`);
+        continue;
+      }
+      const mapped = mapActualPortSparseToPgSparsevec(
+        sparse.map((entry) =>
+          isPlainObject(entry) ? { index: Number(entry.index), value: Number(entry.value) } : { index: Number.NaN, value: Number.NaN },
+        ),
+      );
+      if (!mapped.ok) {
+        incomplete.push(`items ${id} sparse invalid: ${mapped.code}`);
+      } else {
+        itemSparseByRole.set(id, [...mapped.entries]);
+      }
+    }
+    for (const id of [...expectedDocIds, ...expectedQueryIds]) {
+      if (!seen.has(id)) incomplete.push(`items missing sample_id ${id}`);
+    }
+  }
+
+  const readbacks = p.db_readback;
+  if (!Array.isArray(readbacks) || readbacks.length !== expectedDocIds.length + expectedQueryIds.length) {
+    incomplete.push('db_readback must contain 9 entries');
+  } else {
+    const seen = new Set<string>();
+    for (const row of readbacks) {
+      if (!isPlainObject(row)) {
+        incomplete.push('db_readback entry malformed');
+        continue;
+      }
+      const id = row.sample_id;
+      if (typeof id !== 'string') {
+        incomplete.push('db_readback entry missing sample_id');
+        continue;
+      }
+      if (seen.has(id)) incomplete.push(`db_readback duplicate sample_id ${id}`);
+      seen.add(id);
+      if (row.sparse_dimension !== SPARSE_D) incomplete.push(`db_readback ${id} sparse_dimension must be D`);
+      if (!isFiniteDenseVector(row.dense, MODE_A_DENSE_DIMENSION)) {
+        incomplete.push(`db_readback ${id} dense must be ${MODE_A_DENSE_DIMENSION} finite numbers`);
+      }
+      const sparse = row.sparse;
+      if (!Array.isArray(sparse) || sparse.length === 0) {
+        incomplete.push(`db_readback ${id} sparse missing or empty`);
+        continue;
+      }
+      let prevCoord = 0;
+      let valid = true;
+      const coords: MappedSparseCoordinate[] = [];
+      for (const entry of sparse) {
+        if (!isPlainObject(entry)) {
+          valid = false;
+          break;
+        }
+        const coord = Number(entry.coord);
+        const value = Number(entry.value);
+        if (!Number.isSafeInteger(coord) || coord < 1 || coord > SPARSE_D || coord <= prevCoord || !Number.isFinite(value)) {
+          valid = false;
+          break;
+        }
+        prevCoord = coord;
+        coords.push({ coord, value: Math.fround(value) });
+      }
+      if (!valid) {
+        incomplete.push(`db_readback ${id} sparse coordinates invalid`);
+        continue;
+      }
+      const expectedSparse = itemSparseByRole.get(id);
+      if (expectedSparse && canonicalSerialize(coords) !== canonicalSerialize(expectedSparse)) {
+        incomplete.push(`db_readback ${id} does not equal mapped item sparse`);
+      }
+    }
+  }
+
+  const results = p.query_document_results;
+  if (!Array.isArray(results) || results.length !== expectedPairs.size) {
+    incomplete.push('query_document_results must contain 18 pairs');
+  } else {
+    const seen = new Set<string>();
+    for (const row of results) {
+      if (!isPlainObject(row)) {
+        incomplete.push('query_document_results entry malformed');
+        continue;
+      }
+      const key = `${String(row.query_id)}|${String(row.doc_id)}`;
+      if (!expectedPairs.has(key)) {
+        incomplete.push(`query_document_results unexpected pair ${key}`);
+        continue;
+      }
+      if (seen.has(key)) incomplete.push(`query_document_results duplicate pair ${key}`);
+      seen.add(key);
+      for (const field of ['raw_dense', 'raw_sparse', 'norm_dense', 'norm_sparse', 'fused'] as const) {
+        if (!isFiniteNumber(row[field])) incomplete.push(`query_document_results ${key} ${field} missing`);
+      }
+    }
+    for (const key of expectedPairs) {
+      if (!seen.has(key)) incomplete.push(`query_document_results missing pair ${key}`);
+    }
+  }
+
+  if (incomplete.length > 0) return { state: 'INCOMPLETE', errors: incomplete };
+
+  const mismatch: string[] = [];
+  if (p.run_id !== context.runId) mismatch.push('repository_numeric_evidence.run_id must equal evidence run_id');
+  if (p.implementation_subject_head !== context.subjectHead) {
+    mismatch.push('repository_numeric_evidence.implementation_subject_head must equal S');
+  }
+
+  const canonicalSha256 = sha256Canonical(payload);
+  if (typeof storedSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(storedSha256)) {
+    mismatch.push('repository_numeric_evidence_sha256 must be 64 lowercase hex chars');
+  } else if (storedSha256 !== canonicalSha256) {
+    mismatch.push('repository_numeric_evidence_sha256 does not match canonical payload bytes');
+  }
+
+  const rows = results as readonly ModeAQueryDocumentResult[];
+  const pairById = new Map<string, ModeAQueryDocumentResult>();
+  for (const row of rows) pairById.set(`${row.query_id}|${row.doc_id}`, row);
+  for (const q of context.manifest.queries) {
+    const candidates: FusionCandidateInput[] = [];
+    for (const d of context.manifest.documents) {
+      const row = pairById.get(`${q.query_id}|${d.doc_id}`)!;
+      const qSparse = itemSparseByRole.get(q.query_id)!;
+      const dSparse = itemSparseByRole.get(d.doc_id)!;
+      const qDense = itemDenseById.get(q.query_id)!;
+      const dDense = itemDenseById.get(d.doc_id)!;
+      const refSparse = referenceSparseInnerProduct(qSparse, dSparse);
+      const refDense = referenceDenseCosine(qDense, dDense);
+      if (Math.abs(row.raw_sparse - refSparse) > SPARSE_IP_REL_TOL * Math.max(1, Math.abs(refSparse))) {
+        mismatch.push(`query_document_results ${q.query_id}|${d.doc_id} raw_sparse outside tolerance`);
+      }
+      if (Math.abs(row.raw_dense - refDense) > DENSE_COSINE_ABS_TOL) {
+        mismatch.push(`query_document_results ${q.query_id}|${d.doc_id} raw_dense outside tolerance`);
+      }
+      candidates.push({ sample_id: d.doc_id, raw_dense: row.raw_dense, raw_sparse: row.raw_sparse });
+    }
+    const fusion = computeFixedFusion(q.query_id, q.expected_doc_id, candidates);
+    for (const c of fusion.candidates) {
+      const row = pairById.get(`${q.query_id}|${c.sample_id}`)!;
+      if (
+        Math.abs(row.norm_dense - c.norm_dense) > FUSION_RECOMPUTE_ABS_TOL ||
+        Math.abs(row.norm_sparse - c.norm_sparse) > FUSION_RECOMPUTE_ABS_TOL ||
+        Math.abs(row.fused - c.fused) > FUSION_RECOMPUTE_ABS_TOL
+      ) {
+        mismatch.push(`query_document_results ${q.query_id}|${c.sample_id} fusion does not recompute`);
+      }
+    }
+  }
+
+  return mismatch.length > 0 ? { state: 'MISMATCH', errors: mismatch } : { state: 'COMPLETE', canonicalSha256 };
+}
+
+export type MappingOutcome = 'PASS' | 'FAIL' | 'NOT_EVALUATED';
+export type ProviderOutcome = 'RAN_COMPLETE' | 'BLOCKED' | 'FAIL' | 'NOT_RUN';
+export type EvidenceModeOutcome = 'COMPLETE' | 'INCOMPLETE' | 'MISMATCH' | 'NOT_EVALUATED';
+export type LinkedPgvectorOutcome = 'PASS' | 'FAIL' | 'NOT_EVALUATED';
+
+/**
+ * Mechanical lower-flag derivation (Plan §15). Fake boolean flags are never set:
+ * a synthetic-only DB success without a completed linked real Provider run can
+ * never promote PGVECTOR_SPARSEVEC_VERIFIED to VERIFIED.
+ */
+export function deriveLowerFlags(input: {
+  readonly mapping: MappingOutcome;
+  readonly provider: ProviderOutcome;
+  readonly evidenceMode: EvidenceModeOutcome;
+  readonly linkedPgvector: LinkedPgvectorOutcome;
+}): Pick<EvidenceFlags, 'MAPPING_CONTRACT_VERIFIED' | 'SPARSE_PAYLOAD_VERIFIED' | 'PGVECTOR_SPARSEVEC_VERIFIED'> {
+  const mapping: VerificationFlag =
+    input.mapping === 'PASS' ? 'VERIFIED' : input.mapping === 'FAIL' ? 'FAIL' : 'NOT_EVALUATED';
+
+  let sparse: VerificationFlag;
+  if (input.provider === 'FAIL' || input.evidenceMode === 'MISMATCH') {
+    sparse = 'FAIL';
+  } else if (input.provider === 'RAN_COMPLETE' && input.evidenceMode === 'COMPLETE') {
+    sparse = 'VERIFIED';
+  } else if (input.provider === 'BLOCKED' || input.provider === 'RAN_COMPLETE') {
+    sparse = 'BLOCKED';
+  } else {
+    sparse = 'NOT_EVALUATED';
+  }
+
+  let pgvector: VerificationFlag;
+  if (input.linkedPgvector === 'FAIL') {
+    pgvector = 'FAIL';
+  } else if (
+    input.linkedPgvector === 'PASS' &&
+    input.provider === 'RAN_COMPLETE' &&
+    input.evidenceMode === 'COMPLETE'
+  ) {
+    pgvector = 'VERIFIED';
+  } else {
+    pgvector = 'NOT_EVALUATED';
+  }
+
+  return {
+    MAPPING_CONTRACT_VERIFIED: mapping,
+    SPARSE_PAYLOAD_VERIFIED: sparse,
+    PGVECTOR_SPARSEVEC_VERIFIED: pgvector,
+  };
+}
+
 export interface EvidenceFlags {
   readonly MAPPING_CONTRACT_VERIFIED: VerificationFlag;
   readonly SPARSE_PAYLOAD_VERIFIED: VerificationFlag;
@@ -670,6 +1145,9 @@ const REQUIRED_EVIDENCE_KEYS = [
   'observed_nnz_max',
   'observed_min_index',
   'observed_max_index',
+  'evidence_mode',
+  'repository_numeric_evidence',
+  'repository_numeric_evidence_sha256',
   'normalized_payload_evidence_ref',
   'normalized_payload_evidence_sha256',
   'normalized_payload_evidence_version',
@@ -809,10 +1287,38 @@ export function validateSanitizedEvidence(
     }
   }
 
-  // Validate external immutable bundle metadata rules
+  // Validate the single selected evidence delivery mode (Plan §14)
   const flags = ev.flags as EvidenceFlags | undefined;
   const isPositiveSparse = flags?.SPARSE_PAYLOAD_VERIFIED === 'VERIFIED';
-  if (isPositiveSparse) {
+  const evidenceMode = ev.evidence_mode;
+  const modeBKeys = [
+    'normalized_payload_evidence_ref',
+    'normalized_payload_evidence_sha256',
+    'normalized_payload_evidence_version',
+    'normalized_payload_evidence_media_type',
+    'normalized_payload_evidence_run_id',
+    'normalized_payload_evidence_subject_head',
+  ] as const;
+
+  if (typeof evidenceMode !== 'string' || !(EVIDENCE_MODE_VALUES as readonly string[]).includes(evidenceMode)) {
+    errors.push('evidence_mode must be SAFE_REPOSITORY_NUMERIC_EVIDENCE, EXTERNAL_IMMUTABLE_REFERENCE or NOT_EVALUATED');
+  } else if (evidenceMode === EVIDENCE_MODE_SAFE_REPOSITORY_NUMERIC) {
+    for (const key of modeBKeys) {
+      if (ev[key] !== EVIDENCE_MODE_NOT_EVALUATED) {
+        errors.push(`Unused Mode B field ${key} must be NOT_EVALUATED when Mode A is selected`);
+      }
+    }
+    const evaluation = evaluateModeANumericEvidence(ev.repository_numeric_evidence, ev.repository_numeric_evidence_sha256, {
+      runId: String(ev.run_id),
+      subjectHead: String(ev.implementation_subject_head),
+      manifest,
+    });
+    if (evaluation.state === 'INCOMPLETE') {
+      errors.push(`Mode A evidence incomplete: ${evaluation.errors.join('; ')}`);
+    } else if (evaluation.state === 'MISMATCH') {
+      errors.push(`Mode A evidence integrity mismatch: ${evaluation.errors.join('; ')}`);
+    }
+  } else if (evidenceMode === EVIDENCE_MODE_EXTERNAL_IMMUTABLE_REFERENCE) {
     const ref = ev.normalized_payload_evidence_ref;
     const sha = ev.normalized_payload_evidence_sha256;
     const ver = ev.normalized_payload_evidence_version;
@@ -827,17 +1333,17 @@ export function validateSanitizedEvidence(
       ref.startsWith('../') ||
       ref.startsWith('file://') ||
       ref.startsWith('BLOCKED') ||
-      ref.startsWith('NOT_EVALUATED')
+      ref === EVIDENCE_MODE_NOT_EVALUATED
     ) {
-      errors.push('Positive SPARSE_PAYLOAD_VERIFIED requires concrete non-local immutable bundle ref');
+      errors.push('Mode B requires concrete non-local immutable bundle ref');
     }
     if (typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha)) {
       errors.push('normalized_payload_evidence_sha256 must be 64 lowercase hex chars');
     }
-    if (typeof ver !== 'string' || ver.length === 0 || ver.startsWith('BLOCKED') || ver.startsWith('NOT_EVALUATED')) {
+    if (typeof ver !== 'string' || ver.length === 0 || ver.startsWith('BLOCKED') || ver === EVIDENCE_MODE_NOT_EVALUATED) {
       errors.push('normalized_payload_evidence_version must be concrete');
     }
-    if (typeof media !== 'string' || media.length === 0 || media.startsWith('BLOCKED') || media.startsWith('NOT_EVALUATED')) {
+    if (typeof media !== 'string' || media.length === 0 || media.startsWith('BLOCKED') || media === EVIDENCE_MODE_NOT_EVALUATED) {
       errors.push('normalized_payload_evidence_media_type must be concrete');
     }
     if (runId !== ev.run_id) {
@@ -845,6 +1351,22 @@ export function validateSanitizedEvidence(
     }
     if (subj !== ev.implementation_subject_head) {
       errors.push('normalized_payload_evidence_subject_head must equal implementation_subject_head');
+    }
+    if (
+      ev.repository_numeric_evidence !== EVIDENCE_MODE_NOT_EVALUATED ||
+      ev.repository_numeric_evidence_sha256 !== EVIDENCE_MODE_NOT_EVALUATED
+    ) {
+      errors.push('Unused Mode A fields must be NOT_EVALUATED when Mode B is selected');
+    }
+  } else {
+    if (isPositiveSparse) {
+      errors.push('Positive SPARSE_PAYLOAD_VERIFIED requires a complete selected evidence mode');
+    }
+    for (const key of [...modeBKeys, 'repository_numeric_evidence', 'repository_numeric_evidence_sha256'] as const) {
+      const value = ev[key];
+      if (value !== EVIDENCE_MODE_NOT_EVALUATED && !(typeof value === 'string' && value.startsWith('BLOCKED'))) {
+        errors.push(`Unselected evidence field ${key} must be NOT_EVALUATED or a BLOCKED sentinel`);
+      }
     }
   }
 
