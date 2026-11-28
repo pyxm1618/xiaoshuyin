@@ -205,18 +205,20 @@ canonical text = {c1:v1,c2:v2,...}/1000000000   (passed only as a bound query pa
 
 Rules (order of validation is part of the contract):
 
-1. Input is Slice 20 `EmbeddingItemResult.sparse` (`SparseEntry[]`), already validated by 020; Slice 21 re-checks at the DB boundary and never re-normalizes.
+1. Actual Port input is Slice 20 `EmbeddingItemResult.sparse` (`SparseEntry[]`), already validated and canonically ordered by 020; Slice 21 re-checks at the DB boundary and never re-normalizes actual Port output. Before any real experiment provider call or DB mapping, execute rule 10 namespace preflight for both role configurations.
 2. `sparse === null` or missing → reject (`SPARSE_MISSING`); missing sparse is never an empty success.
 3. Each `index` must be `Number.isSafeInteger` and `>= 0`; `index >= D` → reject (`INDEX_OUT_OF_RANGE`); `index = D-1` → accept and maps to SQL `D`.
-4. Strict ascending order required; any non-increasing neighbor → reject (`NON_CANONICAL_ORDER`). Duplicate detection (`DUPLICATE_INDEX`) is evaluated on the raw list **before** zero removal, so a duplicate whose value is 0 still rejects.
+4. Actual Port path: strict ascending order required; non-ascending actual Port payload → reject (`NON_CANONICAL_ORDER`), never sort it. Duplicate detection (`DUPLICATE_INDEX`) is evaluated on the raw list **before** zero removal, so a duplicate whose value is 0 still rejects. Synthetic-only exception is defined below.
 5. Each `value` must be finite (`NONFINITE_VALUE`).
 6. `f = Math.fround(value)`: `!Number.isFinite(f)` → reject (`FLOAT32_OVERFLOW`); `value !== 0 && f === 0` → reject (`FLOAT32_UNDERFLOW_TO_ZERO`).
 7. Only after 3–6 pass, entries with `value === 0` (`+0` or `-0`) are removed.
 8. Empty or all-zero after removal → reject (`EMPTY_SPARSE`).
 9. One D for every document and query row; dense dimension never bounds or derives sparse D.
-10. If `loadEmbeddingRuntimeConfig(env).sparseVocabularyMax` is defined, `index >= sparseVocabularyMax` → reject; if undefined, record `sparse_vocabulary_bound = "NOT_PROVIDED"` and never infer a bound.
+10. Experiment-level namespace preflight: if authoritative `loadEmbeddingRuntimeConfig(env).sparseVocabularyMax` is defined and exceeds D, fail closed (`INVALID_EXPERIMENT_CONFIG`) before provider calls or DB mapping, even if every observed index would fit D. If defined and <= D (including equality), enforce `index < sparseVocabularyMax` for every item/index in addition to rule 3, before zero removal (`INDEX_OUT_OF_RANGE` on violation). If undefined, record `sparse_vocabulary_bound = "NOT_PROVIDED"`; assert observed payload compatibility only, never infer provider full vocabulary size.
 11. Readback must reproduce D, the exact coordinate set and `Math.fround` weights exactly (`===` per weight).
 12. No token hashing, string reindexing, collision merge, clipping, truncation, per-vector D, binary protocol.
+
+**AS-02 architecture-only synthetic fixture:** may begin unsorted and MUST be canonicalized for the synthetic mapping test. Validate all indices (including applicable bound) and values (finite and float32 representability) first; detect duplicate indices on the original entries before any zero removal and reject duplicates, including zero-valued duplicates. Sort unique entries by index ascending, then remove exact ±0, reject empty/all-zero, and perform 0-based → 1-based mapping with the same D and numeric rules. This synthetic-only canonicalization must never be callable from the actual Provider → DB execution path. Actual noncanonical Port output rejects; unsorted unique synthetic input canonicalizes and verifies mapping.
 
 ## 7. Real DB Probe Contract
 
@@ -346,7 +348,7 @@ per item: sample_id, provider_request_id, normalized_sparse_sha256, mapped_spars
           dense_sha256, nnz, observed_min_index, observed_max_index, raw dense/sparse scores per query
 ```
 
-A provider-only PASS plus a detached synthetic DB PASS is insufficient (NS-04). Replays of captured payloads cannot set positive flags.
+A provider-only PASS plus a detached synthetic DB PASS is insufficient (NS-04). Replays of captured payloads cannot set positive flags. The same real run at S must capture the external immutable numeric audit bundle specified in §14; hashes alone are not sufficient lineage for independent reproduction.
 
 ### 10.4 Frozen Chinese technical corpus (6 documents × 3 queries)
 
@@ -505,6 +507,8 @@ provider_calls[] {role, text_type, configured_model_id, model_version_label, out
 configured_sparse_cap (Slice 20 maxSparseElements), sparse_vocabulary_bound ("NOT_PROVIDED" or value)
 sparse_dimension = 1000000000, dense_dimension = 1024, dimension_policy = "S21_SPIKE_ONLY_D_1E9"
 items[] (lineage per §10.3), observed_nnz_max, observed_min_index, observed_max_index
+normalized_payload_evidence_ref, normalized_payload_evidence_sha256, normalized_payload_evidence_version,
+normalized_payload_evidence_media_type, normalized_payload_evidence_run_id, normalized_payload_evidence_subject_head
 mapping_result, db_roundtrip_result, distance_result, independent_calculation
 tolerances {sparse_ip_rel: 1e-5, dense_cosine_abs: 1.25e-4, fusion_recompute_abs: 1e-12}
 index_behavior {hnsw_explain_index_used, planner_restored, synthetic_boundaries[], actual_hnsw_compatible}
@@ -519,6 +523,18 @@ sparsevec_spike_status, rag_candidate_status, readiness_status, readiness_scope
 candidate_b_status = "UNAFFECTED", candidate_c_status = "UNAFFECTED"
 rag_readiness = "NOT_DERIVED", production_route_selection = "DEFERRED_TO_GOLD_DATASET"
 ```
+
+**External immutable audit evidence reference (Frozen Spec §14).** A real Provider → DB run at S must generate an access-controlled immutable audit evidence bundle outside the repository, containing only the approved experiment's numerical reproduction data:
+- `schema_version`, `run_id`, `implementation_subject_head`, configured model identity (same identity/configuration and role-specific text_type as §10.2), provider request identifiers linked to sample IDs/roles;
+- `items[]`: sample_id, role, dense numeric vector, sparse [{index,value}] from the actual normalized Port;
+- `db_readback[]`: sample_id, dense numeric vector, sparse coordinates/values and dimension (explicit 1-based SQL coordinate semantics);
+- `query_document_results[]`: query_id, doc_id, DB-derived raw_dense, DB-derived raw_sparse; optionally mapped canonical sparsevec text.
+
+No API key, Authorization header, raw HTTP body, raw provider response envelope, source excerpt, raw query text, token metadata, family/minor/patient/private data or unapproved data in the bundle. No vector arrays or bundle bytes in Git, including the sanitized evidence JSON. Only the six reference metadata fields above are added to repository evidence; no credential-bearing URLs. Use an existing approved access-controlled immutable object mechanism, version-pinned or content-addressed, readable by the independent auditor. The ref must identify that exact object/version, not a mutable URL, local temporary path or developer laptop path. This is experiment evidence only, not production storage or a new product infrastructure requirement; do not add S3, Supabase, a database, workflow, evidence service or any new implementation path.
+
+For positive real-run evidence all six metadata fields are concrete: SHA-256 of exact fetched bundle bytes (64 hex characters), version/object identity, media type, run ID and S; `normalized_payload_evidence_run_id == evidence.run_id`, `normalized_payload_evidence_subject_head == implementation_subject_head`, with matching IDs inside the fetched bundle. Record an explicit BLOCKED/NOT_EVALUATED sentinel for unavailable reference fields on nonpositive runs; never substitute an invented ref/hash. If no approved mechanism exists or publication/retrieval/auditor access is unavailable, the real-run evidence is BLOCKED (no positive PASS); preserve existing deterministic FAIL precedence. An integrity, identity or numeric mismatch is FAIL. This is a mechanical lineage/permission prerequisite under §15, not a new state or state machine.
+
+Independent Audit 2 must retrieve the referenced bytes, verify SHA-256, object/version, run ID and S, and independently recompute the dense and sparse lineage hashes, canonical mapped sparsevec representation/hash, DB readback hash/equality and dense/sparse reference scores from the captured arrays, using §6 and §8 tolerances and matching sample/query/document IDs; compare each result with the committed sanitized evidence. The bundle schema version and helper at S must specify the exact deterministic serialization/hash inputs (UTF-8, stable ordered fields/arrays and numeric representation) for every lineage hash so independent recomputation is possible without trusting Developer-calculated results. Compare DB-derived scores in the bundle with sanitized scores and independently calculated references. Handoff must include ref, SHA-256, version/object identity, run ID, S and verified auditor access status. Unavailable bundle means no positive independent PASS. No new provider call is required to reproduce the recorded run.
 
 Bounded status vocabularies (values outside these sets fail the schema test):
 
@@ -536,7 +552,7 @@ Bounded status vocabularies (values outside these sets fail the schema test):
 Lower flags ∈ {`VERIFIED`, `FAIL`, `BLOCKED`, `UNKNOWN`, `NOT_EVALUATED`}, default `NOT_EVALUATED`, derived by helper functions from predicates (no Developer-set boolean):
 
 - `MAPPING_CONTRACT_VERIFIED = VERIFIED` iff every §6 positive/negative architecture case passes.
-- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` iff gate open (§4), both calls through the public Port with §10.2 identity, 6 + 3 items returned with non-null nonempty sparse and 1024-dim dense, all items pass §6, lineage hashes present. `INVALID_EXPERIMENT_CONFIG` → `FAIL`; credential/endpoint/model unavailable → `BLOCKED`; provider returns no sparse for the documented dense&sparse request → `FAIL`.
+- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` iff gate open (§4), both calls through the public Port with §10.2 identity, 6 + 3 items returned with non-null nonempty sparse and 1024-dim dense, all items pass §6, lineage hashes present and §14 immutable reference lineage/permission prerequisite satisfied. Missing approved evidence mechanism or auditor access → `BLOCKED`; invalid bundle integrity/identity → `FAIL`. `INVALID_EXPERIMENT_CONFIG` → `FAIL`; credential/endpoint/model unavailable → `BLOCKED`; provider returns no sparse for the documented dense&sparse request → `FAIL`.
 - `PGVECTOR_SPARSEVEC_VERIFIED = VERIFIED` iff §7 identity/role, linked payload insert/readback exact, §8 references within tolerance (analytical + linked), §7.2 boundaries as expected, §9 EXPLAIN index path observed with planner restored, §12 cleanup CLEAN.
 - `FUSION_PROTOTYPE_VERIFIED`: `fusion_mechanics_ok` := linked paired scores for the same six IDs, recompute ≤ 1e-12, and the constant/missing/duplicate/non-finite/tie fixtures behave as frozen.
   - `VERIFIED` iff `fusion_mechanics_ok` and `chinese_queries_passed = 3`;
