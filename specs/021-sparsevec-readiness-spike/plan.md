@@ -7,7 +7,7 @@
 > Frozen Spec exact head: `8792c4cf4e366b5507ac451a68cd31b73e7f5261`
 > Frozen Spec blob (`specs/021-sparsevec-readiness-spike/spec.md`): `77d1caf4de6fdead3efcdb0cf3e8c594d444efbd`
 > Superseded Spec authority (history only): head `688ad88ee4bbadce29a884f9e31d6e85bc8fee48`, blob `952a64610f09997a86571e1e1f390eb5660170ca` — SUPERSEDED BY TARGETED SPEC CORRECTION.
-> Planning branch: `plan/021-sparsevec-readiness-spike` (previous planning head `2363bb5e41e6f1a2b92ee4c9f406b784cab711d3` — NOT executable; superseded by this reconciliation).
+> Planning branch (historical admission): `plan/021-sparsevec-readiness-spike` (previous planning head `2363bb5e41e6f1a2b92ee4c9f406b784cab711d3` — NOT executable; superseded by the admitted reconciliation). T007 bounded correction branch: `planfix/021-t007-evidence-delivery`.
 > This document does not self-record its own Audit 1 verdict (no self-reference). The Audit 1 verdict is reported against the exact remote planning head outside this file.
 > Developer AI: NOT AUTHORIZED by this document. See §4 Implementation Gate.
 
@@ -79,6 +79,8 @@ Upstream state:
 
 If any value above changes before implementation, T001 re-reads remote truth; no stale snapshot authorizes development.
 
+**2026-11-28 T007 bounded correction (supersedes historical admission/gate snapshot only):** current main `80cf8d267ce6b8b771635f49e5fd0f68b5694a89` includes D04 admission (#167); Frozen Spec blob unchanged. Existing PR #168 is OPEN at `80cd3466615a258a7517a48ecb411ce0b45a2494`; old subject S `f349e48037c3a995d2de5a3f9e065b5105310fd3`. This correction addresses B-02 and M-01 only; B-01 (actual DashScope access for positive Candidate A) remains mandatory. No implementation change or audit verdict is authorized. See §20 for bounded continuation after fresh Audit 1 and correction admission.
+
 ## 2. Upstream Traceability
 
 This Plan consumes, and does not amend, the following authorities (precedence: four Docs → frozen upstream specs → Frozen Slice 21 Spec → this Plan):
@@ -130,9 +132,9 @@ Development may start only when T001 proves, on then-current remote truth, ALL o
    (e) remediation merge `5c2ff5a16d4f9116141f60e973b82b88aa5fbe35` is an ancestor of current `origin/main`;
    (f) current `origin/main` canonical CI (`CI` + `Spec Governance` workflows, required checks incl. `Integration Tests`) is PASS.
    The original head `27a0ac57…` is NOT required to receive a PASS verdict. The independent Audit 2 requirement is satisfied only by the FAIL evidence plus the audited remediation exact-head PASS plus the remediation merge on main — never by narrative or by relabelling `27a0ac57…` as PASS.
-5. No competing Slice 21 implementation/owner exists.
+5. No competing Slice 21 implementation/owner exists. The existing PR #168 is the sole intended continuation for this bounded correction, not a competing owner; verify its exact remote identity before reuse (§20).
 6. Current change-governance still classifies `tests/**` as fixed-exempt and the six paths need no ownership.
-7. The Slice 21 Spec and the Audit-1-passed Planning are merged to `main` through a separate planning admission PR (repository practice, cf. Slice 20 PR #112 before PR #142): `origin/main:specs/021-sparsevec-readiness-spike/{spec,plan,checklist,tasks}.md` blobs equal the Audit-1-passed planning-head blobs. The implementation branch is created from that `main`, so the implementation PR diff is exactly the six §5.1 paths.
+7. The Slice 21 Spec and the Audit-1-passed Planning are merged to `main` through a separate planning admission PR (repository practice, cf. Slice 20 PR #112 before PR #142): `origin/main:specs/021-sparsevec-readiness-spike/{spec,plan,checklist,tasks}.md` blobs equal the Audit-1-passed planning-head blobs. For this correction the fresh Audit 1 and correction admission are required; after admission reconcile the existing PR #168 branch to that main without creating a competing implementation or rewriting history, before freezing new S. The implementation PR diff remains exactly the six §5.1 paths.
 
 Planning-time result:
 
@@ -319,7 +321,9 @@ Rationale (fixed, not tunable): pgvector 0.8.7 stores `vector` components as flo
 
 ### 10.1 Execution switch
 
-`tests/ai/sparsevec-readiness-provider-db.test.ts` runs only when `SPARSEVEC_PROVIDER_VERIFY === '1'` AND the DB mode of §7.1 is RUN (manual opt-in); otherwise `describe.skip` with `NOT_EVALUATED`. When opted in and Slice 20 config fails with `SECRET_MISSING`/`CONFIG_MISSING`, the run records `BLOCKED` (no positive flag) and writes evidence only if `SPARSEVEC_EVIDENCE_PATH` is set. It never runs in normal CI.
+`tests/ai/sparsevec-readiness-provider-db.test.ts` runs only when `SPARSEVEC_PROVIDER_VERIFY === '1'` AND the DB mode of §7.1 is RUN (manual opt-in); otherwise `describe.skip` with `NOT_EVALUATED`. When opted in and Slice 20 config fails with `SECRET_MISSING`/`CONFIG_MISSING`, the run records `SPARSE_PAYLOAD_VERIFIED = BLOCKED`, linked DB and fusion flags remain `NOT_EVALUATED` if not run (§15), and writes evidence only if `SPARSEVEC_EVIDENCE_PATH` is set. It never runs in normal CI.
+
+After credential, approved endpoint, DB, identity and execution gates, make actual Provider calls and execute the linked DB/Chinese/fusion experiment; capture approved normalized numeric evidence, finalize one §14 delivery mode, verify its lineage/integrity/privacy and only then derive final states. No `SPARSEVEC_IMMUTABLE_BUNDLE_REF`, `SPARSEVEC_IMMUTABLE_BUNDLE_SHA256`, `SPARSEVEC_IMMUTABLE_BUNDLE_VERSION` or `SPARSEVEC_IMMUTABLE_BUNDLE_MEDIA_TYPE` for a not-yet-generated bundle is a pre-Provider gate. Absence of external storage alone must not prevent the call; no unauthorized capture or disclosure is permitted.
 
 ### 10.2 Frozen experiment identity
 
@@ -348,7 +352,7 @@ per item: sample_id, provider_request_id, normalized_sparse_sha256, mapped_spars
           dense_sha256, nnz, observed_min_index, observed_max_index, raw dense/sparse scores per query
 ```
 
-A provider-only PASS plus a detached synthetic DB PASS is insufficient (NS-04). Replays of captured payloads cannot set positive flags. The same real run at S must capture the external immutable numeric audit bundle specified in §14; hashes alone are not sufficient lineage for independent reproduction.
+A provider-only PASS plus a detached synthetic DB PASS is insufficient (NS-04). Replays of captured payloads cannot set positive flags. The same real run at S must capture sufficient safe normalized numerical evidence in exactly one §14 delivery mode (repository numeric evidence OR access-controlled immutable reference); hashes alone are not sufficient lineage for independent reproduction.
 
 ### 10.4 Frozen Chinese technical corpus (6 documents × 3 queries)
 
@@ -437,7 +441,7 @@ test "$(node -e "console.log(JSON.parse(require('fs').readFileSync('$EV','utf8')
 git merge-base --is-ancestor "$(node -e "console.log(JSON.parse(require('fs').readFileSync('$EV','utf8')).manifest_commit)")" "$S"   # manifest frozen inside S
 ```
 
-Any later change to helper, tests, manifest, queries, corpus, mapping, numeric rule, tolerance, provider config semantics, DB behavior, fusion or execution logic invalidates the evidence → new S + full rerun. If `main` must be merged after S is frozen, that merge is a new S (rerun required).
+Any later change to helper, tests, manifest, queries, corpus, mapping, numeric rule, tolerance, provider config semantics, DB behavior, fusion or execution logic invalidates the evidence → new S + full rerun from T007 (with required deterministic regressions). If `main` must be merged after S is frozen, that merge is a new S (rerun required).
 
 ### 13.3 Final-head validation without new provider truth
 
@@ -459,7 +463,7 @@ On F (no new provider call): architecture suite; DB deterministic suite (manual 
 
 This negated POSIX ERE check exits `0` with empty stdout iff none of the six Slice 21 paths contains a secret pattern (`-- tests/` is intentionally NOT used because `origin/main` contains pre-existing Slice 20 test stubs). Slice 21 test code must construct `env` fixtures dynamically (never write `DASHSCOPE_API_KEY:` or `DASHSCOPE_API_KEY=` literals in Slice 21 source).
 
-Privacy scan (architecture test on the evidence file): no manifest excerpt substring of 20 code points appears in the evidence; forbidden keys `apiKey, api_key, authorization, raw_body, raw_response, excerpt, text, sparse_embedding, embedding` absent; no dense/sparse vector arrays stored (hashes and stats only).
+Privacy scan (architecture test on the evidence file and any selected external evidence): no manifest excerpt substring of 20 code points appears in evidence; forbidden keys `apiKey, api_key, authorization, raw_body, raw_response, excerpt, text, sparse_embedding, embedding` absent; no secrets, credential-bearing URLs, raw HTTP/provider envelopes, raw source/query text, token metadata or private/unapproved data. Only explicitly approved, normalized numeric reproduction arrays under §14 Mode A may be committed in the existing evidence artifact. Mode B bundle bytes remain outside Git. Apply equivalent secret and privacy validation to both modes.
 
 ## 14. Evidence Artifact Contract (`tests/evidence/sparsevec-readiness-stage-a.json`)
 
@@ -507,8 +511,10 @@ provider_calls[] {role, text_type, configured_model_id, model_version_label, out
 configured_sparse_cap (Slice 20 maxSparseElements), sparse_vocabulary_bound ("NOT_PROVIDED" or value)
 sparse_dimension = 1000000000, dense_dimension = 1024, dimension_policy = "S21_SPIKE_ONLY_D_1E9"
 items[] (lineage per §10.3), observed_nnz_max, observed_min_index, observed_max_index
+evidence_mode (SAFE_REPOSITORY_NUMERIC_EVIDENCE or EXTERNAL_IMMUTABLE_REFERENCE; NOT_EVALUATED if no mode reached)
+repository_numeric_evidence, repository_numeric_evidence_sha256 (Mode A only)
 normalized_payload_evidence_ref, normalized_payload_evidence_sha256, normalized_payload_evidence_version,
-normalized_payload_evidence_media_type, normalized_payload_evidence_run_id, normalized_payload_evidence_subject_head
+normalized_payload_evidence_media_type, normalized_payload_evidence_run_id, normalized_payload_evidence_subject_head (Mode B only)
 mapping_result, db_roundtrip_result, distance_result, independent_calculation
 tolerances {sparse_ip_rel: 1e-5, dense_cosine_abs: 1.25e-4, fusion_recompute_abs: 1e-12}
 index_behavior {hnsw_explain_index_used, planner_restored, synthetic_boundaries[], actual_hnsw_compatible}
@@ -524,17 +530,19 @@ candidate_b_status = "UNAFFECTED", candidate_c_status = "UNAFFECTED"
 rag_readiness = "NOT_DERIVED", production_route_selection = "DEFERRED_TO_GOLD_DATASET"
 ```
 
-**External immutable audit evidence reference (Frozen Spec §14).** A real Provider → DB run at S must generate an access-controlled immutable audit evidence bundle outside the repository, containing only the approved experiment's numerical reproduction data:
+**Frozen Spec §14 evidence delivery: safe normalized payload evidence OR access-controlled immutable reference.** Exactly one selected delivery path must supply sufficient independent reproduction evidence for the same real run at S. Both modes use the same approved numerical reproduction data:
 - `schema_version`, `run_id`, `implementation_subject_head`, configured model identity (same identity/configuration and role-specific text_type as §10.2), provider request identifiers linked to sample IDs/roles;
 - `items[]`: sample_id, role, dense numeric vector, sparse [{index,value}] from the actual normalized Port;
 - `db_readback[]`: sample_id, dense numeric vector, sparse coordinates/values and dimension (explicit 1-based SQL coordinate semantics);
-- `query_document_results[]`: query_id, doc_id, DB-derived raw_dense, DB-derived raw_sparse; optionally mapped canonical sparsevec text.
+- `query_document_results[]`: query_id, doc_id, DB-derived raw_dense, DB-derived raw_sparse; optionally mapped canonical sparsevec text; linked mapping/readback hashes and fusion inputs/outputs as needed for independent reproduction.
 
-No API key, Authorization header, raw HTTP body, raw provider response envelope, source excerpt, raw query text, token metadata, family/minor/patient/private data or unapproved data in the bundle. No vector arrays or bundle bytes in Git, including the sanitized evidence JSON. Only the six reference metadata fields above are added to repository evidence; no credential-bearing URLs. Use an existing approved access-controlled immutable object mechanism, version-pinned or content-addressed, readable by the independent auditor. The ref must identify that exact object/version, not a mutable URL, local temporary path or developer laptop path. This is experiment evidence only, not production storage or a new product infrastructure requirement; do not add S3, Supabase, a database, workflow, evidence service or any new implementation path.
+**Mode A — SAFE_REPOSITORY_NUMERIC_EVIDENCE.** Store only the approved safe normalized numeric reproduction data in `repository_numeric_evidence` within the existing `tests/evidence/sparsevec-readiness-stage-a.json` artifact; `repository_numeric_evidence_sha256` is SHA-256 of that payload's canonical serialized bytes, excluding the outer hash field. Require matching run ID and S inside the payload, deterministic serialization, independent recomputation, privacy and secret scans, and Git-fixed artifact identity at F under §13. Mode B metadata is not required for Mode A and must be explicitly NOT_EVALUATED when unused. No other repository path or storage is added.
 
-For positive real-run evidence all six metadata fields are concrete: SHA-256 of exact fetched bundle bytes (64 hex characters), version/object identity, media type, run ID and S; `normalized_payload_evidence_run_id == evidence.run_id`, `normalized_payload_evidence_subject_head == implementation_subject_head`, with matching IDs inside the fetched bundle. Record an explicit BLOCKED/NOT_EVALUATED sentinel for unavailable reference fields on nonpositive runs; never substitute an invented ref/hash. If no approved mechanism exists or publication/retrieval/auditor access is unavailable, the real-run evidence is BLOCKED (no positive PASS); preserve existing deterministic FAIL precedence. An integrity, identity or numeric mismatch is FAIL. This is a mechanical lineage/permission prerequisite under §15, not a new state or state machine.
+**Mode B — EXTERNAL_IMMUTABLE_REFERENCE.** Store the approved numeric reproduction data outside Git using an existing approved access-controlled immutable/version-pinned/content-addressed object mechanism readable by the independent auditor. No bundle bytes in Git for Mode B. The ref identifies the exact object/version, not a mutable URL, local temporary path or developer laptop path. All six Mode B fields are concrete for positive evidence: exact-byte SHA-256 (64 hex characters), ref, version/object identity, media type, run ID and S; `normalized_payload_evidence_run_id == evidence.run_id`, `normalized_payload_evidence_subject_head == implementation_subject_head`, with matching IDs inside the fetched bytes. Mode A fields are explicitly NOT_EVALUATED when unused.
 
-Independent Audit 2 must retrieve the referenced bytes, verify SHA-256, object/version, run ID and S, and independently recompute the dense and sparse lineage hashes, canonical mapped sparsevec representation/hash, DB readback hash/equality and dense/sparse reference scores from the captured arrays, using §6 and §8 tolerances and matching sample/query/document IDs; compare each result with the committed sanitized evidence. The bundle schema version and helper at S must specify the exact deterministic serialization/hash inputs (UTF-8, stable ordered fields/arrays and numeric representation) for every lineage hash so independent recomputation is possible without trusting Developer-calculated results. Compare DB-derived scores in the bundle with sanitized scores and independently calculated references. Handoff must include ref, SHA-256, version/object identity, run ID, S and verified auditor access status. Unavailable bundle means no positive independent PASS. No new provider call is required to reproduce the recorded run.
+For both modes, no API key, Authorization header, credential-bearing URL, raw HTTP body, raw provider response envelope, source excerpt, raw source/query text, token metadata, family/minor/patient/private data or other unapproved data. Apply §13.4 and validate data permission before any capture/publication. The selected mode must be complete; do not combine two incomplete paths or require both modes. Explicit BLOCKED/NOT_EVALUATED sentinels for unavailable/unrun selected-mode fields on nonpositive runs; never invent evidence. If Mode A is complete, absence of external immutable storage MUST NOT BLOCK. If Mode A cannot safely be used (data permission/repository policy) and Mode B is unavailable, or neither permitted path can deliver sufficient auditable evidence, record BLOCKED with reason; integrity/identity/numeric mismatch is FAIL, preserving deterministic FAIL precedence. No new S3, Supabase Storage, DB evidence table, evidence service, workflow, product infrastructure or implementation path. The final bundle/hash/object metadata arises after the real run's evidence exists, never as a pre-call requirement (§10.1).
+
+Independent Audit 2 reads the Git-fixed Mode A artifact at F and verifies its canonical payload SHA-256, or retrieves the Mode B bytes and verifies exact-byte SHA-256, object/version and access. In either case verify run ID and S, independently recompute dense/sparse lineage hashes, canonical mapped sparsevec representation/hash, DB readback hash/equality, raw dense/sparse reference scores and fusion from captured normalized inputs using §§6, 8, 11, matching sample/query/document IDs; compare DB-derived scores with independent references and committed evidence. Schema and helper at S specify exact deterministic serialization/hash inputs (UTF-8, stable ordered fields/arrays and numeric representation) for each lineage hash; never trust Developer-calculated hashes alone. Handoff includes selected mode and run ID/S; Mode A artifact path, canonical hash/content identity at F and privacy/secret validation; Mode B ref, SHA-256, version/object identity, media type and verified auditor access. No new Provider call is required to independently reproduce the recorded run.
 
 Bounded status vocabularies (values outside these sets fail the schema test):
 
@@ -552,17 +560,18 @@ Bounded status vocabularies (values outside these sets fail the schema test):
 Lower flags ∈ {`VERIFIED`, `FAIL`, `BLOCKED`, `UNKNOWN`, `NOT_EVALUATED`}, default `NOT_EVALUATED`, derived by helper functions from predicates (no Developer-set boolean):
 
 - `MAPPING_CONTRACT_VERIFIED = VERIFIED` iff every §6 positive/negative architecture case passes.
-- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` iff gate open (§4), both calls through the public Port with §10.2 identity, 6 + 3 items returned with non-null nonempty sparse and 1024-dim dense, all items pass §6, lineage hashes present and §14 immutable reference lineage/permission prerequisite satisfied. Missing approved evidence mechanism or auditor access → `BLOCKED`; invalid bundle integrity/identity → `FAIL`. `INVALID_EXPERIMENT_CONFIG` → `FAIL`; credential/endpoint/model unavailable → `BLOCKED`; provider returns no sparse for the documented dense&sparse request → `FAIL`.
-- `PGVECTOR_SPARSEVEC_VERIFIED = VERIFIED` iff §7 identity/role, linked payload insert/readback exact, §8 references within tolerance (analytical + linked), §7.2 boundaries as expected, §9 EXPLAIN index path observed with planner restored, §12 cleanup CLEAN.
+- `SPARSE_PAYLOAD_VERIFIED = VERIFIED` iff gate open (§4), both actual calls through the public Port with §10.2 identity, 6 + 3 real items returned with non-null nonempty compatible sparse and 1024-dim dense, all items pass §6, lineage hashes present and exactly one valid §14 evidence mode complete. Neither permitted mode available/sufficient → `BLOCKED`; integrity/identity/numeric mismatch → `FAIL`. `INVALID_EXPERIMENT_CONFIG` → `FAIL`; credential/endpoint/model unavailable → `BLOCKED`; provider returns no sparse for the documented dense&sparse request → `FAIL`.
+- `PGVECTOR_SPARSEVEC_VERIFIED = VERIFIED` iff actual linked real Provider payload from the same experiment enters the target DB, §7 identity/role and type/dimension/nnz probes pass, linked payload insert/readback exact, §8 references within tolerance (analytical + linked), §7.2 boundaries as expected, §9 EXPLAIN index path observed with planner restored, §12 cleanup CLEAN. Synthetic-only DB success is fixture/analytical/boundary/index evidence (`mapping_result`, DB fixture observations), never this full flag. If blocked before the Provider call and linked DB phase did not occur, this flag stays `NOT_EVALUATED` (fixture success cannot promote it); separately observed deterministic incompatibility must remain FAIL, never masked by a blocked dependency.
 - `FUSION_PROTOTYPE_VERIFIED`: `fusion_mechanics_ok` := linked paired scores for the same six IDs, recompute ≤ 1e-12, and the constant/missing/duplicate/non-finite/tie fixtures behave as frozen.
   - `VERIFIED` iff `fusion_mechanics_ok` and `chinese_queries_passed = 3`;
   - `FAIL` iff `fusion_mechanics_ok` is false through a deterministic error;
   - `UNKNOWN` iff `fusion_mechanics_ok` and the three lower technical flags are VERIFIED but `chinese_queries_passed < 3`.
+  - `NOT_EVALUATED` if the same real Provider/DB paired-score experiment never reached fusion; a blocked credential cannot produce VERIFIED fusion. Independent deterministic fixture failures remain FAIL.
 
 Aggregate:
 
 ```text
-SPARSEVEC_SPIKE_PASS_STAGE_A = all four flags VERIFIED && cleanup_status = CLEAN && gate/lineage identities valid
+SPARSEVEC_SPIKE_PASS_STAGE_A = all four flags VERIFIED && cleanup_status = CLEAN && gate/lineage identities valid && exactly one §14 evidence mode complete
 
 Outcome mapping (precedence: FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS; PASS only if all positive):
   (1) candidate_a_readiness_state / (2) execution_completion_state / (3) sparsevec_spike_status / (4) readiness_status / (5) rag_candidate_status
@@ -579,7 +588,7 @@ Outcome mapping (precedence: FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS; PA
     NOT_EVALUATED / NOT_EVALUATED / NOT_EVALUATED / NOT_EVALUATED / CANDIDATE_A_SPARSEVEC_PREREQUISITE_NOT_EVALUATED
 ```
 
-A tiny 6×3 relevance miss with a valid technical chain is `UNKNOWN / INCONCLUSIVE`, never PASS and never, by itself, a deterministic Candidate A FAIL; route quality and A/B/C selection are DEFERRED TO GOLD DATASET.
+For credential-gate BLOCKED before Provider (with passing deterministic mapping/DB fixtures and no other observed failure): MAPPING_CONTRACT_VERIFIED = VERIFIED, SPARSE_PAYLOAD_VERIFIED = BLOCKED, PGVECTOR_SPARSEVEC_VERIFIED = NOT_EVALUATED, FUSION_PROTOTYPE_VERIFIED = NOT_EVALUATED; aggregate = false and Candidate A/execution states = BLOCKED. Fixture observations remain separately recorded. A tiny 6×3 relevance miss with a valid technical chain is `UNKNOWN / INCONCLUSIVE`, never PASS and never, by itself, a deterministic Candidate A FAIL; route quality and A/B/C selection are DEFERRED TO GOLD DATASET.
 
 ## 16. Out of Scope (unchanged from Frozen Spec)
 
@@ -601,11 +610,11 @@ Verification classes and the tasks owning them:
 | V-SEC | secret / privacy | §13.4 | T010, T011 |
 | V-SPEC | spec immutability | `git rev-parse HEAD:specs/021-sparsevec-readiness-spike/spec.md` = `77d1caf4…` | T001, T011, T012 |
 
-Developer may not change command semantics; only path quoting/shell syntax may be adapted.
+Developer may not change command semantics; only path quoting/shell syntax may be adapted. V-PROV does not require final external bundle metadata before execution. V-ARCH/V-SEC validate the selected §14 mode (including independent recomputation, privacy/secret validation, missing versus mismatched evidence, and blocked-before-Provider flag negatives); V-DB synthetic success alone never verifies the full linked PGVECTOR flag.
 
 ## 18. STOP Conditions
 
-STOP (no improvisation) if: Frozen Spec blob drifts; Slice 20 independent Audit 2 remediation lineage incomplete (T001); Slice 20 Port cannot express the experiment without modification; any forbidden path must change; a production migration/table/index/route is needed; PG/pgvector/image/role drift; a source is unavailable, prohibits reproduction, contains private data, or the anchor/key-term check fails; professional judgement would be needed; cleanup cannot be proven; lineage cannot join; a missing channel would need fallback; HNSW would need truncation/remapping; any result would be labelled READY; any post-hoc change to corpus/queries/targets/weights/tolerances would be needed to pass.
+STOP (no improvisation) if: Frozen Spec blob drifts; Slice 20 independent Audit 2 remediation lineage incomplete (T001); Slice 20 Port cannot express the experiment without modification; any forbidden path must change; a production migration/table/index/route is needed; PG/pgvector/image/role drift; a source is unavailable, prohibits reproduction, contains private data, or the anchor/key-term check fails; professional judgement would be needed; cleanup cannot be proven; lineage cannot join; a missing channel would need fallback; HNSW would need truncation/remapping; any result would be labelled READY; any post-hoc change to corpus/queries/targets/weights/tolerances would be needed to pass. Missing credential/endpoint remains BLOCKED; absence of external immutable storage alone is not a STOP. Neither safe permitted evidence mode available → BLOCKED; integrity/identity/numeric mismatch → FAIL (§14–15).
 
 ## 19. Frozen-Spec Traceability
 
@@ -633,3 +642,6 @@ Planning admission: PENDING (fresh independent Audit 1, then a separate planning
 DEVELOPER IMPLEMENTATION GATE: CLOSED until planning admission to main (§4 item 7)
 DEVELOPMENT: NOT AUTHORIZED
 ```
+
+**T007 correction handoff (supersedes prior snapshot above):** fresh independent bounded Audit 1 and subsequent separate planning admission to current main are mandatory before Developer continuation. PR #168 remains OPEN and unchanged during correction; do not close, merge or modify it in this planning round. Existing implementation is PARTIALLY REUSABLE. T003–T006 redesign required: NO (manifest, mapping, DB fixtures, HNSW/boundaries reusable unchanged; run required regressions). After admission and gate recheck, reconcile PR #168 to current main; minimally correct provider external-bundle preflight, evidence validator/schema, linked `PGVECTOR_SPARSEVEC_VERIFIED` state derivation and related architecture tests. This is execution-affecting: old S `f349e48037c3a995d2de5a3f9e065b5105310fd3` is not final after correction; freeze new S and rerun T007 onward with a real Provider run. No prior positive Provider evidence exists to reuse. No new infrastructure, no full replanning, no Frozen Spec change. Developer Gate remains CLOSED for this correction until fresh Audit 1 PASS and admission; no Audit 2 in this planning round.
+
