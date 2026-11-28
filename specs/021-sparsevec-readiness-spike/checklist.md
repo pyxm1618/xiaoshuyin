@@ -34,8 +34,8 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-14 | Runtime role | `xiaoshuyin_app`, `rolsuper=false`, `rolbypassrls=false`, no `public` CREATE, not extension owner | SQL |
 | C21-15 | Sparse D | exactly 1,000,000,000 for every sparse row and query | mapping + DB |
 | C21-16 | Mapping origin | provider 0 → SQL 1 | architecture test |
-| C21-17 | Mapping high boundary | provider D-1 → SQL D; provider D → reject | architecture test |
-| C21-18 | Order / duplicates | non-ascending → reject; duplicate incl. zero-valued duplicate → reject before zero removal | architecture test |
+| C21-17 | Mapping high boundary and namespace preflight | provider D-1 → SQL D; provider D → reject; authoritative sparseVocabularyMax > D → reject experiment before calls/mapping even with in-range observed keys; bound = D allowed; bound <= D enforces index < bound before zero removal; missing bound records NOT_PROVIDED and permits observed-only compatibility claim | architecture test + evidence |
+| C21-18 | Order / duplicates | actual noncanonical Port output → reject without sorting; unsorted unique architecture-only synthetic fixture → validate indices/values, reject duplicates before zero removal, sort ascending, remove exact zero, map 0-based → 1-based; synthetic duplicates incl. zero-valued duplicate → reject; real path never invokes synthetic canonicalization | named architecture tests + path inspection |
 | C21-19 | Numeric boundary | NaN/±Inf reject; `Math.fround` overflow reject; nonzero underflow-to-zero reject; ±0 removed only after validation | architecture test |
 | C21-20 | Empty / all-zero / null sparse | reject (`EMPTY_SPARSE` / `SPARSE_MISSING`) | architecture test |
 | C21-21 | Dense vs sparse dimension | independent; key > 1024 accepted when < D | architecture + DB |
@@ -65,7 +65,7 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-72 | Query role | query call `text_type = query` set explicitly | evidence + test source |
 | C21-73 | Cross-role identity | model, version label, dense dimension 1024, output type `dense+sparse`, endpoint fingerprint identical across roles; only `text_type` differs | evidence |
 | C21-25 | Linked provenance | Port → normalized → mapping → DB row → score → fusion joinable by `sample_id` for all 9 items | evidence `items[]` |
-| C21-40 | Lineage hashes | `normalized_sparse_sha256`, `mapped_sparsevec_text_sha256`, `db_readback_sha256`, `dense_sha256` present per item | evidence |
+| C21-40 | Lineage hashes / independent reproduction | `normalized_sparse_sha256`, `mapped_sparsevec_text_sha256`, `db_readback_sha256`, `dense_sha256` present per item; same-run external immutable bundle (Plan §14), six concrete ref metadata fields for positive evidence, independent fetch verifies bytes SHA-256, version/object, run ID and S; recompute hashes/mapping/readback equality/reference scores and compare committed evidence; absent mechanism/access → BLOCKED, mismatch → FAIL, no positive PASS | evidence schema + bundle retrieval/reproduction + T012 handoff |
 
 ## Chinese Corpus and Fusion
 
@@ -119,12 +119,12 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-52 | Rerun | two consecutive runs succeed without collision | real DB |
 | C21-53 | Planner cleanup | `enable_seqscan` equals pre-probe value | real DB |
 | C21-54 | Secret hygiene | Plan §13.4 negated grep exits 0 with empty stdout on F | scan |
-| C21-55 | Privacy of evidence | no 20-code-point excerpt substring; forbidden keys absent; no vector arrays | architecture test |
+| C21-55 | Privacy of evidence | no 20-code-point excerpt substring; forbidden keys absent; no vector arrays/bundle bytes in repository evidence; external bundle only approved numeric data, no secrets, raw HTTP/provider envelope, source/query text, token metadata or private data (Plan §14) | architecture test + bundle privacy validation |
 | C21-56 | Governance validators | `validate-governance`, governance self-tests, `validate-change-governance --base origin/main --head HEAD`, change-governance self-tests PASS on F | command output |
 | C21-57 | Static guard | `guard-static` + `--self-test` PASS without guard edits | command output |
 | C21-58 | Canonical regression | exact-head CI `verify-all` PASS on F | CI run |
 | C21-59 | Exact-head binding | S and F recorded; T011 checks run on F; provider truth from S only | report |
-| C21-60 | Audit 2 handoff boundary | Developer stops at READY FOR INDEPENDENT AUDIT 2 / BLOCKED / INCONCLUSIVE | final report |
+| C21-60 | Audit 2 handoff boundary | report immutable bundle ref, SHA-256, version/object identity, run ID, S and auditor access status; inaccessible bundle prohibits positive PASS; Developer stops at READY FOR INDEPENDENT AUDIT 2 / BLOCKED / INCONCLUSIVE | final report |
 
 ## Frozen Acceptance Scenario Coverage
 
