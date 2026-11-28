@@ -125,6 +125,85 @@ export const DigitalUseSceneResponse = z.strictObject({
 });
 export type DigitalUseSceneResponseType = z.infer<typeof DigitalUseSceneResponse>;
 
+export const DigitalUseContentProvenance = z.strictObject({
+  authorityDocument: z.string().min(1),
+  authorityDocumentVersion: z.string().min(1),
+  sourceBlob: z.string().regex(/^[0-9a-f]{40}$/),
+  sectionHeading: z.string().min(1),
+  contentVersion: z.string().min(1),
+});
+export type DigitalUseContentProvenanceType = z.infer<typeof DigitalUseContentProvenance>;
+
+export const DigitalUseContentQuestion = z.strictObject({
+  text: z.string().min(1),
+  selection: z.enum(['SINGLE', 'MULTI']),
+  submissionKind: z.literal('TARGET_SELECTION'),
+  minSelections: z.number().int().min(0),
+  maxSelections: z.number().int().min(1),
+  options: z.array(
+    z.strictObject({
+      value: z.string().min(1),
+      label: z.string().min(1),
+    })
+  ).min(1),
+});
+export type DigitalUseContentQuestionType = z.infer<typeof DigitalUseContentQuestion>;
+
+export const DigitalUseMissingContentItem = z.strictObject({
+  contentKind: z.enum([
+    'PROFESSIONAL_APPROVED_CONTENT',
+    'APPROVED_CONTENT_VERSION',
+    'INTEGRATED_TRIAGE_EVIDENCE',
+    'NODE_CONTENT_NOT_REGISTERED',
+  ]),
+  authorityRef: z.string().min(1),
+  reason: z.string().min(1),
+});
+export type DigitalUseMissingContentItemType = z.infer<typeof DigitalUseMissingContentItem>;
+
+export const DigitalUseNodeContentResponse = z.strictObject({
+  nodeCode: z.string().min(1).max(64),
+  contentVersion: z.string().min(1),
+  availability: z.enum(['AVAILABLE', 'UNAVAILABLE']),
+  authorityKind: z.enum(['PRODUCT_FROZEN']).nullable(),
+  provenance: DigitalUseContentProvenance.nullable(),
+  body: z.string().nullable(),
+  question: DigitalUseContentQuestion.nullable(),
+  missing: z.array(DigitalUseMissingContentItem),
+});
+export type DigitalUseNodeContentResponseType = z.infer<typeof DigitalUseNodeContentResponse>;
+
+export const DigitalUseTargetCatalogTarget = z.strictObject({
+  code: z.string().min(1),
+  displayName: z.string().min(1),
+  mandatoryBasis: z.string().min(1),
+  mandatory: z.boolean().nullable(),
+  selected: z.boolean(),
+  targetRevision: z.number().int().min(1).nullable(),
+});
+export type DigitalUseTargetCatalogTargetType = z.infer<typeof DigitalUseTargetCatalogTarget>;
+
+export const DigitalUseTargetCatalogGuidance = z.strictObject({
+  code: z.literal('MANDATORY_TARGETS_UNSELECTED'),
+  message: z.string().min(1),
+  missingMandatoryTargets: z.array(z.string().min(1)).min(1),
+  requiredSelection: z.literal('MULTI'),
+});
+export type DigitalUseTargetCatalogGuidanceType = z.infer<typeof DigitalUseTargetCatalogGuidance>;
+
+export const DigitalUseTargetCatalogResponse = z.strictObject({
+  sceneCode: z.string().min(1),
+  scenePackageVersion: z.string().min(1),
+  catalogVersion: z.string().min(1),
+  authority: DigitalUseContentProvenance,
+  selectionRevision: z.number().int().min(0),
+  mandatoryStatus: z.enum(['RESOLVED', 'UNAVAILABLE']),
+  targets: z.array(DigitalUseTargetCatalogTarget).length(10),
+  guidance: DigitalUseTargetCatalogGuidance.nullable(),
+  missing: z.array(DigitalUseMissingContentItem),
+});
+export type DigitalUseTargetCatalogResponseType = z.infer<typeof DigitalUseTargetCatalogResponse>;
+
 export const DigitalUseNodeResponse = z.strictObject({
   targetPersonId: z.string().uuid(),
   caseId: z.string().uuid(),
@@ -140,6 +219,8 @@ export const DigitalUseNodeResponse = z.strictObject({
   routeReasonCode: z.string().nullable(),
   recovery: DigitalUseRecovery.nullable(),
   downstream: DownstreamAvailability,
+  content: DigitalUseNodeContentResponse,
+  targetCatalog: DigitalUseTargetCatalogResponse.nullable(),
 });
 export type DigitalUseNodeResponseType = z.infer<typeof DigitalUseNodeResponse>;
 
@@ -232,3 +313,4 @@ export const DigitalUseApiError = z.union([
   SceneRuntimeError,
 ]);
 export type DigitalUseApiErrorType = z.infer<typeof DigitalUseApiError>;
+

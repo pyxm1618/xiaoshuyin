@@ -43,25 +43,35 @@ import {
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
+  DIGITAL_USE_PRODUCT_AUTHORITY,
   DIGITAL_USE_SCENE_CODE,
+  DIGITAL_USE_TARGET_CATALOG_VERSION,
+  DIGITAL_USE_TARGET_OPTIONS,
   authorizeRoutedReactivation,
   evaluateIntegratedTriage,
   initialA1001Projection,
+  resolveDigitalUseNodeContent,
   resolveDigitalUseRuntimeNode,
   digitalUseNodeManifest,
+  type DigitalUseMissingContentItem,
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import type {
+  DigitalUseNodeContentResponseType,
   DigitalUseNodeResponseType,
   DigitalUseRecoveryType,
   DigitalUseSceneResponseType,
+  DigitalUseTargetCatalogResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { startAssessmentInTransaction, type CommandResult } from './problem-formulations.js';
-import { familyAllianceTargetIdentity } from './family-alliance-semantics.js';
+import {
+  familyAllianceTargetIdentity,
+  resolveMandatoryFamilyAllianceTargets,
+} from './family-alliance-semantics.js';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
 export interface DigitalUseActor {
@@ -807,8 +817,123 @@ export async function getDigitalUseNode(
         routeReasonCode: stored.branch_reason_codes.at(-1) ?? null,
         recovery: envelope.recovery,
         downstream: envelope.downstream,
+        content: buildDigitalUseNodeContent(manifestNode.nodeCode),
+        targetCatalog:
+          manifestNode.nodeCode === 'A3002'
+            ? await buildDigitalUseTargetCatalog(tx, envelope)
+            : null,
       };
     }
   );
 }
 
+/**
+ * Node content projection. Only content that already exists in the frozen
+ * product Authority is served; professional questionnaire content without an
+ * approved version fails closed with the exact missing list.
+ */
+function buildDigitalUseNodeContent(
+  nodeCode: string
+): DigitalUseNodeContentResponseType {
+  const definition = resolveDigitalUseNodeContent(nodeCode);
+  if (definition === null) throw sceneError('SCENE_NODE_NOT_FOUND');
+  return {
+    nodeCode: definition.nodeCode,
+    contentVersion: definition.contentVersion,
+    availability: definition.availability,
+    authorityKind: definition.authorityKind,
+    provenance:
+      definition.provenance === null ? null : { ...definition.provenance },
+    body: definition.body,
+    question:
+      definition.question === null
+        ? null
+        : {
+            ...definition.question,
+            options: definition.question.options.map((option) => ({
+              ...option,
+            })),
+          },
+    missing:
+      definition.availability === 'AVAILABLE'
+        ? []
+        : definition.missing.map((item) => ({ ...item })),
+  };
+}
+
+/**
+ * Case-specific target catalog. The ten target definitions and the mandatory
+ * judgment are backend-owned; the frontend only renders this projection.
+ * `mandatoryStatus: UNAVAILABLE` is reported when the integrated triage
+ * evidence required by the frozen rule is unavailable — a normal empty
+ * selection is never an error.
+ */
+async function buildDigitalUseTargetCatalog(
+  tx: pg.PoolClient,
+  envelope: DigitalUseSceneResponseType
+): Promise<DigitalUseTargetCatalogResponseType> {
+  const currentByCode = new Map(
+    envelope.targets.map((target) => [String(target.targetCode), target] as const)
+  );
+
+  let mandatory: ReadonlySet<string> | null = null;
+  const missing: DigitalUseMissingContentItem[] = [];
+  try {
+    mandatory = await resolveMandatoryFamilyAllianceTargets(tx, envelope.caseId);
+  } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code !== 'DEPENDENCY_UNAVAILABLE') throw error;
+    missing.push({
+      contentKind: 'INTEGRATED_TRIAGE_EVIDENCE',
+      authorityRef:
+        'Docs/V1产品需求.md 目标清单（必选项的依据是用户前面的测评结果）',
+      reason: '本 Case 的 01002 / 01003 整合测评证据不可用，无法判定必选目标。',
+    });
+  }
+
+  const targets = DIGITAL_USE_TARGET_OPTIONS.map((option) => {
+    const row = currentByCode.get(option.code);
+    return {
+      code: option.code,
+      displayName: option.displayName,
+      mandatoryBasis: option.mandatoryBasis,
+      mandatory: mandatory === null ? null : mandatory.has(option.code),
+      selected: row?.selected ?? false,
+      targetRevision: row?.revision ?? null,
+    };
+  });
+
+  const unselectedMandatory =
+    mandatory === null
+      ? []
+      : [...mandatory].filter(
+          (code) => !(currentByCode.get(code)?.selected ?? false)
+        );
+
+  return {
+    sceneCode: envelope.sceneCode,
+    scenePackageVersion: envelope.scenePackageVersion,
+    catalogVersion: DIGITAL_USE_TARGET_CATALOG_VERSION,
+    authority: {
+      ...DIGITAL_USE_PRODUCT_AUTHORITY,
+      contentVersion: DIGITAL_USE_TARGET_CATALOG_VERSION,
+    },
+    selectionRevision: envelope.targetSelectionRevision,
+    mandatoryStatus: mandatory === null ? 'UNAVAILABLE' : 'RESOLVED',
+    targets,
+    guidance:
+      unselectedMandatory.length === 0
+        ? null
+        : {
+            code: 'MANDATORY_TARGETS_UNSELECTED',
+            message:
+              'This case has mandatory targets that are not selected yet. Select every missing mandatory target before submitting.',
+            missingMandatoryTargets: unselectedMandatory,
+            requiredSelection: 'MULTI',
+          },
+    missing,
+  };
+}
