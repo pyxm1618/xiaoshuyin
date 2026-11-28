@@ -65,7 +65,7 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-72 | Query role | query call `text_type = query` set explicitly | evidence + test source |
 | C21-73 | Cross-role identity | model, version label, dense dimension 1024, output type `dense+sparse`, endpoint fingerprint identical across roles; only `text_type` differs | evidence |
 | C21-25 | Linked provenance | Port → normalized → mapping → DB row → score → fusion joinable by `sample_id` for all 9 items | evidence `items[]` |
-| C21-40 | Lineage hashes / independent reproduction | `normalized_sparse_sha256`, `mapped_sparsevec_text_sha256`, `db_readback_sha256`, `dense_sha256` present per item; same-run external immutable bundle (Plan §14), six concrete ref metadata fields for positive evidence, independent fetch verifies bytes SHA-256, version/object, run ID and S; recompute hashes/mapping/readback equality/reference scores and compare committed evidence; absent mechanism/access → BLOCKED, mismatch → FAIL, no positive PASS | evidence schema + bundle retrieval/reproduction + T012 handoff |
+| C21-40 | Lineage hashes / independent reproduction | `normalized_sparse_sha256`, `mapped_sparsevec_text_sha256`, `db_readback_sha256`, `dense_sha256` per item; exactly one sufficient Plan §14 mode: SAFE_REPOSITORY_NUMERIC_EVIDENCE (Git-fixed artifact, canonical payload SHA-256, run ID/S, privacy/secret validation) OR EXTERNAL_IMMUTABLE_REFERENCE (six concrete ref metadata fields, independent fetch/byte SHA-256, object/version, run ID/S and access). Independently recompute normalized payload hashes, mapping, DB readback/equality, raw dense/sparse scores and fusion; neither safe path sufficient → BLOCKED, mismatch → FAIL. Missing external storage alone never blocks Mode A. | evidence schema + independent reproduction + T012 handoff |
 
 ## Chinese Corpus and Fusion
 
@@ -91,16 +91,16 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 
 | ID | Mechanical check | Required result | Evidence |
 |---|---|---|---|
-| C21-39 | Evidence schema | every Plan §14 key present with in-vocabulary value | architecture schema test |
+| C21-39 | Evidence schema | every common Plan §14 key present with in-vocabulary value; exactly one sufficient selected mode for positive evidence; unused mode fields NOT_EVALUATED; nonpositive missing evidence explicit, no fabricated values | architecture schema test |
 | C21-64 | V1技术设计 §4.2 fields | `postgres_version, tencentdb_kernel_version, extension_name, extension_version, sparsevec_spike_status, rag_candidate_status, readiness_status, checked_at, evidence_ref` all present | schema test |
 | C21-65 | `sparsevec_spike_status` | ∈ {PASS_STAGE_A, FAIL, BLOCKED, UNKNOWN, NOT_EVALUATED} and equals state-machine output | schema + state test |
 | C21-66 | `rag_candidate_status` | ∈ the five `CANDIDATE_A_SPARSEVEC_PREREQUISITE_*` values only | schema test |
 | C21-67 | `readiness_status` bounded | ∈ {PASS_STAGE_A, FAIL, BLOCKED, UNKNOWN, NOT_EVALUATED}; `readiness_scope = CANDIDATE_A_SPARSEVEC_SPIKE_STAGE_A_ONLY` | schema test |
 | C21-68 | No overclaim | status-typed fields (Plan §14 list) contain no `READY` / `SELECTED` / `WINNER` / `PRODUCTION` token; `candidate_b_status = candidate_c_status = UNAFFECTED`; `rag_readiness = NOT_DERIVED` | schema test |
-| C21-41 | State machine | lower flags derived by helper predicates only | architecture test |
+| C21-41 | State machine | lower flags derived by helper predicates only; full `PGVECTOR_SPARSEVEC_VERIFIED` requires actual linked real Provider payload in target DB plus all §15 probes; synthetic-only success never sets full flag VERIFIED | architecture test |
 | C21-42 | Aggregate PASS | only all four VERIFIED + cleanup CLEAN + identities valid | architecture test |
 | C21-43 | FAIL semantics | deterministic technical incompatibility → COMPLETED_WITH_FAIL; Candidate A not met | architecture test |
-| C21-44 | BLOCKED semantics | gate/credential/permission/source unavailable never PASS | architecture test |
+| C21-44 | BLOCKED semantics | gate/credential/permission/source unavailable never PASS; credential blocked before Provider with passing fixtures: mapping VERIFIED, sparse BLOCKED, linked PGVECTOR and fusion NOT_EVALUATED, aggregate false/BLOCKED; neither permitted mode available → BLOCKED; no external pre-call bundle gate; deterministic FAIL precedence preserved | architecture test |
 | C21-45 | UNKNOWN semantics | inconclusive evidence never PASS | architecture test |
 | C21-46 | NOT_EVALUATED semantics | skipped execution never PASS | architecture test |
 | C21-61 | Subject head | evidence `implementation_subject_head` = `git rev-parse HEAD` at run start and end; tree clean except evidence path | evidence + T010 log |
@@ -119,12 +119,12 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | C21-52 | Rerun | two consecutive runs succeed without collision | real DB |
 | C21-53 | Planner cleanup | `enable_seqscan` equals pre-probe value | real DB |
 | C21-54 | Secret hygiene | Plan §13.4 negated grep exits 0 with empty stdout on F | scan |
-| C21-55 | Privacy of evidence | no 20-code-point excerpt substring; forbidden keys absent; no vector arrays/bundle bytes in repository evidence; external bundle only approved numeric data, no secrets, raw HTTP/provider envelope, source/query text, token metadata or private data (Plan §14) | architecture test + bundle privacy validation |
+| C21-55 | Privacy of evidence | no 20-code-point excerpt substring; forbidden keys absent; approved safe normalized numeric arrays permitted only in Mode A existing evidence artifact; Mode B external bundle only approved numeric data; both modes forbid secrets, credential-bearing URLs, raw HTTP/provider envelope, raw source/query text, token metadata or private/unapproved data (Plan §14) | architecture test + selected-mode privacy/secret validation |
 | C21-56 | Governance validators | `validate-governance`, governance self-tests, `validate-change-governance --base origin/main --head HEAD`, change-governance self-tests PASS on F | command output |
 | C21-57 | Static guard | `guard-static` + `--self-test` PASS without guard edits | command output |
 | C21-58 | Canonical regression | exact-head CI `verify-all` PASS on F | CI run |
 | C21-59 | Exact-head binding | S and F recorded; T011 checks run on F; provider truth from S only | report |
-| C21-60 | Audit 2 handoff boundary | report immutable bundle ref, SHA-256, version/object identity, run ID, S and auditor access status; inaccessible bundle prohibits positive PASS; Developer stops at READY FOR INDEPENDENT AUDIT 2 / BLOCKED / INCONCLUSIVE | final report |
+| C21-60 | Audit 2 handoff boundary | report mode, run ID, S; Mode A: artifact path, Git-fixed content/canonical hash identity, privacy/secret validation; Mode B: immutable ref, SHA-256, version/object identity, media type, auditor access. Neither permitted path sufficient prohibits positive PASS; unused Mode B fields not mandatory for Mode A. Developer stops at READY FOR INDEPENDENT AUDIT 2 / BLOCKED / INCONCLUSIVE | final report |
 
 ## Frozen Acceptance Scenario Coverage
 
@@ -146,7 +146,7 @@ Status values for Developer execution: `PASS`, `FAIL`, `NOT APPLICABLE`. Any req
 | NS-01 invalid sparse inputs | C21-18..C21-20 |
 | NS-02 namespace / dimension / role / model misuse | C21-15, C21-17, C21-21, C21-70..C21-73 |
 | NS-03 DB / version / role / boundary failures | C21-12..C21-14, C21-22..C21-24 |
-| NS-04 fake / detached evidence | C21-25, C21-39, C21-40, C21-61, C21-63 |
+| NS-04 fake / detached evidence | C21-25, C21-39, C21-40, C21-41, C21-44, C21-61, C21-63 |
 | NS-05 sample / channel / score / tie negatives | C21-31, C21-35, C21-37 |
 | NS-06 index not exercised / cleanup failure | C21-29, C21-50..C21-53 |
 | NS-07 permission / privacy / secret / professional-label violation | C21-32, C21-33, C21-47, C21-54, C21-55, C21-76, C21-77 |
