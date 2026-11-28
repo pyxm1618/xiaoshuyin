@@ -1,7 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   RERANKER_API_SURFACE,
@@ -125,15 +135,40 @@ function isLiveOptedIn(env: NodeJS.ProcessEnv = process.env): boolean {
   return env['RERANKER_LIVE_VERIFY'] === '1';
 }
 
+function realpathWithMissingTail(target: string): string {
+  let existing = resolve(target);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return resolve(realpathSync(existing), ...tail);
+    } catch {
+      const parent = dirname(existing);
+      if (parent === existing) {
+        return resolve(existing, ...tail);
+      }
+      tail.unshift(basename(existing));
+      existing = parent;
+    }
+  }
+}
+
 function resolveExternalEvidencePath(
   candidatePath: string | undefined,
   repoRoot: string,
 ): string {
-  const target = (candidatePath?.trim() || DEFAULT_EVIDENCE_PATH);
+  const target = candidatePath?.trim() || DEFAULT_EVIDENCE_PATH;
   const resolvedTarget = resolve(target);
-  const resolvedRoot = resolve(repoRoot);
-  const rel = relative(resolvedRoot, resolvedTarget);
-  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
+  const realRepoRoot = realpathSync(resolve(repoRoot));
+  const realParent = realpathWithMissingTail(dirname(resolvedTarget));
+  const realTarget = join(realParent, basename(resolvedTarget));
+
+  // Canonical containment checks: reject repo-internal targets, including `..name` files
+  // and external-looking paths whose real parent is a symlink into the repository.
+  if (
+    isPathInsideRepo(realRepoRoot, realParent) ||
+    isPathInsideRepo(realRepoRoot, realTarget) ||
+    isPathInsideRepo(repoRoot, resolvedTarget)
+  ) {
     throw new Error('RERANKER_LIVE_EVIDENCE_PATH must be outside the repository tree');
   }
   return resolvedTarget;
@@ -168,6 +203,15 @@ function isTrackedTreeClean(): boolean {
     encoding: 'utf8',
   }).trim();
   return status.length === 0;
+}
+
+function readRepoStatus(): string {
+  return execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim();
+}
+
+function isPathInsideRepo(repoRoot: string, target: string): boolean {
+  const rel = relative(resolve(repoRoot), resolve(target));
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`));
 }
 
 function extractFetchUrl(input: Parameters<typeof fetch>[0]): string {
@@ -215,12 +259,13 @@ function scanSanitizedEvidence(
   const serialized = JSON.stringify(evidence);
   const apiKey = env['DASHSCOPE_API_KEY']?.trim();
 
+  // Env var *names* (e.g. DASHSCOPE_API_KEY) are not secrets; only real credential material is.
   const secretDetected =
     (Boolean(apiKey) && serialized.includes(apiKey!)) ||
     /\bAuthorization\b/i.test(serialized) ||
     /\bBearer\b/i.test(serialized) ||
     /\bsk-[A-Za-z0-9_-]{8,}/.test(serialized) ||
-    /DASHSCOPE_API_KEY/.test(serialized);
+    /"(?:api[_-]?key|secret|password|credential)"\s*:\s*"[^"]{8,}"/i.test(serialized);
 
   const rawContentDetected =
     serialized.includes(request.query) ||
@@ -233,6 +278,25 @@ function scanSanitizedEvidence(
   return { secretDetected, rawContentDetected };
 }
 
+function persistEvidence(params: {
+  readonly evidencePath: string;
+  readonly repoRoot: string;
+  readonly evidence: SanitizedLiveEvidence;
+  readonly request: RerankRequest;
+  readonly env?: NodeJS.ProcessEnv;
+}): void {
+  // Fail closed before touching the filesystem: canonical external-path validation and a
+  // secret/raw-content scan of the exact evidence that would be written.
+  const safePath = resolveExternalEvidencePath(params.evidencePath, params.repoRoot);
+  const scan = scanSanitizedEvidence(params.evidence, params.request, params.env);
+  if (scan.secretDetected || scan.rawContentDetected) {
+    throw new Error('RERANKER_LIVE_EVIDENCE_UNSAFE');
+  }
+
+  mkdirSync(dirname(safePath), { recursive: true });
+  writeFileSync(safePath, `${JSON.stringify(params.evidence, null, 2)}\n`, 'utf8');
+}
+
 function buildSanitizedEvidence(params: {
   readonly repositoryHead: string;
   readonly trackedTreeClean: boolean;
@@ -241,6 +305,10 @@ function buildSanitizedEvidence(params: {
   readonly error: RerankerTechnicalError | null;
   readonly attemptCount: number;
   readonly elapsedMs: number;
+  readonly cleanupMechanics: {
+    readonly unauthorizedPersistenceDetected: boolean;
+    readonly repoResidueDetected: boolean;
+  };
   readonly liveState: {
     readonly attempted: boolean;
     readonly provenance: 'REAL_LIVE_CALL' | 'NONE';
@@ -318,7 +386,8 @@ function buildSanitizedEvidence(params: {
   );
 
   const evaluated = evaluateTechnicalEvidence({
-    contractMechanics: { executed: true, allPassed: true },
+    // T010 does not re-run offline contract/protocol/architecture suites, so it must not claim PASS.
+    contractMechanics: { executed: false },
     liveProviderCapability: params.liveState.attempted
       ? {
           attempted: true,
@@ -335,8 +404,8 @@ function buildSanitizedEvidence(params: {
       checkCompleted: true,
       secretDetected: preScan.secretDetected,
       rawContentDetected: preScan.rawContentDetected,
-      unauthorizedPersistenceDetected: false,
-      repoResidueDetected: false,
+      unauthorizedPersistenceDetected: params.cleanupMechanics.unauthorizedPersistenceDetected,
+      repoResidueDetected: params.cleanupMechanics.repoResidueDetected,
     },
   });
 
@@ -344,6 +413,175 @@ function buildSanitizedEvidence(params: {
     ...baseRecord,
     lowerPredicates: evaluated.lowerPredicates,
     aggregateTechnicalResult: evaluated.aggregateTechnicalResult,
+  };
+}
+
+type ControlledLiveOutcome = {
+  readonly evidence: SanitizedLiveEvidence;
+  readonly evidencePath: string;
+  readonly attemptCount: number;
+  readonly repositoryHead: string;
+  readonly trackedTreeClean: boolean;
+  readonly result: RerankResult | null;
+  readonly technicalError: RerankerTechnicalError | null;
+};
+
+function evaluateCleanupMechanics(params: {
+  readonly repoRoot: string;
+  readonly evidencePath: string;
+  readonly baselineRepoStatus: string;
+}): { readonly unauthorizedPersistenceDetected: boolean; readonly repoResidueDetected: boolean } {
+  // The approved external evidence file is the only allowed persistence sink.
+  const unauthorizedPersistenceDetected = isPathInsideRepo(params.repoRoot, params.evidencePath);
+  // Any repository worktree change introduced during verification is residue.
+  const repoResidueDetected = readRepoStatus() !== params.baselineRepoStatus;
+  return { unauthorizedPersistenceDetected, repoResidueDetected };
+}
+
+async function produceControlledLiveEvidence(
+  env: NodeJS.ProcessEnv,
+  repoRoot: string,
+): Promise<ControlledLiveOutcome> {
+  const repositoryHead = readGitHead();
+  const trackedTreeClean = isTrackedTreeClean();
+  const baselineRepoStatus = readRepoStatus();
+  const evidencePath = resolveExternalEvidencePath(env['RERANKER_LIVE_EVIDENCE_PATH'], repoRoot);
+  const credentialAvailable = hasApprovedCredential(env);
+  const baseUrl = resolveApprovedBaseUrl(env);
+
+  if (!credentialAvailable || baseUrl === null) {
+    const missingParts: string[] = [];
+    if (!credentialAvailable) missingParts.push('approved DASHSCOPE_API_KEY');
+    if (baseUrl === null) missingParts.push('approved workspace-specific base URL');
+
+    const blockedEvidence = buildSanitizedEvidence({
+      repositoryHead,
+      trackedTreeClean,
+      baseUrl,
+      result: null,
+      error: null,
+      attemptCount: 0,
+      elapsedMs: 0,
+      cleanupMechanics: evaluateCleanupMechanics({ repoRoot, evidencePath, baselineRepoStatus }),
+      liveState: {
+        attempted: true,
+        provenance: 'REAL_LIVE_CALL',
+        validAccess: false,
+        contractCompatible: null,
+        missingPrerequisite: true,
+        reason: `BLOCKED: missing ${missingParts.join(' and ')}`,
+      },
+    });
+
+    persistEvidence({
+      evidencePath,
+      repoRoot,
+      evidence: blockedEvidence,
+      request: SYNTHETIC_LIVE_REQUEST,
+      env,
+    });
+
+    return {
+      evidence: blockedEvidence,
+      evidencePath,
+      attemptCount: 0,
+      repositoryHead,
+      trackedTreeClean,
+      result: null,
+      technicalError: null,
+    };
+  }
+
+  const startedAt = Date.now();
+  let result: RerankResult | null = null;
+  let technicalError: RerankerTechnicalError | null = null;
+
+  const { attemptCount } = await withCountingGlobalFetch(baseUrl, async () => {
+    try {
+      result = await rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl });
+    } catch (err) {
+      if (err instanceof RerankerTechnicalError) {
+        technicalError = err;
+      } else {
+        technicalError = new RerankerTechnicalError({
+          code: 'UNKNOWN_PROVIDER_FAILURE',
+          retryable: false,
+        });
+      }
+    }
+  });
+
+  const elapsedMs = Math.max(0, Date.now() - startedAt);
+
+  let validAccess = true;
+  let contractCompatible: boolean | null = null;
+  let missingPrerequisite = false;
+  let reason = 'PASS: live qwen3-rerank call matched frozen contract';
+
+  if (result !== null) {
+    contractCompatible =
+      result.provider === RERANKER_PROVIDER &&
+      result.configuredModelId === RERANKER_MODEL_ID &&
+      result.configuredModelRevision === null &&
+      result.results.length === SYNTHETIC_LIVE_REQUEST.candidates.length;
+  } else if (technicalError !== null) {
+    if (
+      technicalError.code === 'CONFIGURATION' ||
+      technicalError.code === 'AUTHENTICATION' ||
+      technicalError.code === 'AUTHORIZATION'
+    ) {
+      validAccess = false;
+      missingPrerequisite = technicalError.code === 'CONFIGURATION';
+      reason = `BLOCKED: ${technicalError.code}`;
+    } else if (
+      technicalError.code === 'MALFORMED_RESPONSE' ||
+      technicalError.code === 'PARTIAL_RESPONSE' ||
+      technicalError.code === 'IDENTITY_MAPPING_FAILURE' ||
+      technicalError.code === 'UNSUPPORTED_CAPABILITY'
+    ) {
+      contractCompatible = false;
+      reason = `FAIL: ${technicalError.code}`;
+    } else {
+      contractCompatible = null;
+      reason = `UNKNOWN: ${technicalError.code}`;
+    }
+  }
+
+  const liveEvidence = buildSanitizedEvidence({
+    repositoryHead,
+    trackedTreeClean,
+    baseUrl,
+    result,
+    error: technicalError,
+    attemptCount,
+    elapsedMs,
+    cleanupMechanics: evaluateCleanupMechanics({ repoRoot, evidencePath, baselineRepoStatus }),
+    liveState: {
+      attempted: true,
+      provenance: 'REAL_LIVE_CALL',
+      validAccess,
+      contractCompatible,
+      missingPrerequisite,
+      reason,
+    },
+  });
+
+  persistEvidence({
+    evidencePath,
+    repoRoot,
+    evidence: liveEvidence,
+    request: SYNTHETIC_LIVE_REQUEST,
+    env,
+  });
+
+  return {
+    evidence: liveEvidence,
+    evidencePath,
+    attemptCount,
+    repositoryHead,
+    trackedTreeClean,
+    result,
+    technicalError,
   };
 }
 
@@ -529,129 +767,162 @@ describe('Slice 23 controlled live provider verification', () => {
       return;
     }
 
-    const repositoryHead = readGitHead();
-    const trackedTreeClean = isTrackedTreeClean();
-    expect(trackedTreeClean).toBe(true);
+    const outcome = await produceControlledLiveEvidence(process.env, process.cwd());
+    expect(outcome.trackedTreeClean).toBe(true);
 
-    const evidencePath = resolveExternalEvidencePath(
-      process.env['RERANKER_LIVE_EVIDENCE_PATH'],
-      process.cwd(),
-    );
-    const credentialAvailable = hasApprovedCredential();
-    const baseUrl = resolveApprovedBaseUrl();
-
-    if (!credentialAvailable || baseUrl === null) {
-      const missingParts: string[] = [];
-      if (!credentialAvailable) missingParts.push('approved DASHSCOPE_API_KEY');
-      if (baseUrl === null) missingParts.push('approved workspace-specific base URL');
-
-      const blockedEvidence = buildSanitizedEvidence({
-        repositoryHead,
-        trackedTreeClean,
-        baseUrl,
-        result: null,
-        error: null,
-        attemptCount: 0,
-        elapsedMs: 0,
-        liveState: {
-          attempted: true,
-          provenance: 'REAL_LIVE_CALL',
-          validAccess: false,
-          contractCompatible: null,
-          missingPrerequisite: true,
-          reason: `BLOCKED: missing ${missingParts.join(' and ')}`,
-        },
-      });
-
-      mkdirSync(dirname(evidencePath), { recursive: true });
-      writeFileSync(evidencePath, `${JSON.stringify(blockedEvidence, null, 2)}\n`, 'utf8');
-
-      expect(blockedEvidence.lowerPredicates.LIVE_PROVIDER_CAPABILITY).toBe('BLOCKED');
-      expect(blockedEvidence.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('PASS');
-      expect(blockedEvidence.aggregateTechnicalResult).toBe('BLOCKED');
-      return;
+    if (outcome.result !== null) {
+      expect(outcome.result.provider).toBe(RERANKER_PROVIDER);
+      expect(outcome.result.configuredModelId).toBe(RERANKER_MODEL_ID);
+      expect(outcome.result.configuredModelRevision).toBeNull();
+      expect(outcome.result.results).toHaveLength(SYNTHETIC_LIVE_REQUEST.candidates.length);
     }
 
-    const startedAt = Date.now();
-    let result: RerankResult | null = null;
-    let technicalError: RerankerTechnicalError | null = null;
+    const scan = scanSanitizedEvidence(outcome.evidence, SYNTHETIC_LIVE_REQUEST);
+    expect(scan.secretDetected).toBe(false);
+    expect(scan.rawContentDetected).toBe(false);
+    expect(outcome.evidence.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('PASS');
+    expect(outcome.evidence.lowerPredicates.CONFIG_IDENTITY).toBe('UNKNOWN');
+  });
 
-    const { attemptCount } = await withCountingGlobalFetch(baseUrl, async () => {
-      try {
-        result = await rerank(SYNTHETIC_LIVE_REQUEST, { baseUrl });
-      } catch (err) {
-        if (err instanceof RerankerTechnicalError) {
-          technicalError = err;
-        } else {
-          technicalError = new RerankerTechnicalError({
-            code: 'UNKNOWN_PROVIDER_FAILURE',
-            retryable: false,
-          });
-        }
-      }
-    });
+  it('derives BLOCKED capability with truthful lower states from the missing-credential branch (S23-A2-M01, S23-A2-B04)', async () => {
+    const workspace = mkdtempSync(join(tmpdir(), 's23-reranker-blocked-'));
+    const evidencePath = join(workspace, 'blocked-evidence.json');
+    const env: NodeJS.ProcessEnv = {
+      RERANKER_LIVE_VERIFY: '1',
+      RERANKER_LIVE_BASE_URL: 'https://workspace-a.cn-beijing.maas.aliyuncs.com/api/v1',
+      RERANKER_LIVE_EVIDENCE_PATH: evidencePath,
+    };
 
-    const elapsedMs = Math.max(0, Date.now() - startedAt);
+    try {
+      const outcome = await produceControlledLiveEvidence(env, process.cwd());
 
-    let validAccess = true;
-    let contractCompatible: boolean | null = null;
-    let missingPrerequisite = false;
-    let reason = 'PASS: live qwen3-rerank call matched frozen contract';
+      expect(outcome.attemptCount).toBe(0);
+      expect(outcome.evidence.liveCapabilityReason).toContain('DASHSCOPE_API_KEY');
+      expect(outcome.evidence.lowerPredicates.LIVE_PROVIDER_CAPABILITY).toBe('BLOCKED');
+      expect(outcome.evidence.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('PASS');
+      expect(outcome.evidence.lowerPredicates.CLEANUP_SECRET_SAFETY).not.toBe('FAIL');
+      expect(outcome.evidence.lowerPredicates.CONTRACT_MECHANICS).toBe('NOT_EVALUATED');
+      expect(outcome.evidence.lowerPredicates.CONFIG_IDENTITY).toBe('UNKNOWN');
+      expect(outcome.evidence.aggregateTechnicalResult).toBe('BLOCKED');
 
-    if (result !== null) {
-      expect(result.provider).toBe(RERANKER_PROVIDER);
-      expect(result.configuredModelId).toBe(RERANKER_MODEL_ID);
-      expect(result.configuredModelRevision).toBeNull();
-      expect(result.results).toHaveLength(SYNTHETIC_LIVE_REQUEST.candidates.length);
-      contractCompatible = true;
-    } else if (technicalError !== null) {
-      if (
-        technicalError.code === 'CONFIGURATION' ||
-        technicalError.code === 'AUTHENTICATION' ||
-        technicalError.code === 'AUTHORIZATION'
-      ) {
-        validAccess = false;
-        missingPrerequisite = technicalError.code === 'CONFIGURATION';
-        reason = `BLOCKED: ${technicalError.code}`;
-      } else if (
-        technicalError.code === 'MALFORMED_RESPONSE' ||
-        technicalError.code === 'PARTIAL_RESPONSE' ||
-        technicalError.code === 'IDENTITY_MAPPING_FAILURE' ||
-        technicalError.code === 'UNSUPPORTED_CAPABILITY'
-      ) {
-        contractCompatible = false;
-        reason = `FAIL: ${technicalError.code}`;
-      } else {
-        contractCompatible = null;
-        reason = `UNKNOWN: ${technicalError.code}`;
-      }
+      expect(existsSync(evidencePath)).toBe(true);
+      expect(JSON.parse(readFileSync(evidencePath, 'utf8'))).toEqual(outcome.evidence);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
     }
+  });
 
-    const liveEvidence = buildSanitizedEvidence({
-      repositoryHead,
-      trackedTreeClean,
-      baseUrl,
-      result,
-      error: technicalError,
-      attemptCount,
-      elapsedMs,
+  it('scans and validates evidence before writing so unsafe evidence never touches disk (S23-A2-B03)', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 's23-reranker-write-'));
+    const safeEvidence = buildSanitizedEvidence({
+      repositoryHead: 'synthetic-head',
+      trackedTreeClean: true,
+      baseUrl: 'https://workspace-a.cn-beijing.maas.aliyuncs.com/api/v1',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      elapsedMs: 0,
+      cleanupMechanics: {
+        unauthorizedPersistenceDetected: false,
+        repoResidueDetected: false,
+      },
       liveState: {
         attempted: true,
         provenance: 'REAL_LIVE_CALL',
-        validAccess,
-        contractCompatible,
-        missingPrerequisite,
-        reason,
+        validAccess: false,
+        contractCompatible: null,
+        missingPrerequisite: true,
+        reason: 'BLOCKED: missing approved DASHSCOPE_API_KEY',
       },
     });
+    const env: NodeJS.ProcessEnv = { DASHSCOPE_API_KEY: 'super-secret-key-value' };
 
-    mkdirSync(dirname(evidencePath), { recursive: true });
-    writeFileSync(evidencePath, `${JSON.stringify(liveEvidence, null, 2)}\n`, 'utf8');
+    // T010 live evidence must not claim contract mechanics it did not mechanically execute.
+    expect(safeEvidence.lowerPredicates.CONTRACT_MECHANICS).toBe('NOT_EVALUATED');
 
-    const scan = scanSanitizedEvidence(liveEvidence, SYNTHETIC_LIVE_REQUEST);
-    expect(scan.secretDetected).toBe(false);
-    expect(scan.rawContentDetected).toBe(false);
-    expect(liveEvidence.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('PASS');
-    expect(liveEvidence.lowerPredicates.CONFIG_IDENTITY).toBe('UNKNOWN');
+    const unsafeCases: Array<{ readonly label: string; readonly evidence: SanitizedLiveEvidence }> = [
+      {
+        label: 'api-key providerRequestId',
+        evidence: { ...safeEvidence, providerRequestId: 'super-secret-key-value' },
+      },
+      {
+        label: 'bearer providerRequestId',
+        evidence: { ...safeEvidence, providerRequestId: 'Bearer abcdefgh123456' },
+      },
+      {
+        label: 'raw query providerRequestId',
+        evidence: { ...safeEvidence, providerRequestId: SYNTHETIC_LIVE_REQUEST.query },
+      },
+      {
+        label: 'raw candidate text providerRequestId',
+        evidence: {
+          ...safeEvidence,
+          providerRequestId: SYNTHETIC_LIVE_REQUEST.candidates[0]!.candidateText,
+        },
+      },
+      {
+        label: 'raw instruct providerRequestId',
+        evidence: { ...safeEvidence, providerRequestId: SYNTHETIC_LIVE_REQUEST.options.instruct },
+      },
+      {
+        label: 'raw query liveCapabilityReason',
+        evidence: { ...safeEvidence, liveCapabilityReason: SYNTHETIC_LIVE_REQUEST.query },
+      },
+    ];
+
+    try {
+      for (const [index, unsafeCase] of unsafeCases.entries()) {
+        const targetPath = join(workspace, `unsafe-${index}.json`);
+        expect(
+          () =>
+            persistEvidence({
+              evidencePath: targetPath,
+              repoRoot: process.cwd(),
+              evidence: unsafeCase.evidence,
+              request: SYNTHETIC_LIVE_REQUEST,
+              env,
+            }),
+          unsafeCase.label,
+        ).toThrow();
+        expect(existsSync(targetPath), unsafeCase.label).toBe(false);
+      }
+
+      const safePath = join(workspace, 'safe-evidence.json');
+      persistEvidence({
+        evidencePath: safePath,
+        repoRoot: process.cwd(),
+        evidence: safeEvidence,
+        request: SYNTHETIC_LIVE_REQUEST,
+        env,
+      });
+      expect(existsSync(safePath)).toBe(true);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('distinguishes repository-internal dot-dot-looking names and symlink escapes from real external paths (S23-A2-B03)', () => {
+    const repoRoot = process.cwd();
+
+    expect(() => resolveExternalEvidencePath('..evidence.json', repoRoot)).toThrow(
+      /outside the repository tree/,
+    );
+    expect(() => resolveExternalEvidencePath('tests/fixtures/live/evidence.json', repoRoot)).toThrow(
+      /outside the repository tree/,
+    );
+    expect(resolveExternalEvidencePath('../s23-outside-evidence.json', repoRoot)).toMatch(
+      /s23-outside-evidence\.json$/,
+    );
+
+    const workspace = mkdtempSync(join(tmpdir(), 's23-reranker-symlink-'));
+    try {
+      const linkPath = join(workspace, 'repo-link');
+      symlinkSync(repoRoot, linkPath, 'dir');
+      expect(() =>
+        resolveExternalEvidencePath(join(linkPath, 'evidence.json'), repoRoot),
+      ).toThrow(/outside the repository tree/);
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
   });
 });

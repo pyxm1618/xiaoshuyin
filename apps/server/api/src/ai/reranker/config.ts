@@ -13,7 +13,8 @@ export const RERANKER_RETRY_BACKOFF_MS = 1_000 as const;
 
 const APPROVED_HOST_SUFFIX = '.maas.aliyuncs.com';
 const APPROVED_BASE_PATH = '/api/v1';
-const HOST_LABEL_PATTERN = /^[a-z0-9-]+$/;
+const REQUIRED_WORKSPACE_HOST_LABELS = 2;
+const DNS_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export type RerankerConfigInput = {
   readonly baseUrl: string;
@@ -49,12 +50,15 @@ function isValidWorkspaceHost(hostname: string): boolean {
     return false;
   }
   const labels = workspacePrefix.split('.');
-  return labels.every((label) => label.length > 0 && HOST_LABEL_PATTERN.test(label));
+  if (labels.length !== REQUIRED_WORKSPACE_HOST_LABELS) {
+    return false;
+  }
+  return labels.every((label) => DNS_LABEL_PATTERN.test(label));
 }
 
 /**
  * Validates the explicit workspace-specific DashScope base URL.
- * Enforces HTTPS, a workspace-specific *.maas.aliyuncs.com host, exact /api/v1 path,
+ * Enforces HTTPS, an exact <workspace>.<region>.maas.aliyuncs.com host, exact /api/v1 path,
  * and rejects userinfo, port, query, and hash components.
  */
 export function validateRerankerBaseUrl(baseUrl: unknown): string {

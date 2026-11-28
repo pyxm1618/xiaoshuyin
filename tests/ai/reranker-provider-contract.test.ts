@@ -25,8 +25,10 @@ import {
 } from '../../apps/server/api/src/ai/reranker/errors.js';
 import {
   createRerankerTransport,
+  executeDashScopeRerank,
   isRetryableRerankerErrorCode,
   type RerankerFetch,
+  type RerankerTransport,
 } from '../../apps/server/api/src/ai/reranker/transport.js';
 import {
   EVIDENCE_STATES,
@@ -303,13 +305,33 @@ describe('Slice 23 T003 reranker capability config, error taxonomy, and secret b
     expect('secret' in config).toBe(false);
   });
 
-  it('accepts valid workspace-specific HTTPS *.maas.aliyuncs.com/api/v1 base URLs and normalizes host case', () => {
+  it('accepts valid workspace+region HTTPS *.maas.aliyuncs.com/api/v1 base URLs and normalizes host case', () => {
     expect(
       validateRerankerBaseUrl('https://WS-01.CN-BEIJING.MAAS.ALIYUNCS.COM/api/v1'),
     ).toBe('https://ws-01.cn-beijing.maas.aliyuncs.com/api/v1');
     expect(
-      validateRerankerBaseUrl('https://workspace-a.maas.aliyuncs.com/api/v1'),
-    ).toBe('https://workspace-a.maas.aliyuncs.com/api/v1');
+      validateRerankerBaseUrl('https://workspace-a.ap-southeast-1.maas.aliyuncs.com/api/v1'),
+    ).toBe('https://workspace-a.ap-southeast-1.maas.aliyuncs.com/api/v1');
+  });
+
+  it('rejects workspace hosts without exactly workspace+region DNS labels (S23-A2-M04)', () => {
+    for (const invalidBaseUrl of [
+      'https://workspace-a.maas.aliyuncs.com/api/v1',
+      'https://cn-beijing.maas.aliyuncs.com/api/v1',
+      'https://workspace-a.cn-beijing.extra.maas.aliyuncs.com/api/v1',
+      'https://-workspace.cn-beijing.maas.aliyuncs.com/api/v1',
+      'https://workspace-.cn-beijing.maas.aliyuncs.com/api/v1',
+    ]) {
+      let caught: unknown;
+      try {
+        validateRerankerBaseUrl(invalidBaseUrl);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught, invalidBaseUrl).toBeInstanceOf(RerankerTechnicalError);
+      expect((caught as RerankerTechnicalError).code).toBe('CONFIGURATION');
+      expect((caught as RerankerTechnicalError).retryable).toBe(false);
+    }
   });
 
   it.each([
@@ -347,10 +369,10 @@ describe('Slice 23 T003 reranker capability config, error taxonomy, and secret b
     );
 
     const config = createRerankerConfig({
-      baseUrl: 'https://workspace-a.maas.aliyuncs.com/api/v1',
+      baseUrl: 'https://workspace-a.cn-beijing.maas.aliyuncs.com/api/v1',
     });
 
-    expect(config.baseUrl).toBe('https://workspace-a.maas.aliyuncs.com/api/v1');
+    expect(config.baseUrl).toBe('https://workspace-a.cn-beijing.maas.aliyuncs.com/api/v1');
     expect(fakeEnvReader).not.toHaveBeenCalled();
 
     const resolvedKey = resolveDashScopeApiKey(fakeEnvReader);
@@ -816,6 +838,165 @@ describe('Slice 23 T004 reranker native HTTP transport, timeout, and bounded ret
     'UNKNOWN_PROVIDER_FAILURE',
   ] as const)('marks error code %s as non-retryable in transport retry policy', (code) => {
     expect(isRetryableRerankerErrorCode(code)).toBe(false);
+  });
+
+  it.each([302, 307, 308])(
+    'never auto-follows a native HTTP %d redirect and fails closed without retry (S23-A2-B01)',
+    async (status) => {
+      const config = createTestConfig();
+      const redirectTarget = 'https://unapproved.example.com/steal';
+      const requestedUrls: string[] = [];
+      const fetchInits: Array<RequestInit | undefined> = [];
+      const sleepCalls: number[] = [];
+
+      const fakeFetch: RerankerFetch = vi.fn(async (url, init) => {
+        requestedUrls.push(String(url));
+        fetchInits.push(init);
+        return new Response(null, {
+          status,
+          headers: { location: redirectTarget },
+        });
+      });
+
+      const transport = createRerankerTransport(config, {
+        fetch: fakeFetch,
+        envReader: makeEnvReader('synthetic-redirect-secret'),
+        sleep: vi.fn(async (ms: number) => {
+          sleepCalls.push(ms);
+        }),
+      });
+
+      let caught: unknown;
+      try {
+        await transport.send(makeTransportRequest());
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(fetchInits[0]?.redirect).toBe('manual');
+      expect(requestedUrls).toEqual([
+        'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank',
+      ]);
+      expect(requestedUrls).not.toContain(redirectTarget);
+      expect(fakeFetch).toHaveBeenCalledTimes(1);
+      expect(sleepCalls).toEqual([]);
+      expect(caught).toBeInstanceOf(RerankerTechnicalError);
+      const err = caught as RerankerTechnicalError;
+      expect(err.code).toBe('UNKNOWN_PROVIDER_FAILURE');
+      expect(err.retryable).toBe(false);
+      expect(JSON.stringify(toSafeRerankerErrorMetadata(err))).not.toContain(
+        'synthetic-redirect-secret',
+      );
+    },
+  );
+
+  it.each([
+    { status: 401, expectedCode: 'AUTHENTICATION' },
+    { status: 403, expectedCode: 'AUTHORIZATION' },
+    { status: 400, expectedCode: 'INVALID_INPUT' },
+    { status: 404, expectedCode: 'UNSUPPORTED_CAPABILITY' },
+    { status: 429, expectedCode: 'RATE_LIMIT' },
+    { status: 500, expectedCode: 'UNKNOWN_PROVIDER_FAILURE' },
+    { status: 200, expectedCode: 'MALFORMED_RESPONSE' },
+  ] as const)(
+    'treats a $status response with an unreadable body as terminal $expectedCode without retry (S23-A2-M03)',
+    async ({ status, expectedCode }) => {
+      const config = createTestConfig();
+      const sleepCalls: number[] = [];
+
+      const makeUnreadableResponse = (): Response => {
+        const response = new Response(null, { status });
+        Object.defineProperty(response, 'text', {
+          value: async () => {
+            throw new Error('response body stream failed');
+          },
+        });
+        return response;
+      };
+
+      const fakeFetch: RerankerFetch = vi.fn(async () => makeUnreadableResponse());
+      const transport = createRerankerTransport(config, {
+        fetch: fakeFetch,
+        envReader: makeEnvReader(),
+        sleep: vi.fn(async (ms: number) => {
+          sleepCalls.push(ms);
+        }),
+      });
+
+      let caught: unknown;
+      try {
+        await transport.send(makeTransportRequest());
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(RerankerTechnicalError);
+      const err = caught as RerankerTechnicalError;
+      expect(err.code).toBe(expectedCode);
+      expect(err.retryable).toBe(false);
+      expect(fakeFetch).toHaveBeenCalledTimes(1);
+      expect(sleepCalls).toEqual([]);
+    },
+  );
+
+  it('snapshots candidate identity before the first async boundary so caller mutation cannot remap results (S23-A2-B02)', async () => {
+    const candidates = [
+      { candidateId: 'cand-A', candidateText: 'text A' },
+      { candidateId: 'cand-B', candidateText: 'text B' },
+    ];
+    const request: RerankRequest = {
+      query: 'synthetic identity query',
+      candidates,
+      options: { instruct: 'synthetic identity instruct' },
+    };
+
+    const sentBodies: unknown[] = [];
+    const fakeTransport: RerankerTransport = {
+      provider: 'ALIBABA_DASHSCOPE',
+      modelId: 'qwen3-rerank',
+      async send(transportRequest) {
+        sentBodies.push(transportRequest.body);
+        // Caller mutates its own array/objects while the provider response is pending.
+        candidates.reverse();
+        candidates[0]!.candidateId = 'CORRUPTED';
+        candidates[0]!.candidateText = 'CORRUPTED';
+        return {
+          status: 200,
+          attempts: 1,
+          bodyText: JSON.stringify({
+            request_id: 'req-b02',
+            output: {
+              results: [
+                { index: 0, relevance_score: 0.9 },
+                { index: 1, relevance_score: 0.2 },
+              ],
+            },
+            usage: { total_tokens: 7 },
+          }),
+        };
+      },
+    };
+
+    const parsed = await executeDashScopeRerank(request, fakeTransport);
+
+    expect(sentBodies).toEqual([
+      {
+        model: 'qwen3-rerank',
+        input: {
+          query: 'synthetic identity query',
+          documents: ['text A', 'text B'],
+        },
+        parameters: {
+          top_n: 2,
+          return_documents: false,
+          instruct: 'synthetic identity instruct',
+        },
+      },
+    ]);
+    expect(parsed.results).toEqual([
+      { index: 0, candidateId: 'cand-A', score: 0.9 },
+      { index: 1, candidateId: 'cand-B', score: 0.2 },
+    ]);
   });
 });
 

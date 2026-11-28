@@ -624,3 +624,66 @@ describe('Slice 23 T008 DashScope adversarial protocol and error taxonomy matrix
     },
   );
 });
+
+describe('Slice 23 T008 conflicting dual result envelopes fail closed (S23-A2-M02)', () => {
+  const canonicalResults = [{ index: 0, relevance_score: 0.9 }];
+  const alternateResults = [{ index: 0, relevance_score: 0.1 }];
+
+  it.each([
+    {
+      label: 'data.results alongside canonical output.results',
+      body: {
+        request_id: 'req-dual-data',
+        output: { results: canonicalResults },
+        data: { results: alternateResults },
+        usage: { total_tokens: 10 },
+      },
+    },
+    {
+      label: 'top-level results alongside canonical output.results',
+      body: {
+        request_id: 'req-dual-top',
+        output: { results: canonicalResults },
+        results: alternateResults,
+        usage: { total_tokens: 10 },
+      },
+    },
+    {
+      label: 'output.data alongside canonical output.results',
+      body: {
+        request_id: 'req-dual-output-data',
+        output: { results: canonicalResults, data: alternateResults },
+        usage: { total_tokens: 10 },
+      },
+    },
+  ])('fails closed with MALFORMED_RESPONSE on $label', ({ body }) => {
+    const request = makeRequest({
+      candidates: [{ candidateId: 'c1', candidateText: 'doc 1' }],
+    });
+
+    try {
+      parseDashScopeRerankResponse(JSON.stringify(body), request.candidates);
+      expect.unreachable('Expected MALFORMED_RESPONSE');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RerankerTechnicalError);
+      expect((error as RerankerTechnicalError).code).toBe('MALFORMED_RESPONSE');
+      expect((error as RerankerTechnicalError).retryable).toBe(false);
+    }
+  });
+
+  it('still accepts harmless non-result metadata alongside canonical output.results', () => {
+    const request = makeRequest({
+      candidates: [{ candidateId: 'c1', candidateText: 'doc 1' }],
+    });
+    const bodyText = JSON.stringify({
+      request_id: 'req-harmless-metadata',
+      output: { results: canonicalResults },
+      usage: { total_tokens: 10 },
+      metadata: { trace: 'ok' },
+      data: { status: 'ok' },
+    });
+
+    const parsed = parseDashScopeRerankResponse(bodyText, request.candidates);
+    expect(parsed.results).toEqual([{ index: 0, candidateId: 'c1', score: 0.9 }]);
+  });
+});

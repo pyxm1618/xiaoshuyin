@@ -188,6 +188,11 @@ function classifyHttpFailure(
 ): RerankerTechnicalError {
   const { providerCode, providerRequestId } = parseSafeErrorEnvelope(bodyText, headers);
 
+  // A redirect is never followed; it is a terminal, non-retryable provider failure.
+  if (status >= 300 && status < 400) {
+    return createClassifiedError('UNKNOWN_PROVIDER_FAILURE', false, providerRequestId);
+  }
+
   if (status === 401 || providerCode === 'InvalidApiKey') {
     return createClassifiedError('AUTHENTICATION', false, providerRequestId);
   }
@@ -273,42 +278,71 @@ export function createRerankerTransport(
         }, config.attemptTimeoutMs);
 
         try {
-          const response = await fetchFn(endpointUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: serializedBody,
-            signal: controller.signal,
-          });
-
-          const bodyText = await response.text();
-          if (response.ok) {
-            const providerRequestId = extractSafeSuccessRequestId(bodyText, response.headers);
-            return {
-              status: response.status,
-              bodyText,
-              attempts: attempt,
-              ...(providerRequestId !== undefined ? { providerRequestId } : {}),
-            };
+          let response: Response | undefined;
+          try {
+            response = await fetchFn(endpointUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: serializedBody,
+              signal: controller.signal,
+              // Never silently follow a redirect to a different endpoint/host.
+              redirect: 'manual',
+            });
+          } catch (error) {
+            if (timedOut || isAbortError(error)) {
+              lastError = new RerankerTechnicalError({
+                code: 'TIMEOUT',
+                retryable: true,
+              });
+            } else {
+              lastError = new RerankerTechnicalError({
+                code: 'PROVIDER_UNAVAILABLE',
+                retryable: true,
+              });
+            }
           }
 
-          lastError = classifyHttpFailure(response.status, bodyText, response.headers);
-        } catch (error) {
-          if (timedOut || isAbortError(error)) {
-            lastError = new RerankerTechnicalError({
-              code: 'TIMEOUT',
-              retryable: true,
-            });
-          } else {
-            lastError = new RerankerTechnicalError({
-              code: 'PROVIDER_UNAVAILABLE',
-              retryable: true,
-            });
+          if (response !== undefined) {
+            let bodyText: string | undefined;
+            try {
+              bodyText = await response.text();
+            } catch {
+              // Once fetch resolves, a provider response already exists; body read failure is
+              // not a connection failure and must stay terminal.
+              bodyText = undefined;
+            }
+
+            if (bodyText === undefined) {
+              lastError = response.ok
+                ? new RerankerTechnicalError({
+                    code: 'MALFORMED_RESPONSE',
+                    retryable: false,
+                  })
+                : classifyHttpFailure(response.status, '', response.headers);
+            } else if (response.ok) {
+              const providerRequestId = extractSafeSuccessRequestId(bodyText, response.headers);
+              return {
+                status: response.status,
+                bodyText,
+                attempts: attempt,
+                ...(providerRequestId !== undefined ? { providerRequestId } : {}),
+              };
+            } else {
+              lastError = classifyHttpFailure(response.status, bodyText, response.headers);
+            }
           }
         } finally {
           clearTimer(timerHandle);
+        }
+
+        if (lastError === undefined) {
+          lastError = new RerankerTechnicalError({
+            code: 'UNKNOWN_PROVIDER_FAILURE',
+            retryable: false,
+          });
         }
 
         const canRetry =
@@ -450,6 +484,17 @@ export function parseDashScopeRerankResponse(
     throw protocolError('MALFORMED_RESPONSE', false, requestId);
   }
 
+  // AS-05: a second result-bearing envelope alongside canonical output.results is ambiguous.
+  // Harmless metadata is tolerated, but alternate result arrays are not.
+  const rawData = parsed['data'];
+  if (
+    Array.isArray(parsed['results']) ||
+    (isPlainObject(rawData) && Array.isArray(rawData['results'])) ||
+    Array.isArray(rawOutput['data'])
+  ) {
+    throw protocolError('MALFORMED_RESPONSE', false, requestId);
+  }
+
   const rawResults: readonly unknown[] = rawOutput['results'];
   const candidateCount = candidates.length;
   const seenIndices = new Set<number>();
@@ -585,6 +630,27 @@ export function normalizeDashScopeError(
 }
 
 /**
+ * Creates a detached immutable snapshot of the caller request before any async boundary,
+ * so provider indices always map to the exact candidate identity that was actually sent.
+ */
+function snapshotRerankRequest(request: RerankRequest): RerankRequest {
+  return Object.freeze({
+    query: request.query,
+    candidates: Object.freeze(
+      request.candidates.map((candidate) =>
+        Object.freeze({
+          candidateId: candidate.candidateId,
+          candidateText: candidate.candidateText,
+        }),
+      ),
+    ),
+    options: Object.freeze({
+      instruct: request.options.instruct,
+    }),
+  });
+}
+
+/**
  * Executes the DashScope native protocol round-trip using the injected transport
  * and returns the strictly parsed internal provider response for T006 orchestration.
  */
@@ -592,7 +658,8 @@ export async function executeDashScopeRerank(
   request: RerankRequest,
   transport: RerankerTransport,
 ): Promise<DashScopeParsedRerankResponse> {
-  const transportRequest = buildDashScopeRerankTransportRequest(request);
+  const snapshot = snapshotRerankRequest(request);
+  const transportRequest = buildDashScopeRerankTransportRequest(snapshot);
   const response = await transport.send(transportRequest);
-  return parseDashScopeRerankResponse(response.bodyText, request.candidates);
+  return parseDashScopeRerankResponse(response.bodyText, snapshot.candidates);
 }
