@@ -487,10 +487,12 @@ export function parseDashScopeRerankResponse(
   // AS-05: a second result-bearing envelope alongside canonical output.results is ambiguous.
   // Harmless metadata is tolerated, but alternate result arrays are not.
   const rawData = parsed['data'];
+  const rawOutputData = rawOutput['data'];
   if (
     Array.isArray(parsed['results']) ||
     (isPlainObject(rawData) && Array.isArray(rawData['results'])) ||
-    Array.isArray(rawOutput['data'])
+    Array.isArray(rawOutputData) ||
+    (isPlainObject(rawOutputData) && Array.isArray(rawOutputData['results']))
   ) {
     throw protocolError('MALFORMED_RESPONSE', false, requestId);
   }

@@ -656,6 +656,14 @@ describe('Slice 23 T008 conflicting dual result envelopes fail closed (S23-A2-M0
         usage: { total_tokens: 10 },
       },
     },
+    {
+      label: 'output.data.results alongside canonical output.results',
+      body: {
+        request_id: 'req-dual-output-data-results',
+        output: { results: canonicalResults, data: { results: alternateResults } },
+        usage: { total_tokens: 10 },
+      },
+    },
   ])('fails closed with MALFORMED_RESPONSE on $label', ({ body }) => {
     const request = makeRequest({
       candidates: [{ candidateId: 'c1', candidateText: 'doc 1' }],

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -171,6 +172,25 @@ function resolveExternalEvidencePath(
   ) {
     throw new Error('RERANKER_LIVE_EVIDENCE_PATH must be outside the repository tree');
   }
+
+  // The final path component itself must not be a symlink, and an existing target must not
+  // resolve back into the repository. A real externally validated parent is not enough: a
+  // pre-existing symlink would otherwise let writeFileSync follow it into the repo.
+  let finalTargetStat: ReturnType<typeof lstatSync> | null = null;
+  try {
+    finalTargetStat = lstatSync(resolvedTarget);
+  } catch {
+    finalTargetStat = null;
+  }
+  if (finalTargetStat !== null) {
+    if (finalTargetStat.isSymbolicLink()) {
+      throw new Error('RERANKER_LIVE_EVIDENCE_PATH must not be a symbolic link');
+    }
+    if (isPathInsideRepo(realRepoRoot, realpathSync(resolvedTarget))) {
+      throw new Error('RERANKER_LIVE_EVIDENCE_PATH must be outside the repository tree');
+    }
+  }
+
   return resolvedTarget;
 }
 
@@ -309,6 +329,7 @@ function buildSanitizedEvidence(params: {
     readonly unauthorizedPersistenceDetected: boolean;
     readonly repoResidueDetected: boolean;
   };
+  readonly cleanupCheckCompleted?: boolean;
   readonly liveState: {
     readonly attempted: boolean;
     readonly provenance: 'REAL_LIVE_CALL' | 'NONE';
@@ -401,7 +422,7 @@ function buildSanitizedEvidence(params: {
       : { attempted: false },
     config: configShape,
     cleanupSecretSafety: {
-      checkCompleted: true,
+      checkCompleted: params.cleanupCheckCompleted ?? true,
       secretDetected: preScan.secretDetected,
       rawContentDetected: preScan.rawContentDetected,
       unauthorizedPersistenceDetected: params.cleanupMechanics.unauthorizedPersistenceDetected,
@@ -426,16 +447,66 @@ type ControlledLiveOutcome = {
   readonly technicalError: RerankerTechnicalError | null;
 };
 
-function evaluateCleanupMechanics(params: {
-  readonly repoRoot: string;
+function persistEvidenceAndDeriveCleanup(params: {
   readonly evidencePath: string;
+  readonly repoRoot: string;
   readonly baselineRepoStatus: string;
-}): { readonly unauthorizedPersistenceDetected: boolean; readonly repoResidueDetected: boolean } {
+  readonly readRepoStatusFn: () => string;
+  readonly buildEvidence: (
+    cleanupMechanics: {
+      readonly unauthorizedPersistenceDetected: boolean;
+      readonly repoResidueDetected: boolean;
+    },
+    cleanupCheckCompleted: boolean,
+  ) => SanitizedLiveEvidence;
+  readonly request: RerankRequest;
+  readonly env?: NodeJS.ProcessEnv;
+}): {
+  readonly evidence: SanitizedLiveEvidence;
+  readonly unauthorizedPersistenceDetected: boolean;
+  readonly repoResidueDetected: boolean;
+} {
+  const safePath = resolveExternalEvidencePath(params.evidencePath, params.repoRoot);
   // The approved external evidence file is the only allowed persistence sink.
-  const unauthorizedPersistenceDetected = isPathInsideRepo(params.repoRoot, params.evidencePath);
-  // Any repository worktree change introduced during verification is residue.
-  const repoResidueDetected = readRepoStatus() !== params.baselineRepoStatus;
-  return { unauthorizedPersistenceDetected, repoResidueDetected };
+  const unauthorizedPersistenceDetected = isPathInsideRepo(params.repoRoot, safePath);
+
+  // Phase 1: provisional record persisted before the cleanup predicate can be terminal, so it
+  // must not claim PASS (checkCompleted=false derives UNKNOWN).
+  const provisional = params.buildEvidence(
+    { unauthorizedPersistenceDetected, repoResidueDetected: false },
+    false,
+  );
+  persistEvidence({
+    evidencePath: safePath,
+    repoRoot: params.repoRoot,
+    evidence: provisional,
+    request: params.request,
+    env: params.env,
+  });
+
+  // Phase 2: verify repository residue *after* persistence against the pre-write baseline.
+  const postPersistenceRepoStatus = params.readRepoStatusFn();
+  const repoResidueDetected = postPersistenceRepoStatus !== params.baselineRepoStatus;
+
+  // Phase 3: the final record binds the completed facts and is scanned + path-guarded again.
+  const evidence = params.buildEvidence(
+    { unauthorizedPersistenceDetected, repoResidueDetected },
+    true,
+  );
+  persistEvidence({
+    evidencePath: safePath,
+    repoRoot: params.repoRoot,
+    evidence,
+    request: params.request,
+    env: params.env,
+  });
+
+  // Phase 4: the final write itself must not introduce any further repository residue.
+  if (params.readRepoStatusFn() !== postPersistenceRepoStatus) {
+    throw new Error('RERANKER_LIVE_EVIDENCE_REPO_RESIDUE_AFTER_FINAL_WRITE');
+  }
+
+  return { evidence, unauthorizedPersistenceDetected, repoResidueDetected };
 }
 
 async function produceControlledLiveEvidence(
@@ -454,32 +525,34 @@ async function produceControlledLiveEvidence(
     if (!credentialAvailable) missingParts.push('approved DASHSCOPE_API_KEY');
     if (baseUrl === null) missingParts.push('approved workspace-specific base URL');
 
-    const blockedEvidence = buildSanitizedEvidence({
-      repositoryHead,
-      trackedTreeClean,
-      baseUrl,
-      result: null,
-      error: null,
-      attemptCount: 0,
-      elapsedMs: 0,
-      cleanupMechanics: evaluateCleanupMechanics({ repoRoot, evidencePath, baselineRepoStatus }),
-      liveState: {
-        attempted: true,
-        provenance: 'REAL_LIVE_CALL',
-        validAccess: false,
-        contractCompatible: null,
-        missingPrerequisite: true,
-        reason: `BLOCKED: missing ${missingParts.join(' and ')}`,
-      },
-    });
-
-    persistEvidence({
+    const blockedEvidence = persistEvidenceAndDeriveCleanup({
       evidencePath,
       repoRoot,
-      evidence: blockedEvidence,
+      baselineRepoStatus,
+      readRepoStatusFn: readRepoStatus,
+      buildEvidence: (cleanupMechanics, cleanupCheckCompleted) =>
+        buildSanitizedEvidence({
+          repositoryHead,
+          trackedTreeClean,
+          baseUrl,
+          result: null,
+          error: null,
+          attemptCount: 0,
+          elapsedMs: 0,
+          cleanupMechanics,
+          cleanupCheckCompleted,
+          liveState: {
+            attempted: true,
+            provenance: 'REAL_LIVE_CALL',
+            validAccess: false,
+            contractCompatible: null,
+            missingPrerequisite: true,
+            reason: `BLOCKED: missing ${missingParts.join(' and ')}`,
+          },
+        }),
       request: SYNTHETIC_LIVE_REQUEST,
       env,
-    });
+    }).evidence;
 
     return {
       evidence: blockedEvidence,
@@ -547,32 +620,34 @@ async function produceControlledLiveEvidence(
     }
   }
 
-  const liveEvidence = buildSanitizedEvidence({
-    repositoryHead,
-    trackedTreeClean,
-    baseUrl,
-    result,
-    error: technicalError,
-    attemptCount,
-    elapsedMs,
-    cleanupMechanics: evaluateCleanupMechanics({ repoRoot, evidencePath, baselineRepoStatus }),
-    liveState: {
-      attempted: true,
-      provenance: 'REAL_LIVE_CALL',
-      validAccess,
-      contractCompatible,
-      missingPrerequisite,
-      reason,
-    },
-  });
-
-  persistEvidence({
+  const liveEvidence = persistEvidenceAndDeriveCleanup({
     evidencePath,
     repoRoot,
-    evidence: liveEvidence,
+    baselineRepoStatus,
+    readRepoStatusFn: readRepoStatus,
+    buildEvidence: (cleanupMechanics, cleanupCheckCompleted) =>
+      buildSanitizedEvidence({
+        repositoryHead,
+        trackedTreeClean,
+        baseUrl,
+        result,
+        error: technicalError,
+        attemptCount,
+        elapsedMs,
+        cleanupMechanics,
+        cleanupCheckCompleted,
+        liveState: {
+          attempted: true,
+          provenance: 'REAL_LIVE_CALL',
+          validAccess,
+          contractCompatible,
+          missingPrerequisite,
+          reason,
+        },
+      }),
     request: SYNTHETIC_LIVE_REQUEST,
     env,
-  });
+  }).evidence;
 
   return {
     evidence: liveEvidence,
@@ -923,6 +998,104 @@ describe('Slice 23 controlled live provider verification', () => {
       ).toThrow(/outside the repository tree/);
     } finally {
       rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an external evidence file that is itself a symlink into the repository (S23-A2-B03 final-file)', () => {
+    const fakeRepo = mkdtempSync(join(tmpdir(), 's23-reranker-b03-repo-'));
+    const sink = mkdtempSync(join(tmpdir(), 's23-reranker-b03-sink-'));
+    const repoInternalTarget = join(fakeRepo, 'internal-target.json');
+    const linkPath = join(sink, 'evidence.json');
+
+    const safeEvidence = buildSanitizedEvidence({
+      repositoryHead: 'synthetic-head',
+      trackedTreeClean: true,
+      baseUrl: 'https://workspace-a.cn-beijing.maas.aliyuncs.com/api/v1',
+      result: null,
+      error: null,
+      attemptCount: 0,
+      elapsedMs: 0,
+      cleanupMechanics: { unauthorizedPersistenceDetected: false, repoResidueDetected: false },
+      liveState: {
+        attempted: true,
+        provenance: 'REAL_LIVE_CALL',
+        validAccess: false,
+        contractCompatible: null,
+        missingPrerequisite: true,
+        reason: 'BLOCKED: missing approved DASHSCOPE_API_KEY',
+      },
+    });
+
+    try {
+      symlinkSync(repoInternalTarget, linkPath, 'file');
+      expect(() =>
+        persistEvidence({
+          evidencePath: linkPath,
+          repoRoot: fakeRepo,
+          evidence: safeEvidence,
+          request: SYNTHETIC_LIVE_REQUEST,
+          env: {},
+        }),
+      ).toThrow();
+      // The final-component symlink must never be followed into the repository.
+      expect(existsSync(repoInternalTarget)).toBe(false);
+      // The external evidence path itself must be left untouched, not replaced.
+      expect(lstatSync(linkPath).isSymbolicLink()).toBe(true);
+    } finally {
+      rmSync(fakeRepo, { recursive: true, force: true });
+      rmSync(sink, { recursive: true, force: true });
+    }
+  });
+
+  it('binds CLEANUP_SECRET_SAFETY to a post-persistence residue check, not a pre-write snapshot (S23-A2-B04)', () => {
+    const fakeRepo = mkdtempSync(join(tmpdir(), 's23-reranker-b04-repo-'));
+    const sink = mkdtempSync(join(tmpdir(), 's23-reranker-b04-sink-'));
+    const evidencePath = join(sink, 'evidence.json');
+    const baselineRepoStatus = 'clean';
+
+    // Simulate persistence introducing untracked repository residue only *after* the
+    // external evidence file exists, so a pre-write snapshot cannot observe it.
+    const readRepoStatusFn = () =>
+      existsSync(evidencePath) ? '?? residue.json' : baselineRepoStatus;
+
+    try {
+      const outcome = persistEvidenceAndDeriveCleanup({
+        evidencePath,
+        repoRoot: fakeRepo,
+        baselineRepoStatus,
+        readRepoStatusFn,
+        buildEvidence: (cleanupMechanics, cleanupCheckCompleted) =>
+          buildSanitizedEvidence({
+            repositoryHead: 'synthetic-head',
+            trackedTreeClean: true,
+            baseUrl: null,
+            result: null,
+            error: null,
+            attemptCount: 0,
+            elapsedMs: 0,
+            cleanupMechanics,
+            cleanupCheckCompleted,
+            liveState: {
+              attempted: true,
+              provenance: 'REAL_LIVE_CALL',
+              validAccess: false,
+              contractCompatible: null,
+              missingPrerequisite: true,
+              reason: 'BLOCKED: missing approved DASHSCOPE_API_KEY',
+            },
+          }),
+        request: SYNTHETIC_LIVE_REQUEST,
+        env: {},
+      });
+
+      expect(outcome.repoResidueDetected).toBe(true);
+      expect(outcome.evidence.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('FAIL');
+      expect(outcome.evidence.aggregateTechnicalResult).toBe('FAIL');
+      const persisted = JSON.parse(readFileSync(evidencePath, 'utf8')) as SanitizedLiveEvidence;
+      expect(persisted.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('FAIL');
+    } finally {
+      rmSync(fakeRepo, { recursive: true, force: true });
+      rmSync(sink, { recursive: true, force: true });
     }
   });
 });
