@@ -1573,3 +1573,295 @@ describe('Slice 23 T007 controlled whitelist telemetry', () => {
     expect(sanitizedValid.requestFingerprint).toBe(validRequestFp);
   });
 });
+
+describe('Slice 23 T008 cross-module and adversarial offline test matrix', () => {
+  const BASE_URL = 'https://ws-t008.cn-beijing.maas.aliyuncs.com/api/v1';
+
+  const makeJsonResponse = (status: number, body: unknown): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+
+  it('executes full end-to-end orchestration through native transport without reading process.env.DASHSCOPE_API_KEY', async () => {
+    const originalApiKey = process.env.DASHSCOPE_API_KEY;
+    delete process.env.DASHSCOPE_API_KEY;
+
+    try {
+      const envReader = vi.fn((key: string) =>
+        key === 'DASHSCOPE_API_KEY' ? 'synthetic-t008-key' : undefined,
+      );
+      const capturedUrls: string[] = [];
+      const capturedBodies: unknown[] = [];
+      const capturedAuthHeaders: string[] = [];
+
+      const fakeFetch: RerankerFetch = vi.fn(async (url, init) => {
+        capturedUrls.push(String(url));
+        capturedBodies.push(JSON.parse(String(init?.body)));
+        capturedAuthHeaders.push(new Headers(init?.headers).get('Authorization') ?? '');
+        return makeJsonResponse(200, {
+          request_id: 'req-e2e-t008',
+          usage: { total_tokens: 55 },
+          output: {
+            results: [
+              { index: 1, relevance_score: 1 },
+              { index: 0, relevance_score: 0 },
+            ],
+          },
+        });
+      });
+
+      const config = createRerankerConfig({ baseUrl: BASE_URL });
+      const transport = createRerankerTransport(config, {
+        fetch: fakeFetch,
+        envReader,
+        sleep: vi.fn(async () => {}),
+      });
+
+      const result = await rerankWithDeps(
+        makeValidRequest({
+          query: 'exact synthetic query',
+          candidates: [
+            { candidateId: 'cand-first', candidateText: 'doc first' },
+            { candidateId: 'cand-second', candidateText: 'doc second' },
+          ],
+          options: { instruct: 'exact synthetic instruct' },
+        }),
+        { baseUrl: BASE_URL },
+        { transport },
+      );
+
+      expect(envReader).toHaveBeenCalledTimes(1);
+      expect(capturedUrls).toEqual([
+        'https://ws-t008.cn-beijing.maas.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank',
+      ]);
+      expect(capturedAuthHeaders).toEqual(['Bearer synthetic-t008-key']);
+      expect(capturedBodies).toEqual([
+        {
+          model: 'qwen3-rerank',
+          input: {
+            query: 'exact synthetic query',
+            documents: ['doc first', 'doc second'],
+          },
+          parameters: {
+            top_n: 2,
+            return_documents: false,
+            instruct: 'exact synthetic instruct',
+          },
+        },
+      ]);
+      expect(result).toEqual({
+        provider: 'ALIBABA_DASHSCOPE',
+        configuredModelId: 'qwen3-rerank',
+        configuredModelRevision: null,
+        providerRequestId: 'req-e2e-t008',
+        usage: { totalTokens: 55 },
+        results: [
+          { candidateId: 'cand-second', score: 1, rank: 1 },
+          { candidateId: 'cand-first', score: 0, rank: 2 },
+        ],
+      });
+    } finally {
+      if (originalApiKey !== undefined) {
+        process.env.DASHSCOPE_API_KEY = originalApiKey;
+      }
+    }
+  });
+
+  it('rejects >500 candidates before transport and does not guess token-count limits from character length', async () => {
+    const fakeFetch: RerankerFetch = vi.fn(async () =>
+      makeJsonResponse(400, {
+        code: 'InvalidParameter',
+        message: 'input length exceeds token limit',
+        request_id: 'req-400-overlimit',
+      }),
+    );
+
+    const config = createRerankerConfig({ baseUrl: BASE_URL });
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: () => 'synthetic-t008-key',
+      sleep: vi.fn(async () => {}),
+    });
+
+    // >500 candidates fails locally with 0 transport calls
+    const over500 = Array.from({ length: 501 }, (_, i) => ({
+      candidateId: `id-${i}`,
+      candidateText: `text-${i}`,
+    }));
+    await expect(
+      rerankWithDeps(makeValidRequest({ candidates: over500 }), { baseUrl: BASE_URL }, { transport }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT', retryable: false });
+    expect(fakeFetch).not.toHaveBeenCalled();
+
+    // Very long character text is not locally rejected by character heuristic; provider 400 InvalidParameter -> INVALID_INPUT
+    const veryLongQuery = 'a'.repeat(130_000);
+    let caught: unknown;
+    try {
+      await rerankWithDeps(
+        makeValidRequest({ query: veryLongQuery }),
+        { baseUrl: BASE_URL },
+        { transport },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    expect((caught as RerankerTechnicalError).code).toBe('INVALID_INPUT');
+    expect((caught as RerankerTechnicalError).retryable).toBe(false);
+    expect((caught as RerankerTechnicalError).providerRequestId).toBe('req-400-overlimit');
+  });
+
+  it.each([
+    {
+      label: 'PARTIAL_RESPONSE',
+      body: {
+        request_id: 'req-e2e-partial',
+        usage: { total_tokens: 10 },
+        output: { results: [{ index: 0, relevance_score: 0.9 }] },
+      },
+      expectedCode: 'PARTIAL_RESPONSE',
+    },
+    {
+      label: 'IDENTITY_MAPPING_FAILURE',
+      body: {
+        request_id: 'req-e2e-id',
+        usage: { total_tokens: 10 },
+        output: {
+          results: [
+            { index: 0, relevance_score: 0.9 },
+            { index: 0, relevance_score: 0.8 },
+          ],
+        },
+      },
+      expectedCode: 'IDENTITY_MAPPING_FAILURE',
+    },
+    {
+      label: 'MALFORMED_RESPONSE',
+      body: {
+        request_id: 'req-e2e-malformed',
+        usage: { total_tokens: 10 },
+        output: {
+          results: [
+            { index: 0, relevance_score: 0.2 },
+            { index: 1, relevance_score: 0.8 },
+          ],
+        },
+      },
+      expectedCode: 'MALFORMED_RESPONSE',
+    },
+  ])('does not retry $label in full orchestration and surfaces terminal failure', async ({
+    body,
+    expectedCode,
+  }) => {
+    const sleepCalls: number[] = [];
+    const fakeFetch: RerankerFetch = vi.fn(async () => makeJsonResponse(200, body));
+    const config = createRerankerConfig({ baseUrl: BASE_URL });
+    const transport = createRerankerTransport(config, {
+      fetch: fakeFetch,
+      envReader: () => 'synthetic-t008-key',
+      sleep: vi.fn(async (ms: number) => {
+        sleepCalls.push(ms);
+      }),
+    });
+
+    let caught: unknown;
+    try {
+      await rerankWithDeps(
+        makeValidRequest({
+          candidates: [
+            { candidateId: 'c1', candidateText: 'doc 1' },
+            { candidateId: 'c2', candidateText: 'doc 2' },
+          ],
+        }),
+        { baseUrl: BASE_URL },
+        { transport },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(fakeFetch).toHaveBeenCalledTimes(1);
+    expect(sleepCalls).toEqual([]);
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    expect((caught as RerankerTechnicalError).code).toBe(expectedCode);
+    expect((caught as RerankerTechnicalError).retryable).toBe(false);
+  });
+
+  it('rejects unsafe providerRequestId values with whitespace, control chars, or credential prefixes in telemetry', () => {
+    const config = createRerankerConfig({ baseUrl: BASE_URL });
+    const request = makeValidRequest();
+
+    for (const unsafeId of [
+      'req with space',
+      'req\ninjected-line',
+      'req\tcontrol',
+      'Bearer token-value',
+      'sk-secret-like-id',
+      '   ',
+    ]) {
+      const record = buildRerankerTelemetryRecord({
+        config,
+        request,
+        attemptCount: 1,
+        elapsedMs: 40,
+        terminalState: 'PROVIDER_UNAVAILABLE',
+        errorCode: 'PROVIDER_UNAVAILABLE',
+        providerRequestId: unsafeId,
+      });
+
+      expect(record.providerRequestId).toBeUndefined();
+      if (unsafeId.trim().length > 0) {
+        expect(JSON.stringify(record)).not.toContain(unsafeId.trim());
+      }
+    }
+  });
+
+  it('guarantees offline/mock/synthetic inputs can never produce LIVE_PROVIDER_CAPABILITY = PASS or aggregate PASS', () => {
+    const config = createRerankerConfig({ baseUrl: BASE_URL });
+
+    for (const provenance of ['OFFLINE_MOCK', 'NONE'] as const) {
+      const liveState = deriveLiveProviderCapabilityState({
+        attempted: true,
+        provenance,
+        exactHeadBound: true,
+        exactConfigBound: true,
+        validAccess: true,
+        contractCompatible: true,
+      });
+      expect(liveState).toBe('NOT_EVALUATED');
+      expect(liveState).not.toBe('PASS');
+
+      const report = evaluateTechnicalEvidence({
+        contractMechanics: { executed: true, allPassed: true },
+        liveProviderCapability: {
+          attempted: true,
+          provenance,
+          exactHeadBound: true,
+          exactConfigBound: true,
+          validAccess: true,
+          contractCompatible: true,
+        },
+        config,
+        cleanupSecretSafety: {
+          checkCompleted: true,
+          secretDetected: false,
+          rawContentDetected: false,
+          unauthorizedPersistenceDetected: false,
+          repoResidueDetected: false,
+        },
+      });
+
+      expect(report.lowerPredicates).toEqual({
+        CONTRACT_MECHANICS: 'PASS',
+        LIVE_PROVIDER_CAPABILITY: 'NOT_EVALUATED',
+        CONFIG_IDENTITY: 'UNKNOWN',
+        CLEANUP_SECRET_SAFETY: 'PASS',
+      });
+      expect(report.aggregateTechnicalResult).toBe('UNKNOWN');
+      expect(report.aggregateTechnicalResult).not.toBe('PASS');
+    }
+  });
+});

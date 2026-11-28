@@ -485,3 +485,142 @@ describe('Slice 23 T005 DashScope qwen3-rerank request mapping and strict parser
     },
   );
 });
+
+describe('Slice 23 T008 DashScope adversarial protocol and error taxonomy matrix', () => {
+  it.each([
+    {
+      label: 'missing index field (unknown result index)',
+      results: [
+        { relevance_score: 0.9 },
+        { index: 1, relevance_score: 0.8 },
+      ],
+    },
+    {
+      label: 'null index (unknown result index)',
+      results: [
+        { index: null, relevance_score: 0.9 },
+        { index: 1, relevance_score: 0.8 },
+      ],
+    },
+    {
+      label: 'missing candidate due to duplicate index covering N items',
+      results: [
+        { index: 1, relevance_score: 0.9 },
+        { index: 1, relevance_score: 0.8 },
+      ],
+    },
+  ])('fails closed with IDENTITY_MAPPING_FAILURE on $label without text matching', ({ results }) => {
+    const request = makeRequest({
+      candidates: [
+        { candidateId: 'c1', candidateText: 'duplicate text' },
+        { candidateId: 'c2', candidateText: 'duplicate text' },
+      ],
+    });
+    const bodyText = JSON.stringify({
+      request_id: 'req-t008-id-fail',
+      output: { results },
+      usage: { total_tokens: 15 },
+    });
+
+    try {
+      parseDashScopeRerankResponse(bodyText, request.candidates);
+      expect.unreachable('Expected IDENTITY_MAPPING_FAILURE');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RerankerTechnicalError);
+      expect((error as RerankerTechnicalError).code).toBe('IDENTITY_MAPPING_FAILURE');
+      expect((error as RerankerTechnicalError).retryable).toBe(false);
+    }
+  });
+
+  it.each([
+    { label: 'top-level array instead of object', bodyText: '[]' },
+    { label: 'top-level null', bodyText: 'null' },
+    { label: 'top-level results without output envelope', bodyText: JSON.stringify({ request_id: 'r1', results: [{ index: 0, relevance_score: 0.9 }], usage: { total_tokens: 5 } }) },
+    { label: 'unexpected output.data nested envelope', bodyText: JSON.stringify({ request_id: 'r1', output: { data: [{ index: 0, relevance_score: 0.9 }] }, usage: { total_tokens: 5 } }) },
+    { label: 'null item inside output.results', bodyText: JSON.stringify({ request_id: 'r1', output: { results: [null] }, usage: { total_tokens: 5 } }) },
+    { label: 'missing relevance_score field', bodyText: JSON.stringify({ request_id: 'r1', output: { results: [{ index: 0 }] }, usage: { total_tokens: 5 } }) },
+  ])('rejects unexpected or malformed schema ($label) with MALFORMED_RESPONSE', ({ bodyText }) => {
+    const request = makeRequest({
+      candidates: [{ candidateId: 'c1', candidateText: 'doc 1' }],
+    });
+
+    try {
+      parseDashScopeRerankResponse(bodyText, request.candidates);
+      expect.unreachable('Expected MALFORMED_RESPONSE');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RerankerTechnicalError);
+      expect((error as RerankerTechnicalError).code).toBe('MALFORMED_RESPONSE');
+      expect((error as RerankerTechnicalError).retryable).toBe(false);
+    }
+  });
+
+  it('rejects missing candidate in valid shorter result collection as PARTIAL_RESPONSE', () => {
+    const request = makeRequest({
+      candidates: [
+        { candidateId: 'c1', candidateText: 'doc 1' },
+        { candidateId: 'c2', candidateText: 'doc 2' },
+        { candidateId: 'c3', candidateText: 'doc 3' },
+      ],
+    });
+    const bodyText = JSON.stringify({
+      request_id: 'req-t008-partial',
+      output: {
+        results: [
+          { index: 2, relevance_score: 0.9 },
+          { index: 0, relevance_score: 0.5 },
+        ],
+      },
+      usage: { total_tokens: 21 },
+    });
+
+    try {
+      parseDashScopeRerankResponse(bodyText, request.candidates);
+      expect.unreachable('Expected PARTIAL_RESPONSE');
+    } catch (error) {
+      expect(error).toBeInstanceOf(RerankerTechnicalError);
+      expect((error as RerankerTechnicalError).code).toBe('PARTIAL_RESPONSE');
+      expect((error as RerankerTechnicalError).retryable).toBe(false);
+    }
+  });
+
+  it.each([
+    {
+      status: 404,
+      body: { code: 'NotFound', message: 'endpoint or model not found', request_id: 'err-404-nf' },
+      expectedCode: 'UNSUPPORTED_CAPABILITY',
+      expectedRetryable: false,
+    },
+    {
+      status: 429,
+      body: { code: 'RateLimitExceeded', message: 'burst limit', request_id: 'err-429-rle' },
+      expectedCode: 'RATE_LIMIT',
+      expectedRetryable: true,
+    },
+    {
+      status: 429,
+      body: { code: 'QuotaExhausted', message: 'quota exhausted', request_id: 'err-429-qe' },
+      expectedCode: 'RATE_LIMIT',
+      expectedRetryable: false,
+    },
+    {
+      status: 503,
+      body: { code: 'ModelUnavailable', message: 'model temporarily unavailable', request_id: 'err-503-mu' },
+      expectedCode: 'PROVIDER_UNAVAILABLE',
+      expectedRetryable: true,
+    },
+  ])(
+    'normalizes additional DashScope error $status/$body.code to $expectedCode (retryable=$expectedRetryable)',
+    ({ status, body, expectedCode, expectedRetryable }) => {
+      const err = normalizeDashScopeError(status, JSON.stringify(body));
+      const safeMeta = toSafeRerankerErrorMetadata(err);
+
+      expect(err).toBeInstanceOf(RerankerTechnicalError);
+      expect(safeMeta).toEqual({
+        code: expectedCode,
+        retryable: expectedRetryable,
+        providerRequestId: body.request_id,
+      });
+      expect(JSON.stringify(safeMeta)).not.toContain(body.message);
+    },
+  );
+});
