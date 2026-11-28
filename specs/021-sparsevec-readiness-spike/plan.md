@@ -361,7 +361,7 @@ Outbound permission rationale (RESOLVED, no user approval dependency): each exce
 | D01 | 教育部等六部门印发通知部署做好预防中小学生沉迷网络游戏管理工作 | http://fx.xwapp.moe.gov.cn/article/202110/617b9997695ccf00015c2a1d.html | 2021-10 | `为深入贯彻《中华人民共和国未成年人保护法》` | target Q01 |
 | D02 | 《近视防控三十问答》，转给师生家长 | http://fx.xwapp.moe.gov.cn/article/202306/648bc6d9ebf50d603fbc064b.html | 2023-06 | `第二届全国综合防控儿童青少年近视宣讲团` | target Q02 |
 | D03 | 最新通知！教育部印发《学校新型冠状病毒感染防控工作方案》 | http://fx.xwapp.moe.gov.cn/article/202212/63ae672b6ada004457c8d005.html | 2022-12 | `为科学高效统筹学校新型冠状病毒感染防控和教育教学工作` | target Q03 |
-| D04 | 研究生教育学科专业目录（2022年）发布，自2023年起实施 | https://fx.xwapp.moe.gov.cn/article/202209/63214de5f858056a22552341.html | 2022-09 | `通知要求，新版目录自2023年起实施` | distractor |
+| D04 | 研究生教育学科专业目录（2022年）发布，自2023年起实施 | http://fx.xwapp.moe.gov.cn/article/202209/63214de5f858056a22552341.html | 2022-09 | `通知要求，新版目录自2023年起实施` | distractor |
 | D05 | 教育部等5部门联合印发意见，规范高校在线开放课程教学管理 | http://fx.xwapp.moe.gov.cn/article/202204/624665851916aa00012e9a5a.html | 2022-04 | `正式印发` | distractor |
 | D06 | 教育部公布第三批基础学科拔尖学生培养计划2.0基地名单 | http://fx.xwapp.moe.gov.cn/article/202111/61a44c5f695ccf00015c496f.html | 2021-11 | `加快培养基础学科拔尖人才` | distractor |
 
