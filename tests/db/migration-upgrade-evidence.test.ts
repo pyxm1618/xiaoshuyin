@@ -135,7 +135,8 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 028_professional_knowledge_authority_boundary_remediation.sql');
     expect(output).toContain('APPLY 029_staff_assignment_control_plane.sql');
     expect(output).toContain('APPLY 039_final_bounded_remediation.sql');
-    expect(output).toMatch(/Migration complete: 40 new, 3 previously applied\./);
+    expect(output).toContain('APPLY 041_evidence_conflict_group_immutability.sql');
+    expect(output).toMatch(/Migration complete: 41 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -237,6 +238,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '038_phone_contract_child_participation_deferred_binding.sql',
       '039_final_bounded_remediation.sql',
       '040_consent_dependency_canonical_matching.sql',
+      '041_evidence_conflict_group_immutability.sql',
     ]);
 
     // New Evidence schema exists.
@@ -346,7 +348,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 43 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 44 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
