@@ -1147,6 +1147,12 @@ async function markProblemFormulationsForDependencyReview(
   if (input.familyId === null && input.caseId === null) {
     throw new Error('PROBLEM_FORMULATION_REVIEW_SCOPE_REQUIRED');
   }
+  // CONSENT refs use the same canonical matcher as Goal / Contract
+  // propagation (app.consent_dependency_matches): UUID identity is compared as
+  // a UUID, never as case-sensitive text, and the optional version is exact.
+  // Plain jsonb containment would treat an unversioned propagated ref as a
+  // subset of every version-pinned stored ref. The CASE guard keeps a
+  // malformed stored id from reaching the uuid cast.
   const result = await tx.query(
     `UPDATE problem_formulations
         SET review_state = 'NEEDS_REVIEW',
@@ -1155,11 +1161,24 @@ async function markProblemFormulationsForDependencyReview(
         AND ($2::uuid IS NULL OR case_id = $2)
         AND status <> 'SUPERSEDED'
         AND review_state = 'CURRENT'
-        AND dependency_refs @> $3::jsonb`,
+        AND CASE WHEN $4::boolean THEN EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(dependency_refs) AS stored(dep)
+               WHERE CASE
+                       WHEN stored.dep->>'type' = 'CONSENT'
+                        AND stored.dep->>'id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                       THEN app.consent_dependency_matches(stored.dep, $5::jsonb)
+                       ELSE false
+                     END
+            )
+            ELSE dependency_refs @> $3::jsonb
+            END`,
     [
       input.familyId,
       input.caseId,
       JSON.stringify([input.dependency]),
+      input.dependency.type === 'CONSENT',
+      JSON.stringify(input.dependency),
     ]
   );
   return result.rowCount ?? 0;
@@ -1214,28 +1233,47 @@ export async function markProblemFormulationsForEvidenceReview(
 }
 
 /**
- * AUTH-006 current-runtime Consent propagation seam. Revocation marks only
- * formulations and downstream Goal/Contract that are pinned to the exact superseded Consent id + version.
+ * AUTH-006 current-runtime Consent propagation seam (N-05).
+ *
+ * A stored Consent dependency is either version-pinned
+ * (`{type, id, version}`) or an identity dependency on the Consent's current
+ * authority (`{type, id}`). Revoking version N therefore invalidates:
+ *   1. refs pinned to exactly `{id, version: N}`; and
+ *   2. unversioned refs on the same Consent identity.
+ *
+ * The matcher (`app.consent_dependency_matches`) is exact per propagated
+ * shape: a versioned propagation matches only the same pinned version, and an
+ * unversioned propagation matches only unversioned stored refs. Emitting both
+ * shapes covers (1) and (2) while a ref pinned to another version stays
+ * untouched. Formulations, Goals and Contracts all go through both shapes.
  */
 export async function markProblemFormulationsForConsentReview(
   tx: Tx,
-  input: { familyId: string; consentId: string; version: number }
+  input: { familyId: string; consentId: string; version?: number }
 ): Promise<number> {
-  const dependency: DependencyRef = {
-    type: 'CONSENT',
-    id: input.consentId.toLowerCase(),
-    version: input.version,
-  };
-  const count = await markProblemFormulationsForDependencyReview(tx, {
-    familyId: input.familyId,
-    caseId: null,
-    dependency,
-  });
-  await propagateDownstreamDependencyReview(tx, {
-    familyId: input.familyId,
-    caseId: null,
-    dependency,
-  });
+  const id = input.consentId.toLowerCase();
+  const dependencies: DependencyRef[] =
+    input.version === undefined
+      ? [{ type: 'CONSENT', id }]
+      : [
+          { type: 'CONSENT', id, version: input.version },
+          { type: 'CONSENT', id },
+        ];
+  let count = 0;
+  for (const dependency of dependencies) {
+    // Rows already moved to NEEDS_REVIEW by the first shape are no longer
+    // CURRENT, so nothing is counted or audited twice.
+    count += await markProblemFormulationsForDependencyReview(tx, {
+      familyId: input.familyId,
+      caseId: null,
+      dependency,
+    });
+    await propagateDownstreamDependencyReview(tx, {
+      familyId: input.familyId,
+      caseId: null,
+      dependency,
+    });
+  }
   return count;
 }
 
