@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MAX_RERANK_CANDIDATES,
+  createReranker,
+  rerank,
   validateRerankRequest,
   type RerankRequest,
   type RerankResult,
 } from '../../apps/server/api/src/ai/reranker/index.js';
+import * as rerankerPublicIndex from '../../apps/server/api/src/ai/reranker/index.js';
+import {
+  createReranker as createRerankerWithDeps,
+  rerank as rerankWithDeps,
+} from '../../apps/server/api/src/ai/reranker/rerank.js';
 import {
   createRerankerConfig,
   resolveDashScopeApiKey,
@@ -787,5 +795,357 @@ describe('Slice 23 T004 reranker native HTTP transport, timeout, and bounded ret
     'UNKNOWN_PROVIDER_FAILURE',
   ] as const)('marks error code %s as non-retryable in transport retry policy', (code) => {
     expect(isRetryableRerankerErrorCode(code)).toBe(false);
+  });
+});
+
+describe('Slice 23 T006 deterministic rerank orchestration and normalized output', () => {
+  const BASE_URL = 'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1';
+
+  const makeFakeTransport = (
+    handler: (request: { readonly path: string; readonly body: unknown }) => Promise<{
+      readonly status: number;
+      readonly bodyText: string;
+      readonly attempts: number;
+      readonly providerRequestId?: string;
+    }>,
+  ) => {
+    const send = vi.fn(handler);
+    return {
+      provider: 'ALIBABA_DASHSCOPE' as const,
+      modelId: 'qwen3-rerank' as const,
+      send,
+    };
+  };
+
+  it('validates input before egress and makes 0 transport calls on invalid requests', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      bodyText: '{}',
+      attempts: 1,
+    }));
+    const capability = createRerankerWithDeps({ baseUrl: BASE_URL }, { transport });
+
+    const invalidRequests: RerankRequest[] = [
+      makeValidRequest({ query: '   ' }),
+      makeValidRequest({ candidates: [] }),
+      makeValidRequest({
+        candidates: [
+          { candidateId: 'dup', candidateText: 'a' },
+          { candidateId: 'dup', candidateText: 'b' },
+        ],
+      }),
+      makeValidRequest({ options: { instruct: '' } }),
+    ];
+
+    for (const invalidReq of invalidRequests) {
+      let caught: unknown;
+      try {
+        await capability.rerank(invalidReq);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(RerankerTechnicalError);
+      const techError = caught as RerankerTechnicalError;
+      expect(techError.code).toBe('INVALID_INPUT');
+      expect(techError.retryable).toBe(false);
+    }
+
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
+  it('orchestrates a valid single-candidate request and returns normalized RerankResult', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-single-1',
+      bodyText: JSON.stringify({
+        request_id: 'req-single-1',
+        usage: { total_tokens: 18 },
+        output: {
+          results: [{ index: 0, relevance_score: 0.88 }],
+        },
+      }),
+    }));
+
+    const result = await rerankWithDeps(
+      makeValidRequest({
+        candidates: [{ candidateId: 'only-one', candidateText: 'single doc' }],
+      }),
+      { baseUrl: BASE_URL },
+      { transport },
+    );
+
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      provider: 'ALIBABA_DASHSCOPE',
+      configuredModelId: 'qwen3-rerank',
+      configuredModelRevision: null,
+      providerRequestId: 'req-single-1',
+      usage: { totalTokens: 18 },
+      results: [{ candidateId: 'only-one', score: 0.88, rank: 1 }],
+    });
+  });
+
+  it('reorders multiple candidates by score descending, assigns rank 1..N, and preserves exact candidateId', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-multi-1',
+      bodyText: JSON.stringify({
+        request_id: 'req-multi-1',
+        usage: { total_tokens: 64 },
+        output: {
+          results: [
+            { index: 2, relevance_score: 0.95 },
+            { index: 0, relevance_score: 0.8 },
+            { index: 1, relevance_score: 0.7 },
+          ],
+        },
+      }),
+    }));
+
+    const result = await rerankWithDeps(
+      makeValidRequest({
+        candidates: [
+          { candidateId: ' cand-A ', candidateText: 'alpha' },
+          { candidateId: 'cand-B\t', candidateText: 'beta' },
+          { candidateId: 'CAND-C', candidateText: 'gamma' },
+        ],
+      }),
+      { baseUrl: BASE_URL },
+      { transport },
+    );
+
+    expect(result.results).toEqual([
+      { candidateId: 'CAND-C', score: 0.95, rank: 1 },
+      { candidateId: ' cand-A ', score: 0.8, rank: 2 },
+      { candidateId: 'cand-B\t', score: 0.7, rank: 3 },
+    ]);
+    expect(result.results.map((r) => r.rank)).toEqual([1, 2, 3]);
+    expect(new Set(result.results.map((r) => r.candidateId))).toEqual(
+      new Set([' cand-A ', 'cand-B\t', 'CAND-C']),
+    );
+  });
+
+  it('preserves exact candidateId mapping when candidateText values are duplicated', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-dup-text',
+      bodyText: JSON.stringify({
+        request_id: 'req-dup-text',
+        usage: { total_tokens: 30 },
+        output: {
+          results: [
+            { index: 1, relevance_score: 0.91 },
+            { index: 0, relevance_score: 0.42 },
+          ],
+        },
+      }),
+    }));
+
+    const result = await rerankWithDeps(
+      makeValidRequest({
+        candidates: [
+          { candidateId: 'A', candidateText: 'same' },
+          { candidateId: 'B', candidateText: 'same' },
+        ],
+      }),
+      { baseUrl: BASE_URL },
+      { transport },
+    );
+
+    expect(result.results).toEqual([
+      { candidateId: 'B', score: 0.91, rank: 1 },
+      { candidateId: 'A', score: 0.42, rank: 2 },
+    ]);
+  });
+
+  it('breaks exact equal-score ties by original input index ascending regardless of provider tie order', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-tie-1',
+      bodyText: JSON.stringify({
+        request_id: 'req-tie-1',
+        usage: { total_tokens: 45 },
+        output: {
+          results: [
+            { index: 1, relevance_score: 0.8 },
+            { index: 0, relevance_score: 0.8 },
+            { index: 2, relevance_score: 0.5 },
+          ],
+        },
+      }),
+    }));
+
+    const result = await rerankWithDeps(
+      makeValidRequest({
+        candidates: [
+          { candidateId: 'A', candidateText: 'doc A' },
+          { candidateId: 'B', candidateText: 'doc B' },
+          { candidateId: 'C', candidateText: 'doc C' },
+        ],
+      }),
+      { baseUrl: BASE_URL },
+      { transport },
+    );
+
+    expect(result.results).toEqual([
+      { candidateId: 'A', score: 0.8, rank: 1 },
+      { candidateId: 'B', score: 0.8, rank: 2 },
+      { candidateId: 'C', score: 0.5, rank: 3 },
+    ]);
+  });
+
+  it('returns all candidates without relevance threshold filtering and omits provider-native index fields', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-all-1',
+      bodyText: JSON.stringify({
+        request_id: 'req-all-1',
+        usage: { total_tokens: 12 },
+        output: {
+          results: [
+            { index: 0, relevance_score: 0.01 },
+            { index: 1, relevance_score: 0 },
+          ],
+        },
+      }),
+    }));
+
+    const result = await rerankWithDeps(
+      makeValidRequest({
+        candidates: [
+          { candidateId: 'low-1', candidateText: 'doc 1' },
+          { candidateId: 'zero-2', candidateText: 'doc 2' },
+        ],
+      }),
+      { baseUrl: BASE_URL },
+      { transport },
+    );
+
+    expect(result.results).toHaveLength(2);
+    expect(Object.keys(result).sort()).toEqual([
+      'configuredModelId',
+      'configuredModelRevision',
+      'provider',
+      'providerRequestId',
+      'results',
+      'usage',
+    ]);
+    for (const item of result.results) {
+      expect(Object.keys(item).sort()).toEqual(['candidateId', 'rank', 'score']);
+      expect('index' in item).toBe(false);
+      expect('relevance_score' in item).toBe(false);
+    }
+  });
+
+  it('fails closed without partial success when provider returns fewer results than candidates', async () => {
+    const transport = makeFakeTransport(async () => ({
+      status: 200,
+      attempts: 1,
+      providerRequestId: 'req-partial-1',
+      bodyText: JSON.stringify({
+        request_id: 'req-partial-1',
+        usage: { total_tokens: 20 },
+        output: {
+          results: [{ index: 0, relevance_score: 0.9 }],
+        },
+      }),
+    }));
+
+    let caught: unknown;
+    try {
+      await rerankWithDeps(
+        makeValidRequest({
+          candidates: [
+            { candidateId: 'A', candidateText: 'doc A' },
+            { candidateId: 'B', candidateText: 'doc B' },
+          ],
+        }),
+        { baseUrl: BASE_URL },
+        { transport },
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    const err = caught as RerankerTechnicalError;
+    expect(err.code).toBe('PARTIAL_RESPONSE');
+    expect(err.providerRequestId).toBe('req-partial-1');
+  });
+
+  it('remains stateless across independent requests', async () => {
+    let callCount = 0;
+    const transport = makeFakeTransport(async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          status: 200,
+          attempts: 1,
+          providerRequestId: 'req-state-1',
+          bodyText: JSON.stringify({
+            request_id: 'req-state-1',
+            usage: { total_tokens: 10 },
+            output: {
+              results: [
+                { index: 0, relevance_score: 0.9 },
+                { index: 1, relevance_score: 0.2 },
+              ],
+            },
+          }),
+        };
+      }
+      return {
+        status: 200,
+        attempts: 1,
+        providerRequestId: 'req-state-2',
+        bodyText: JSON.stringify({
+          request_id: 'req-state-2',
+          usage: { total_tokens: 25 },
+          output: {
+            results: [
+              { index: 1, relevance_score: 0.99 },
+              { index: 0, relevance_score: 0.11 },
+            ],
+          },
+        }),
+      };
+    });
+
+    const capability = createRerankerWithDeps({ baseUrl: BASE_URL }, { transport });
+    const req = makeValidRequest({
+      candidates: [
+        { candidateId: 'A', candidateText: 'doc A' },
+        { candidateId: 'B', candidateText: 'doc B' },
+      ],
+    });
+
+    const first = await capability.rerank(req);
+    const second = await capability.rerank(req);
+
+    expect(first.providerRequestId).toBe('req-state-1');
+    expect(first.usage.totalTokens).toBe(10);
+    expect(first.results.map((r) => r.candidateId)).toEqual(['A', 'B']);
+
+    expect(second.providerRequestId).toBe('req-state-2');
+    expect(second.usage.totalTokens).toBe(25);
+    expect(second.results.map((r) => r.candidateId)).toEqual(['B', 'A']);
+  });
+
+  it('exposes bounded provider-neutral capability exports from index.ts', () => {
+    expect(MAX_RERANK_CANDIDATES).toBe(500);
+    expect(typeof createReranker).toBe('function');
+    expect(typeof rerank).toBe('function');
+    expect(typeof validateRerankRequest).toBe('function');
+    expect('executeDashScopeRerank' in rerankerPublicIndex).toBe(false);
+    expect('parseDashScopeRerankResponse' in rerankerPublicIndex).toBe(false);
+    expect('createRerankerTransport' in rerankerPublicIndex).toBe(false);
+    expect('resolveDashScopeApiKey' in rerankerPublicIndex).toBe(false);
+    expect('createRerankerConfig' in rerankerPublicIndex).toBe(false);
   });
 });
