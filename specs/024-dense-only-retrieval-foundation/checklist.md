@@ -1,6 +1,6 @@
 # Slice 24 — Acceptance Checklist
 
-Frozen Spec c3e77df03173c9ff7d856186fe09a366ba64b985; blob 9e3dceab12b1e8a8a05b4ad89ce222f72cbc6503. Plan §8 is the matching matrix. All checkboxes deliberately unchecked: future execution evidence only. Planning Audit 1 checks coverage, not runtime outcomes.
+Frozen Spec d8d582e45442078778c30da0282a821dac87e300; blob 08f5e785a3c8d0b3874103f7091d9f6a933e06dd. Plan §8 is the matching matrix. All checkboxes deliberately unchecked: future execution evidence only. Planning Audit 1 checks coverage, not runtime outcomes.
 
 - [ ] C01 — AS-01; FR-002, FR-003; T2402, T2404, T2407; Plan §8 / corresponding design sections. Exact source-set/content hash and deterministic chunk; actual insert/read/new connection and DB restart; same vector bytes and reference; wrong hash/FK negative.
 - [ ] C02 — AS-02; FR-003, FR-004; T2402, T2403, T2404, T2407; Plan §8 / corresponding design sections. Unique logical identity; concurrent duplicate and conflict; no partial batch; successor, retirement, expiry, NEEDS_REVIEW, invalid, revoked approval and binding changes suppress old rows before ranking.

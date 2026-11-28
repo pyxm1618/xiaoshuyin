@@ -1,6 +1,6 @@
 # Slice 24 — Dense-only Candidate C Retrieval Foundation — Plan
 
-Status: Planning AI 2 design; implementation not authorized. Parent Frozen Spec commit c3e77df03173c9ff7d856186fe09a366ba64b985; blob 9e3dceab12b1e8a8a05b4ad89ce222f72cbc6503. Reference main 80cf8d267ce6b8b771635f49e5fd0f68b5694a89. Authority remains upstream; this plan is not a production route, professional approval or release.
+Status: Planning AI 2 design; implementation not authorized. Parent Frozen Spec commit d8d582e45442078778c30da0282a821dac87e300; blob 08f5e785a3c8d0b3874103f7091d9f6a933e06dd. Reference main 80cf8d267ce6b8b771635f49e5fd0f68b5694a89. Authority remains upstream; this plan is not a production route, professional approval or release.
 
 ## Upstream Traceability
 Frozen spec Upstream Traceability is normative, including 总产品需求 §§25/28/31A/32, V1-C03/C20/C21/C24/C25/C27/C28/C34/C37/C39/C41, V1-X01/X11/X14, 总体技术架构 §§11/17.5/19A, V1技术设计 §§4.0A/4.2/7.0/7.5/8/9/9.1/12.8/13/14A/15/20/32.6/32.13/36/37/38/40. Exact-main authority blobs, in that document order: 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29, 379cb8cfb377924cd21ccfe55baa5aecdf207f5e, f2e1589e3f87d1970f5ce342887fc7d3bf95dee4, 2885694c1833c9643797c0947a1b7e581ae2fb05. They match spec observation. The matrix in §8 is the executable FR/AS/checklist/tasks binding, not a replacement of authority.

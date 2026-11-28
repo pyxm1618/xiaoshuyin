@@ -1,6 +1,6 @@
 # Slice 24 — Tasks
 
-Frozen Spec c3e77df03173c9ff7d856186fe09a366ba64b985; exact Plan/Checklist in same planning commit. All tasks unchecked. No development before T2401 PASS. Path aliases index.ts, projection.ts, repository.ts, admission.ts refer ONLY to apps/server/api/src/ai/dense-retrieval/. Contract/DB tests = tests/ai/dense-retrieval-contract.test.ts and tests/db/dense-retrieval.integration.test.ts. All paths limited to Plan §6; any new need STOP. Each implementation task starts with relevant RED evidence before behavior edits, then GREEN; no changes to Frozen Spec or existing governance. Dependencies sequential unless explicitly independent; no separate parallel implementation.
+Frozen Spec d8d582e45442078778c30da0282a821dac87e300; exact Plan/Checklist in same planning commit. All tasks unchecked. No development before T2401 PASS. Path aliases index.ts, projection.ts, repository.ts, admission.ts refer ONLY to apps/server/api/src/ai/dense-retrieval/. Contract/DB tests = tests/ai/dense-retrieval-contract.test.ts and tests/db/dense-retrieval.integration.test.ts. All paths limited to Plan §6; any new need STOP. Each implementation task starts with relevant RED evidence before behavior edits, then GREEN; no changes to Frozen Spec or existing governance. Dependencies sequential unless explicitly independent; no separate parallel implementation.
 
 - [ ] T2401 [REQ:V1-X14; FR-001, FR-015, FR-017, FR-018] Developer Gate and Remote Truth (read-only) [VERIFY:C13,C14,C15; AS-13,AS-14]
   - Plan: §8 rows C13, C14, C15; Checklist same IDs.
