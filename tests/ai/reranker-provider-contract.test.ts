@@ -28,6 +28,25 @@ import {
   isRetryableRerankerErrorCode,
   type RerankerFetch,
 } from '../../apps/server/api/src/ai/reranker/transport.js';
+import {
+  EVIDENCE_STATES,
+  LOWER_EVIDENCE_PREDICATES,
+  deriveAggregateTechnicalResult,
+  deriveCleanupSecretSafetyState,
+  deriveConfigIdentityState,
+  deriveContractMechanicsState,
+  deriveLiveProviderCapabilityState,
+  evaluateTechnicalEvidence,
+  type EvidenceState,
+  type LowerEvidenceStates,
+} from '../../apps/server/api/src/ai/reranker/evidence.js';
+import {
+  RERANKER_TELEMETRY_WHITELIST_KEYS,
+  buildRerankerTelemetryRecord,
+  createSafeConfigFingerprint,
+  createSafeRequestFingerprint,
+  sanitizeTelemetryRecord,
+} from '../../apps/server/api/src/ai/reranker/telemetry.js';
 
 type AssertExactFalse<T extends false> = T;
 
@@ -71,6 +90,8 @@ type _NoConfigTimeoutOverride = AssertExactFalse<'attemptTimeoutMs' extends keyo
 type _NoConfigMaxAttemptsOverride = AssertExactFalse<'maxAttempts' extends keyof RerankerConfigInput ? true : false>;
 type _NoConfigBackoffOverride = AssertExactFalse<'retryBackoffMs' extends keyof RerankerConfigInput ? true : false>;
 type _NoConfigApiKeyOverride = AssertExactFalse<'apiKey' extends keyof RerankerConfigInput ? true : false>;
+
+const T007_BASE_URL = 'https://ws-123.cn-beijing.maas.aliyuncs.com/api/v1';
 
 const makeValidRequest = (patch: Partial<RerankRequest> = {}): RerankRequest => ({
   query: 'synthetic query',
@@ -823,7 +844,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
       bodyText: '{}',
       attempts: 1,
     }));
-    const capability = createRerankerWithDeps({ baseUrl: BASE_URL }, { transport });
+    const capability = createRerankerWithDeps({ baseUrl: T007_BASE_URL }, { transport });
 
     const invalidRequests: RerankRequest[] = [
       makeValidRequest({ query: '   ' }),
@@ -872,7 +893,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
       makeValidRequest({
         candidates: [{ candidateId: 'only-one', candidateText: 'single doc' }],
       }),
-      { baseUrl: BASE_URL },
+      { baseUrl: T007_BASE_URL },
       { transport },
     );
 
@@ -913,7 +934,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
           { candidateId: 'CAND-C', candidateText: 'gamma' },
         ],
       }),
-      { baseUrl: BASE_URL },
+      { baseUrl: T007_BASE_URL },
       { transport },
     );
 
@@ -952,7 +973,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
           { candidateId: 'B', candidateText: 'same' },
         ],
       }),
-      { baseUrl: BASE_URL },
+      { baseUrl: T007_BASE_URL },
       { transport },
     );
 
@@ -988,7 +1009,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
           { candidateId: 'C', candidateText: 'doc C' },
         ],
       }),
-      { baseUrl: BASE_URL },
+      { baseUrl: T007_BASE_URL },
       { transport },
     );
 
@@ -1023,7 +1044,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
           { candidateId: 'zero-2', candidateText: 'doc 2' },
         ],
       }),
-      { baseUrl: BASE_URL },
+      { baseUrl: T007_BASE_URL },
       { transport },
     );
 
@@ -1066,7 +1087,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
             { candidateId: 'B', candidateText: 'doc B' },
           ],
         }),
-        { baseUrl: BASE_URL },
+        { baseUrl: T007_BASE_URL },
         { transport },
       );
     } catch (error) {
@@ -1117,7 +1138,7 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
       };
     });
 
-    const capability = createRerankerWithDeps({ baseUrl: BASE_URL }, { transport });
+    const capability = createRerankerWithDeps({ baseUrl: T007_BASE_URL }, { transport });
     const req = makeValidRequest({
       candidates: [
         { candidateId: 'A', candidateText: 'doc A' },
@@ -1147,5 +1168,362 @@ describe('Slice 23 T006 deterministic rerank orchestration and normalized output
     expect('createRerankerTransport' in rerankerPublicIndex).toBe(false);
     expect('resolveDashScopeApiKey' in rerankerPublicIndex).toBe(false);
     expect('createRerankerConfig' in rerankerPublicIndex).toBe(false);
+  });
+});
+
+describe('Slice 23 T007 mechanical evidence state machine', () => {
+  it('fixes the exact 5-state vocabulary and 4 lower predicates without READY semantics', () => {
+    expect(EVIDENCE_STATES).toEqual([
+      'PASS',
+      'FAIL',
+      'BLOCKED',
+      'UNKNOWN',
+      'NOT_EVALUATED',
+    ]);
+    expect(EVIDENCE_STATES).not.toContain('READY');
+    expect(EVIDENCE_STATES).not.toContain('SUCCESS');
+    expect(EVIDENCE_STATES).not.toContain('OK');
+    expect(EVIDENCE_STATES).not.toContain('PARTIAL_PASS');
+    expect(EVIDENCE_STATES).not.toContain('APPROVED');
+    expect(EVIDENCE_STATES).not.toContain('PRODUCTION_READY');
+
+    expect(LOWER_EVIDENCE_PREDICATES).toEqual([
+      'CONTRACT_MECHANICS',
+      'LIVE_PROVIDER_CAPABILITY',
+      'CONFIG_IDENTITY',
+      'CLEANUP_SECRET_SAFETY',
+    ]);
+  });
+
+  it('derives aggregate technical result purely with FAIL > BLOCKED > UNKNOWN > NOT_EVALUATED > PASS regardless of predicate position', () => {
+    const allPass: LowerEvidenceStates = {
+      CONTRACT_MECHANICS: 'PASS',
+      LIVE_PROVIDER_CAPABILITY: 'PASS',
+      CONFIG_IDENTITY: 'PASS',
+      CLEANUP_SECRET_SAFETY: 'PASS',
+    };
+    expect(deriveAggregateTechnicalResult(allPass)).toBe('PASS');
+
+    // FAIL dominates BLOCKED, UNKNOWN, NOT_EVALUATED, PASS in every position
+    for (const key of LOWER_EVIDENCE_PREDICATES) {
+      const state: LowerEvidenceStates = {
+        CONTRACT_MECHANICS: 'BLOCKED',
+        LIVE_PROVIDER_CAPABILITY: 'UNKNOWN',
+        CONFIG_IDENTITY: 'NOT_EVALUATED',
+        CLEANUP_SECRET_SAFETY: 'PASS',
+        [key]: 'FAIL',
+      };
+      expect(deriveAggregateTechnicalResult(state)).toBe('FAIL');
+    }
+
+    // BLOCKED dominates UNKNOWN, NOT_EVALUATED, PASS in every position
+    for (const key of LOWER_EVIDENCE_PREDICATES) {
+      const state: LowerEvidenceStates = {
+        CONTRACT_MECHANICS: 'UNKNOWN',
+        LIVE_PROVIDER_CAPABILITY: 'NOT_EVALUATED',
+        CONFIG_IDENTITY: 'PASS',
+        CLEANUP_SECRET_SAFETY: 'PASS',
+        [key]: 'BLOCKED',
+      };
+      expect(deriveAggregateTechnicalResult(state)).toBe('BLOCKED');
+    }
+
+    // UNKNOWN dominates NOT_EVALUATED and PASS in every position
+    for (const key of LOWER_EVIDENCE_PREDICATES) {
+      const state: LowerEvidenceStates = {
+        CONTRACT_MECHANICS: 'NOT_EVALUATED',
+        LIVE_PROVIDER_CAPABILITY: 'PASS',
+        CONFIG_IDENTITY: 'PASS',
+        CLEANUP_SECRET_SAFETY: 'PASS',
+        [key]: 'UNKNOWN',
+      };
+      expect(deriveAggregateTechnicalResult(state)).toBe('UNKNOWN');
+    }
+
+    // NOT_EVALUATED dominates PASS in every position
+    for (const key of LOWER_EVIDENCE_PREDICATES) {
+      const state: LowerEvidenceStates = {
+        CONTRACT_MECHANICS: 'PASS',
+        LIVE_PROVIDER_CAPABILITY: 'PASS',
+        CONFIG_IDENTITY: 'PASS',
+        CLEANUP_SECRET_SAFETY: 'PASS',
+        [key]: 'NOT_EVALUATED',
+      };
+      expect(deriveAggregateTechnicalResult(state)).toBe('NOT_EVALUATED');
+    }
+  });
+
+  it('does not allow any READY override or manual aggregate PASS flag', () => {
+    const config = createRerankerConfig({ baseUrl: T007_BASE_URL });
+    const report = evaluateTechnicalEvidence({
+      contractMechanics: { executed: true, allPassed: true },
+      liveProviderCapability: { attempted: false },
+      config,
+      cleanupSecretSafety: {
+        checkCompleted: true,
+        secretDetected: false,
+        rawContentDetected: false,
+        unauthorizedPersistenceDetected: false,
+        repoResidueDetected: false,
+      },
+    });
+
+    expect(report.lowerPredicates.CONTRACT_MECHANICS).toBe('PASS');
+    expect(report.lowerPredicates.LIVE_PROVIDER_CAPABILITY).toBe('NOT_EVALUATED');
+    expect(report.lowerPredicates.CONFIG_IDENTITY).toBe('UNKNOWN');
+    expect(report.lowerPredicates.CLEANUP_SECRET_SAFETY).toBe('PASS');
+    expect(report.aggregateTechnicalResult).toBe('UNKNOWN');
+
+    expect('ready' in report).toBe(false);
+    expect('isReady' in report).toBe(false);
+    expect('forceReady' in report).toBe(false);
+    expect('manualPass' in report).toBe(false);
+    expect('overrideStatus' in report).toBe(false);
+
+    // Passing extra READY-like properties at runtime cannot alter pure aggregate derivation.
+    const tampered = {
+      CONTRACT_MECHANICS: 'PASS',
+      LIVE_PROVIDER_CAPABILITY: 'NOT_EVALUATED',
+      CONFIG_IDENTITY: 'UNKNOWN',
+      CLEANUP_SECRET_SAFETY: 'PASS',
+      ready: true,
+      isReady: true,
+      forceReady: true,
+      manualPass: true,
+      overrideStatus: 'PASS',
+    } as unknown as LowerEvidenceStates;
+
+    expect(deriveAggregateTechnicalResult(tampered)).toBe('UNKNOWN');
+  });
+
+  it('prevents offline or mock evidence from setting LIVE_PROVIDER_CAPABILITY to PASS', () => {
+    const offlineAttempt = deriveLiveProviderCapabilityState({
+      attempted: true,
+      provenance: 'OFFLINE_MOCK',
+      exactHeadBound: true,
+      exactConfigBound: true,
+      validAccess: true,
+      contractCompatible: true,
+    });
+    expect(offlineAttempt).not.toBe('PASS');
+    expect(offlineAttempt).toBe('NOT_EVALUATED');
+
+    const notAttempted = deriveLiveProviderCapabilityState({ attempted: false });
+    expect(notAttempted).toBe('NOT_EVALUATED');
+
+    const missingCreds = deriveLiveProviderCapabilityState({
+      attempted: true,
+      provenance: 'REAL_LIVE_CALL',
+      exactHeadBound: true,
+      exactConfigBound: true,
+      validAccess: false,
+      contractCompatible: null,
+      missingPrerequisite: true,
+    });
+    expect(missingCreds).toBe('BLOCKED');
+
+    const incompatible = deriveLiveProviderCapabilityState({
+      attempted: true,
+      provenance: 'REAL_LIVE_CALL',
+      exactHeadBound: true,
+      exactConfigBound: true,
+      validAccess: true,
+      contractCompatible: false,
+    });
+    expect(incompatible).toBe('FAIL');
+
+    const unboundHead = deriveLiveProviderCapabilityState({
+      attempted: true,
+      provenance: 'REAL_LIVE_CALL',
+      exactHeadBound: false,
+      exactConfigBound: true,
+      validAccess: true,
+      contractCompatible: true,
+    });
+    expect(unboundHead).toBe('UNKNOWN');
+
+    const realLivePass = deriveLiveProviderCapabilityState({
+      attempted: true,
+      provenance: 'REAL_LIVE_CALL',
+      exactHeadBound: true,
+      exactConfigBound: true,
+      validAccess: true,
+      contractCompatible: true,
+    });
+    expect(realLivePass).toBe('PASS');
+
+    // Offline tests can only prove CONTRACT_MECHANICS
+    expect(deriveContractMechanicsState({ executed: true, allPassed: true })).toBe('PASS');
+    expect(deriveContractMechanicsState({ executed: true, allPassed: false })).toBe('FAIL');
+    expect(deriveContractMechanicsState({ executed: false })).toBe('NOT_EVALUATED');
+  });
+
+  it('keeps CONFIG_IDENTITY as UNKNOWN when modelRevision is null and immutableRevisionPinStatus is UNKNOWN_NOT_DOCUMENTED', () => {
+    const config = createRerankerConfig({ baseUrl: T007_BASE_URL });
+    expect(config.modelRevision).toBeNull();
+    expect(config.immutableRevisionPinStatus).toBe('UNKNOWN_NOT_DOCUMENTED');
+
+    const state = deriveConfigIdentityState(config);
+    expect(state).toBe('UNKNOWN');
+    expect(state).not.toBe('PASS');
+  });
+
+  it('requires mechanical verification for CLEANUP_SECRET_SAFETY and never defaults to PASS', () => {
+    expect(
+      deriveCleanupSecretSafetyState({
+        checkCompleted: false,
+      }),
+    ).toBe('UNKNOWN');
+
+    expect(
+      deriveCleanupSecretSafetyState({
+        checkCompleted: false,
+        blocked: true,
+      }),
+    ).toBe('BLOCKED');
+
+    expect(
+      deriveCleanupSecretSafetyState({
+        checkCompleted: true,
+        secretDetected: true,
+        rawContentDetected: false,
+        unauthorizedPersistenceDetected: false,
+        repoResidueDetected: false,
+      }),
+    ).toBe('FAIL');
+
+    expect(
+      deriveCleanupSecretSafetyState({
+        checkCompleted: true,
+        secretDetected: false,
+        rawContentDetected: false,
+        unauthorizedPersistenceDetected: false,
+        repoResidueDetected: false,
+      }),
+    ).toBe('PASS');
+  });
+});
+
+describe('Slice 23 T007 controlled whitelist telemetry', () => {
+  it('retains only whitelist fields and strips raw content, secrets, raw responses, and fabricated cost', () => {
+    const config = createRerankerConfig({ baseUrl: T007_BASE_URL });
+    const secretQuery = 'sensitive raw query text should never appear';
+    const secretCandidate = 'sensitive raw candidate text should never appear';
+    const secretInstruct = 'sensitive raw instruct text should never appear';
+    const fakeApiKey = 'sk-test-secret-value-12345';
+
+    const request: RerankRequest = {
+      query: secretQuery,
+      candidates: [{ candidateId: 'syn-cand-1', candidateText: secretCandidate }],
+      options: { instruct: secretInstruct },
+    };
+
+    const record = buildRerankerTelemetryRecord({
+      config,
+      request,
+      attemptCount: 1,
+      elapsedMs: 123,
+      terminalState: 'SUCCESS',
+      providerRequestId: 'req-safe-001',
+      totalTokens: 42,
+    });
+
+    expect(record.provider).toBe('ALIBABA_DASHSCOPE');
+    expect(record.configuredModelId).toBe('qwen3-rerank');
+    expect(record.configuredModelRevision).toBeNull();
+    expect(record.immutableRevisionPinStatus).toBe('UNKNOWN_NOT_DOCUMENTED');
+    expect(record.candidateCount).toBe(1);
+    expect(record.attemptCount).toBe(1);
+    expect(record.elapsedMs).toBe(123);
+    expect(record.terminalState).toBe('SUCCESS');
+    expect(record.errorCode).toBeUndefined();
+    expect(record.providerRequestId).toBe('req-safe-001');
+    expect(record.totalTokens).toBe(42);
+    expect(record.configFingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(record.requestFingerprint).toMatch(/^[a-f0-9]{64}$/);
+
+    const serialized = JSON.stringify(record);
+    expect(serialized).not.toContain(secretQuery);
+    expect(serialized).not.toContain(secretCandidate);
+    expect(serialized).not.toContain(secretInstruct);
+    expect(serialized).not.toContain(fakeApiKey);
+    expect(serialized).not.toContain('Authorization');
+    expect(serialized).not.toContain('cost');
+    expect(serialized).not.toContain('estimatedCost');
+    expect(serialized).not.toContain('costUsd');
+    expect(serialized).not.toContain('price');
+    expect(serialized).not.toContain('billingAmount');
+
+    for (const key of Object.keys(record)) {
+      expect(RERANKER_TELEMETRY_WHITELIST_KEYS).toContain(key);
+    }
+
+    // Verify sanitizeTelemetryRecord strips forbidden fields even if injected
+    const polluted = {
+      ...record,
+      query: secretQuery,
+      candidateText: secretCandidate,
+      documents: [secretCandidate],
+      instruct: secretInstruct,
+      DASHSCOPE_API_KEY: fakeApiKey,
+      Authorization: `Bearer ${fakeApiKey}`,
+      rawResponse: '{"secret":true}',
+      rawRequestBody: '{"query":"leak"}',
+      providerMessage: 'raw provider error text',
+      professionalLabel: 'GOLD_APPROVED',
+      cost: 0,
+      estimatedCost: 0.001,
+      costUsd: 0.001,
+      price: 0.001,
+      billingAmount: 0.001,
+    };
+
+    const sanitized = sanitizeTelemetryRecord(polluted);
+    const sanitizedKeys = Object.keys(sanitized);
+    for (const key of sanitizedKeys) {
+      expect(RERANKER_TELEMETRY_WHITELIST_KEYS).toContain(key);
+    }
+    expect('query' in sanitized).toBe(false);
+    expect('candidateText' in sanitized).toBe(false);
+    expect('documents' in sanitized).toBe(false);
+    expect('instruct' in sanitized).toBe(false);
+    expect('DASHSCOPE_API_KEY' in sanitized).toBe(false);
+    expect('Authorization' in sanitized).toBe(false);
+    expect('rawResponse' in sanitized).toBe(false);
+    expect('rawRequestBody' in sanitized).toBe(false);
+    expect('providerMessage' in sanitized).toBe(false);
+    expect('professionalLabel' in sanitized).toBe(false);
+    expect('cost' in sanitized).toBe(false);
+    expect('estimatedCost' in sanitized).toBe(false);
+    expect('costUsd' in sanitized).toBe(false);
+    expect('price' in sanitized).toBe(false);
+    expect('billingAmount' in sanitized).toBe(false);
+  });
+
+  it('omits totalTokens when absent and preserves safe errorCode/providerRequestId on technical failure', () => {
+    const config = createRerankerConfig({ baseUrl: T007_BASE_URL });
+    const request = makeValidRequest();
+
+    const failedRecord = buildRerankerTelemetryRecord({
+      config,
+      request,
+      attemptCount: 2,
+      elapsedMs: 11200,
+      terminalState: 'TIMEOUT',
+      errorCode: 'TIMEOUT',
+      providerRequestId: 'Bearer sk-should-be-rejected',
+    });
+
+    expect(failedRecord.terminalState).toBe('TIMEOUT');
+    expect(failedRecord.errorCode).toBe('TIMEOUT');
+    expect(failedRecord.totalTokens).toBeUndefined();
+    expect(failedRecord.providerRequestId).toBeUndefined();
+
+    const safeConfigFp = createSafeConfigFingerprint(config);
+    const safeRequestFp = createSafeRequestFingerprint(request);
+    expect(safeConfigFp).toMatch(/^[a-f0-9]{64}$/);
+    expect(safeRequestFp).toMatch(/^[a-f0-9]{64}$/);
+    expect(safeConfigFp).not.toContain('sk-');
+    expect(safeRequestFp).not.toContain(request.query);
   });
 });
