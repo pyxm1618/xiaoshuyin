@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "changeId": "n05-p2-remediation-20261126",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "001-family-identity-core",
+      "specPath": "specs/001-family-identity-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/consents.ts"
+      ]
+    },
+    {
+      "feature": "foundation-remaining-remediation",
+      "specPath": "specs/foundation-remaining-remediation",
+      "implementationPaths": [
+        "packages/compliance/src/feature-policy-repository.ts",
+        "packages/domain/src/problem-formulations.ts"
+      ]
+    }
+  ]
+}
