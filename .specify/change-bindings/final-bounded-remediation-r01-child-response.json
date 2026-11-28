@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "changeId": "final-bounded-remediation-r01-child-response",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "004-case-participant-core",
+      "specPath": "specs/004-case-participant-core",
+      "implementationPaths": [
+        "apps/server/api/src/openapi-spec.ts",
+        "packages/generated/openapi.d.ts",
+        "packages/generated/openapi.json"
+      ]
+    }
+  ]
+}

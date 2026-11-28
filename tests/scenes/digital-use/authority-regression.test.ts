@@ -112,5 +112,9 @@ describe('Phase 2 D3/D8 authority downstream projection', () => {
     expect(spec).toContain('FR-038 [Phase2-D8]');
     expect(spec).toContain('A1001/01002/01003');
     expect(spec).toContain('A2001/A2002 outcome pages MUST NOT be used');
+    expect(spec).toContain('MUST re-run the same evaluator against the new current authoritative Evidence snapshot');
+    expect(productAuthority).toContain('恢复入口必须回到仍可授权访问的 Evidence collection / correction 节点（A1001 / 01002 / 01003 及其当前合法补充路径）');
+    expect(productAuthority).toContain('不得把用户导向只属于 A2001/A2002 outcome 的页面来“补资料”');
+    expect(productAuthority).not.toContain('用户仍可走本文已经存在的其它合法选择，例如 A2001/A2002 页面上的“继续当前 Digital Use 问题”下游选择');
   });
 });

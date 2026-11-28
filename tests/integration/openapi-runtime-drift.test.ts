@@ -69,4 +69,55 @@ describe('Runtime route status == generated OpenAPI status (MEDIUM-01)', () => {
       await app.close();
     }
   });
+
+  it('Participation operations stay mechanically aligned', async () => {
+    const PARTICIPATION_OPERATIONS: Record<string, string> = {
+      'POST /api/v1/participations/:id/responses':
+        '/api/v1/participations/{id}/responses',
+      'POST /api/v1/participations/:id/decline':
+        '/api/v1/participations/{id}/decline',
+      'POST /api/v1/participations/:id/withdraw':
+        '/api/v1/participations/{id}/withdraw',
+      'GET /api/v1/participations/:id': '/api/v1/participations/{id}',
+    };
+
+    const captured = new Map<string, string[]>();
+    const app = await buildApp({
+      onRoute: (route: any) => {
+        const schema = route?.schema as { response?: Record<string, unknown> } | undefined;
+        if (!schema?.response) return;
+        const methods = Array.isArray(route.method)
+          ? route.method
+          : String(route.method).split(',');
+        const statuses = Object.keys(schema.response).sort();
+        for (const method of methods) {
+          const normalized = String(method).trim().toUpperCase();
+          if (normalized === 'HEAD') continue;
+          captured.set(`${normalized} ${route.url}`, statuses);
+        }
+      },
+    });
+
+    await app.ready();
+    try {
+      const entries = [...captured.entries()].filter(([key]) =>
+        Object.hasOwn(PARTICIPATION_OPERATIONS, key)
+      );
+      expect(entries.map(([key]) => key).sort()).toEqual(
+        Object.keys(PARTICIPATION_OPERATIONS).sort()
+      );
+
+      for (const [routeKey, openapiPath] of Object.entries(PARTICIPATION_OPERATIONS)) {
+        const [method] = routeKey.split(' ');
+        const operation = spec.paths[openapiPath]?.[method.toLowerCase()];
+        expect(operation, `generated operation missing: ${routeKey}`).toBeDefined();
+        expect(
+          captured.get(routeKey),
+          `response status drift: runtime ${routeKey} vs generated openapi.json`
+        ).toEqual(Object.keys(operation.responses).sort());
+      }
+    } finally {
+      await app.close();
+    }
+  });
 });

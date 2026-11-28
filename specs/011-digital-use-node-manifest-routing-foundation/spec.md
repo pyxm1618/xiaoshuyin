@@ -572,7 +572,8 @@ A graph validator MUST count these approved edge/entry types when determining le
 
 - **FR-036 [Phase2-D3]** Direct-impact conflict resolution MUST be dimension-local: within one direct-impact dimension, credible current true+false = `CONFLICT`; that dimension contributes neither positive nor negative. An independent direct-impact dimension with valid true still establishes aggregate positive.
 - **FR-037 [Phase2-D3]** 01002/01003 route-driving conflict MUST always BLOCK before ordinary triage. Implementations MUST NOT use free-form “can overturn positive” reasoning or cross-dimension cancellation.
-- **FR-038 [Phase2-D8]** `INSUFFICIENT` MUST expose real missing requirements and a reachable A1001/01002/01003 collection/correction target; A2001/A2002 outcome pages MUST NOT be used as a substitute recovery route before an outcome exists.
+- **FR-038 [Phase2-D8]** `INSUFFICIENT` MUST expose real missing requirements and a reachable A1001/01002/01003 collection/correction target; A2001/A2002 outcome pages MUST NOT be used as a substitute recovery route before an outcome exists. Recovery MUST preserve the real missing-item list, Evidence history and provenance, MUST allow evidence supplement/correction and resubmission, and MUST re-run the same evaluator against the new current authoritative Evidence snapshot; no recovery action may route the user to outcome-only pages to “补充资料”, and no action may invent or backfill missing values.
+
 ## 13. Failure Semantics
 
 The future implementation MUST treat the following as blocking failures, not warnings:

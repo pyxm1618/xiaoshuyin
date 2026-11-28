@@ -7,7 +7,7 @@ const spec = JSON.parse(
 );
 
 describe('Generated OpenAPI — Slice 4 participation surface', () => {
-  it('exposes exactly the six frozen participation operations', () => {
+  it('exposes the six frozen participation operations plus the formalized child response operation', () => {
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
       if (!path.includes('participation')) continue;
@@ -21,13 +21,34 @@ describe('Generated OpenAPI — Slice 4 participation surface', () => {
       'POST /api/v1/cases/{id}/participation-invites',
       'POST /api/v1/participation-invites/{token}/accept',
       'POST /api/v1/participations/{id}/decline',
+      'POST /api/v1/participations/{id}/responses',
       'POST /api/v1/participations/{id}/withdraw',
     ]);
   });
 
-  it('does not expose generic participant response or management routes', () => {
+  it('formalizes the child response operation without widening authority', () => {
+    const operation = (spec.paths as Record<string, any>)['/api/v1/participations/{id}/responses']?.post;
+    expect(operation).toBeDefined();
+    expect(operation.operationId).toBe('createParticipationResponse');
+    expect(operation.security).toEqual([{ bearerAuth: [] }]);
+    expect((operation.parameters ?? []).map((p: any) => p.$ref)).toEqual([
+      '#/components/parameters/ParticipationIdPath',
+    ]);
+    expect(operation.requestBody.content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/CreateParticipationResponseRequest',
+    });
+    expect(Object.keys(operation.responses).sort()).toEqual([
+      '201', '401', '403', '404', '409', '422',
+    ]);
+    expect(spec.components.schemas.CreateParticipationResponseRequest.additionalProperties).toBe(false);
+    expect(spec.components.schemas.ParticipationResponseDto.additionalProperties).toBe(false);
+    expect(Object.keys(spec.components.schemas.ParticipationResponseDto.properties).sort()).toEqual([
+      'authorPersonId', 'caseId', 'content', 'createdAt', 'id', 'participationId',
+    ]);
+  });
+
+  it('does not expose generic participant management routes', () => {
     const paths = Object.keys(spec.paths);
-    expect(paths.some((p) => p.includes('/participations/{id}/responses'))).toBe(false);
     expect(paths.some((p) => p.endsWith('/participants'))).toBe(false);
   });
 

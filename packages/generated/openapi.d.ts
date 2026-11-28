@@ -404,6 +404,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/participations/{id}/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createParticipationResponse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/participations/{id}": {
         parameters: {
             query?: never;
@@ -1562,6 +1578,23 @@ export interface components {
             /** @enum {string} */
             code: "PARTICIPATION_NOT_FOUND";
             message: string;
+        };
+        CreateParticipationResponseRequest: {
+            content: string;
+            idempotencyKey?: string;
+        };
+        ParticipationResponseDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            participationId: string;
+            /** Format: uuid */
+            authorPersonId: string;
+            content: string;
+            /** Format: date-time */
+            createdAt: string;
         };
         PhoneUseContractDto: {
             /** Format: uuid */
@@ -4062,6 +4095,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    createParticipationResponse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description participation UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["ParticipationIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParticipationResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Child-authored participation response recorded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResponseDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `PARTICIPATION_PROCESSING_DISALLOWED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `PARTICIPATION_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationNotFoundError"];
+                };
+            };
+            /** @description State conflict / idempotency mismatch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationStateConflictError"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                    };
                 };
             };
         };
