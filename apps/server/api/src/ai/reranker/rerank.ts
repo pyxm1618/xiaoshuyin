@@ -6,7 +6,11 @@ import {
   type RerankResult,
 } from './contracts.js';
 import { RerankerTechnicalError } from './errors.js';
-import { createRerankerTransport, type RerankerTransport } from './transport.js';
+import {
+  createRerankerTransport,
+  executeDashScopeRerank,
+  type RerankerTransport,
+} from './transport.js';
 
 export type CreateRerankerOptions = {
   readonly baseUrl: string;
@@ -91,7 +95,6 @@ export function createReranker(
       }
 
       const transport = resolveTransport(config, deps);
-      const { executeDashScopeRerank } = await import('./dashscope.js');
       const parsed = await executeDashScopeRerank(validation.value, transport);
 
       return {
