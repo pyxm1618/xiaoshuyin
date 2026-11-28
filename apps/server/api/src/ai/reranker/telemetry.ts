@@ -49,6 +49,14 @@ export type RerankerTelemetryInput = {
 };
 
 const ERROR_CODE_SET: ReadonlySet<string> = new Set(RERANKER_ERROR_CODES);
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
+
+function sanitizeSafeFingerprint(value: unknown): string {
+  if (typeof value !== 'string' || !SHA256_HEX_PATTERN.test(value)) {
+    return '';
+  }
+  return value;
+}
 
 function sha256Hex(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -185,9 +193,7 @@ export function sanitizeTelemetryRecord(
       ? { providerRequestId: safeProviderRequestId }
       : {}),
     ...(safeTotalTokens !== undefined ? { totalTokens: safeTotalTokens } : {}),
-    configFingerprint:
-      typeof candidate.configFingerprint === 'string' ? candidate.configFingerprint : '',
-    requestFingerprint:
-      typeof candidate.requestFingerprint === 'string' ? candidate.requestFingerprint : '',
+    configFingerprint: sanitizeSafeFingerprint(candidate.configFingerprint),
+    requestFingerprint: sanitizeSafeFingerprint(candidate.requestFingerprint),
   });
 }

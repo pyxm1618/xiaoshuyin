@@ -1526,4 +1526,50 @@ describe('Slice 23 T007 controlled whitelist telemetry', () => {
     expect(safeConfigFp).not.toContain('sk-');
     expect(safeRequestFp).not.toContain(request.query);
   });
+
+  it('rejects non-SHA-256 disguised strings in configFingerprint and requestFingerprint while preserving valid SHA-256 fingerprints', () => {
+    const config = createRerankerConfig({ baseUrl: T007_BASE_URL });
+    const request = makeValidRequest();
+    const validConfigFp = createSafeConfigFingerprint(config);
+    const validRequestFp = createSafeRequestFingerprint(request);
+
+    const sanitizedDisguised = sanitizeTelemetryRecord({
+      terminalState: 'SUCCESS',
+      candidateCount: 1,
+      attemptCount: 1,
+      elapsedMs: 10,
+      requestFingerprint: 'sensitive raw query disguised as fingerprint',
+      configFingerprint: 'Bearer sk-secret-value-disguised',
+    });
+
+    expect(sanitizedDisguised.requestFingerprint).toBe('');
+    expect(sanitizedDisguised.configFingerprint).toBe('');
+    expect(JSON.stringify(sanitizedDisguised)).not.toContain('sensitive raw query');
+    expect(JSON.stringify(sanitizedDisguised)).not.toContain('Bearer');
+    expect(JSON.stringify(sanitizedDisguised)).not.toContain('sk-secret');
+
+    const sanitizedArbitrary = sanitizeTelemetryRecord({
+      terminalState: 'SUCCESS',
+      candidateCount: 1,
+      attemptCount: 1,
+      elapsedMs: 10,
+      requestFingerprint: 'arbitrary-non-fingerprint-string',
+      configFingerprint: '12345-not-64-hex',
+    });
+
+    expect(sanitizedArbitrary.requestFingerprint).toBe('');
+    expect(sanitizedArbitrary.configFingerprint).toBe('');
+
+    const sanitizedValid = sanitizeTelemetryRecord({
+      terminalState: 'SUCCESS',
+      candidateCount: 1,
+      attemptCount: 1,
+      elapsedMs: 10,
+      configFingerprint: validConfigFp,
+      requestFingerprint: validRequestFp,
+    });
+
+    expect(sanitizedValid.configFingerprint).toBe(validConfigFp);
+    expect(sanitizedValid.requestFingerprint).toBe(validRequestFp);
+  });
 });
