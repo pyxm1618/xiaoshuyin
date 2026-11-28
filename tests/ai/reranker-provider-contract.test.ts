@@ -1,9 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   validateRerankRequest,
   type RerankRequest,
   type RerankResult,
 } from '../../apps/server/api/src/ai/reranker/index.js';
+import {
+  createRerankerConfig,
+  resolveDashScopeApiKey,
+  validateRerankerBaseUrl,
+  type RerankerConfigInput,
+} from '../../apps/server/api/src/ai/reranker/config.js';
+import {
+  RERANKER_ERROR_CODES,
+  RerankerTechnicalError,
+  toSafeRerankerErrorMetadata,
+} from '../../apps/server/api/src/ai/reranker/errors.js';
 
 type AssertExactFalse<T extends false> = T;
 
@@ -34,6 +45,19 @@ type _NoNativeIndex = AssertExactFalse<'index' extends keyof RerankResult['resul
 type _NoNativeRelevanceScore = AssertExactFalse<
   'relevance_score' extends keyof RerankResult['results'][number] ? true : false
 >;
+
+// Compile-time checks: caller cannot override fixed provider/model/policy/secret via RerankerConfigInput.
+type _NoConfigProviderOverride = AssertExactFalse<'provider' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigModelIdOverride = AssertExactFalse<'modelId' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigModelRevisionOverride = AssertExactFalse<'modelRevision' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigPinStatusOverride = AssertExactFalse<
+  'immutableRevisionPinStatus' extends keyof RerankerConfigInput ? true : false
+>;
+type _NoConfigApiSurfaceOverride = AssertExactFalse<'apiSurface' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigTimeoutOverride = AssertExactFalse<'attemptTimeoutMs' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigMaxAttemptsOverride = AssertExactFalse<'maxAttempts' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigBackoffOverride = AssertExactFalse<'retryBackoffMs' extends keyof RerankerConfigInput ? true : false>;
+type _NoConfigApiKeyOverride = AssertExactFalse<'apiKey' extends keyof RerankerConfigInput ? true : false>;
 
 const makeValidRequest = (patch: Partial<RerankRequest> = {}): RerankRequest => ({
   query: 'synthetic query',
@@ -219,6 +243,188 @@ describe('Slice 23 T002 reranker public contract and input validation', () => {
       candidateId: 'cand-1',
       score: 0.91,
       rank: 1,
+    });
+  });
+});
+
+describe('Slice 23 T003 reranker capability config, error taxonomy, and secret boundary', () => {
+  it('constructs fixed provider, model identity, unknown revision, and local runtime policy', () => {
+    const config = createRerankerConfig({
+      baseUrl: 'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1',
+    });
+
+    expect(config).toEqual({
+      provider: 'ALIBABA_DASHSCOPE',
+      modelId: 'qwen3-rerank',
+      modelRevision: null,
+      immutableRevisionPinStatus: 'UNKNOWN_NOT_DOCUMENTED',
+      apiSurface: 'DASHSCOPE_NATIVE_HTTP',
+      baseUrl: 'https://ws-alpha.cn-beijing.maas.aliyuncs.com/api/v1',
+      attemptTimeoutMs: 10_000,
+      maxAttempts: 2,
+      retryBackoffMs: 1_000,
+    });
+    expect(Object.isFrozen(config)).toBe(true);
+    expect('apiKey' in config).toBe(false);
+    expect('secret' in config).toBe(false);
+  });
+
+  it('accepts valid workspace-specific HTTPS *.maas.aliyuncs.com/api/v1 base URLs and normalizes host case', () => {
+    expect(
+      validateRerankerBaseUrl('https://WS-01.CN-BEIJING.MAAS.ALIYUNCS.COM/api/v1'),
+    ).toBe('https://ws-01.cn-beijing.maas.aliyuncs.com/api/v1');
+    expect(
+      validateRerankerBaseUrl('https://workspace-a.maas.aliyuncs.com/api/v1'),
+    ).toBe('https://workspace-a.maas.aliyuncs.com/api/v1');
+  });
+
+  it.each([
+    'http://workspace.maas.aliyuncs.com/api/v1',
+    'https://maas.aliyuncs.com/api/v1',
+    'https://evil.example.com/api/v1',
+    'https://workspace.maas.aliyuncs.com/',
+    'https://workspace.maas.aliyuncs.com/api/v2',
+    'https://workspace.maas.aliyuncs.com/api/v1/',
+    // Reject port, userinfo, query, and hash to preserve the strict base URL contract without inventing business semantics.
+    'https://workspace.maas.aliyuncs.com:8443/api/v1',
+    'https://user:pass@workspace.maas.aliyuncs.com/api/v1',
+    'https://workspace.maas.aliyuncs.com/api/v1?x=1',
+    'https://workspace.maas.aliyuncs.com/api/v1#frag',
+    '',
+    '   ',
+    'not-a-valid-url',
+  ])('rejects invalid base URL %j with CONFIGURATION error', (invalidBaseUrl) => {
+    let caught: unknown;
+    try {
+      createRerankerConfig({ baseUrl: invalidBaseUrl });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(RerankerTechnicalError);
+    const techError = caught as RerankerTechnicalError;
+    expect(techError.code).toBe('CONFIGURATION');
+    expect(techError.retryable).toBe(false);
+  });
+
+  it('accesses DASHSCOPE_API_KEY lazily and never reads secrets during normal config construction', () => {
+    const fakeEnvReader = vi.fn((key: string) =>
+      key === 'DASHSCOPE_API_KEY' ? 'synthetic-placeholder-key' : undefined,
+    );
+
+    const config = createRerankerConfig({
+      baseUrl: 'https://workspace-a.maas.aliyuncs.com/api/v1',
+    });
+
+    expect(config.baseUrl).toBe('https://workspace-a.maas.aliyuncs.com/api/v1');
+    expect(fakeEnvReader).not.toHaveBeenCalled();
+
+    const resolvedKey = resolveDashScopeApiKey(fakeEnvReader);
+    expect(resolvedKey).toBe('synthetic-placeholder-key');
+    expect(fakeEnvReader).toHaveBeenCalledTimes(1);
+    expect(fakeEnvReader).toHaveBeenCalledWith('DASHSCOPE_API_KEY');
+  });
+
+  it.each([undefined, '', '   ', '\t\n'])(
+    'classifies missing or blank DASHSCOPE_API_KEY (%j) as CONFIGURATION rather than AUTHENTICATION',
+    (missingSecret) => {
+      const fakeEnvReader = vi.fn(() => missingSecret);
+
+      let caught: unknown;
+      try {
+        resolveDashScopeApiKey(fakeEnvReader);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(RerankerTechnicalError);
+      const techError = caught as RerankerTechnicalError;
+      expect(techError.code).toBe('CONFIGURATION');
+      expect(techError.code).not.toBe('AUTHENTICATION');
+      expect(techError.retryable).toBe(false);
+    },
+  );
+
+  it('defines exactly the 12 frozen technical error codes', () => {
+    expect(RERANKER_ERROR_CODES).toEqual([
+      'CONFIGURATION',
+      'AUTHENTICATION',
+      'AUTHORIZATION',
+      'RATE_LIMIT',
+      'TIMEOUT',
+      'PROVIDER_UNAVAILABLE',
+      'MALFORMED_RESPONSE',
+      'UNSUPPORTED_CAPABILITY',
+      'INVALID_INPUT',
+      'IDENTITY_MAPPING_FAILURE',
+      'PARTIAL_RESPONSE',
+      'UNKNOWN_PROVIDER_FAILURE',
+    ]);
+    expect(new Set(RERANKER_ERROR_CODES).size).toBe(12);
+  });
+
+  it('exposes only safe error metadata and strips or forbids raw provider body, query/text/instruct, and credentials', () => {
+    const error = new RerankerTechnicalError({
+      code: 'RATE_LIMIT',
+      retryable: true,
+      providerRequestId: 'req-safe-123',
+    });
+
+    expect(error.code).toBe('RATE_LIMIT');
+    expect(error.retryable).toBe(true);
+    expect(error.providerRequestId).toBe('req-safe-123');
+
+    const safeMeta = toSafeRerankerErrorMetadata(error);
+    expect(safeMeta).toEqual({
+      code: 'RATE_LIMIT',
+      retryable: true,
+      providerRequestId: 'req-safe-123',
+    });
+
+    const forbiddenKeys = [
+      'rawResponse',
+      'rawBody',
+      'query',
+      'candidateText',
+      'instruct',
+      'apiKey',
+      'authorization',
+      'Authorization',
+      'credential',
+      'secret',
+      'payload',
+    ];
+    for (const key of forbiddenKeys) {
+      expect(key in error).toBe(false);
+      expect(key in safeMeta).toBe(false);
+    }
+
+    const serialized = JSON.stringify(safeMeta);
+    expect(serialized).not.toContain('synthetic');
+  });
+
+  it('keeps local CONFIGURATION distinct from provider AUTHENTICATION failures', () => {
+    const configError = new RerankerTechnicalError({
+      code: 'CONFIGURATION',
+      retryable: false,
+    });
+    const authError = new RerankerTechnicalError({
+      code: 'AUTHENTICATION',
+      retryable: false,
+      providerRequestId: 'req-auth-401',
+    });
+
+    expect(configError.code).toBe('CONFIGURATION');
+    expect(authError.code).toBe('AUTHENTICATION');
+    expect(configError.code).not.toBe(authError.code);
+    expect(toSafeRerankerErrorMetadata(configError)).toEqual({
+      code: 'CONFIGURATION',
+      retryable: false,
+    });
+    expect(toSafeRerankerErrorMetadata(authError)).toEqual({
+      code: 'AUTHENTICATION',
+      retryable: false,
+      providerRequestId: 'req-auth-401',
     });
   });
 });
